@@ -1,0 +1,4 @@
+/* Tailwind kept for utility classes in non-design-system components */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

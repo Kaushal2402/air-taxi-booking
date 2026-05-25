@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from fastapi import Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.core.exceptions import ForbiddenException, UnauthorizedException
+from app.core.security import decode_token
+from app.database import get_db
+from app.models.admin_user import AdminUser
+from app.repositories.admin_user_repository import AdminUserRepository
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def get_current_admin_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db=Depends(get_db),
+) -> AdminUser:
+    if not credentials:
+        raise UnauthorizedException()
+
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") == "partial_auth":
+        raise UnauthorizedException("Invalid or expired token")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise UnauthorizedException()
+
+    repo = AdminUserRepository(db)
+    user = await repo.get_by_id(user_id)
+    if not user:
+        raise UnauthorizedException()
+    if user.status == "suspended":
+        raise ForbiddenException("Account suspended")
+
+    # Verify the session embedded in the token is still active.
+    # This ensures revoked sessions are rejected immediately on the next request
+    # rather than waiting for the access token to expire.
+    session_id = payload.get("sid")
+    if session_id:
+        session = await repo.get_session_by_id(session_id)
+        if not session:
+            raise UnauthorizedException("Session has been revoked")
+
+    return user
+
+
+def require_role(*roles: str):
+    async def _check(user: AdminUser = Depends(get_current_admin_user)) -> AdminUser:
+        if user.role not in roles:
+            raise ForbiddenException(f"Role '{user.role}' does not have access to this resource")
+        return user
+    return _check
+
+
+def get_request_meta(request: Request) -> dict:
+    return {
+        "ip": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+        "location": None,  # Geo-lookup would go here
+    }

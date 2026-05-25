@@ -1,0 +1,19 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.env
+backend/.coverage
+backend/htmlcov/
+backend/.pytest_cache/
+backend/dist/
+
+# Node
+admin-panel/node_modules/
+admin-panel/dist/
+admin-panel/.env
+
+# Misc
+.DS_Store
+*.log
