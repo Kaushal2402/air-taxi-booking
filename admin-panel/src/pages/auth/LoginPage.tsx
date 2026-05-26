@@ -23,6 +23,7 @@ export default function LoginPage() {
   const isMobile = useIsMobile()
   const [showPw, setShowPw] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isLockedOut, setIsLockedOut] = useState(false)
   const [loading, setLoading] = useState(false)
   const locationMessage = (location.state as any)?.message as string | undefined
 
@@ -33,17 +34,25 @@ export default function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     setApiError('')
+    setIsLockedOut(false)
     setLoading(true)
     try {
       const res = await authService.login(data)
       if (res.requires_2fa && res.partial_token) {
-        navigate('/2fa', { state: { partial_token: res.partial_token, email: data.email } })
+        navigate('/2fa', { state: { partial_token: res.partial_token, email: data.email, has_phone: res.has_phone ?? false } })
       } else if (res.access_token && res.refresh_token && res.user) {
         setAuth(res.user, res.access_token, res.refresh_token)
         navigate('/dashboard')
       }
     } catch (e: any) {
-      setApiError(e?.response?.data?.message || 'Invalid email or password')
+      const status = e?.response?.status
+      if (status === 403) {
+        setIsLockedOut(true)
+        setApiError(e?.response?.data?.message || 'Account is temporarily locked due to too many failed attempts.')
+      } else {
+        setIsLockedOut(false)
+        setApiError(e?.response?.data?.message || 'Invalid email or password')
+      }
     } finally {
       setLoading(false)
     }
@@ -189,7 +198,26 @@ export default function LoginPage() {
                 color: 'var(--ok)',
               }}>{locationMessage}</div>
             )}
-            {apiError && (
+            {apiError && isLockedOut && (
+              <div style={{
+                padding: '12px 14px',
+                background: 'var(--warn-soft, #fef3c7)',
+                border: '1px solid color-mix(in oklab, var(--warn, #d97706) 35%, transparent)',
+                borderRadius: 3,
+                fontSize: 13,
+                color: 'var(--warn, #92400e)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+              }}>
+                <Icon name="lock" size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--warn, #d97706)' }} />
+                <div>
+                  <div style={{ fontWeight: 500, marginBottom: 2 }}>Account temporarily locked</div>
+                  <div style={{ opacity: 0.85 }}>{apiError}</div>
+                </div>
+              </div>
+            )}
+            {apiError && !isLockedOut && (
               <div style={{
                 padding: '10px 14px',
                 background: 'var(--danger-soft)',

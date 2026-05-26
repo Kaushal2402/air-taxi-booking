@@ -59,4 +59,5 @@ def get_request_meta(request: Request) -> dict:
         "ip": request.client.host if request.client else None,
         "user_agent": request.headers.get("user-agent"),
         "location": None,  # Geo-lookup would go here
+        "timezone": request.headers.get("x-timezone"),  # IANA tz from browser, e.g. "Asia/Kolkata"
     }

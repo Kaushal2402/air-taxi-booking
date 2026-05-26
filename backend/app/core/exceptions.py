@@ -57,6 +57,16 @@ class ValidationException(AppException):
         )
 
 
+class TooManyRequestsException(AppException):
+    def __init__(self, message: str = "Too many requests", retry_after: int = 60):
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            code="TOO_MANY_REQUESTS",
+            message=message,
+            details={"retry_after": retry_after},
+        )
+
+
 async def app_exception_handler(request: Request, exc: AppException) -> ORJSONResponse:
     return ORJSONResponse(
         status_code=exc.status_code,

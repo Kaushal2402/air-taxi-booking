@@ -8,6 +8,9 @@ interface User {
   role: string;
   status: string;
   two_factor_enabled: boolean;
+  phone: string | null;
+  avatar_url: string | null;
+  locale: string;
 }
 
 interface AuthState {

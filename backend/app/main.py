@@ -1,7 +1,9 @@
+import os
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.config import get_settings
@@ -34,6 +36,10 @@ app.add_exception_handler(AppException, app_exception_handler)
 
 # API routes
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+# Static files (avatars, etc.) — served at /static/...
+os.makedirs("static/avatars", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Socket.IO — mounted at /ws
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=settings.cors_origins_list)

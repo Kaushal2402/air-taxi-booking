@@ -1,3 +1,4 @@
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -11,6 +12,16 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_recycle=3600,
 )
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _set_utc_timezone(dbapi_connection, connection_record):
+    """Force every MySQL connection to use UTC so that NOW() / server_default
+    timestamps are stored and read in UTC, regardless of the server's system
+    timezone setting."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("SET time_zone = '+00:00'")
+    cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

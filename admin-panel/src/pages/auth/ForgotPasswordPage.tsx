@@ -15,6 +15,7 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sentEmail, setSentEmail] = useState('')
+  const [apiError, setApiError] = useState('')
   const isMobile = useIsMobile()
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -23,10 +24,21 @@ export default function ForgotPasswordPage() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
+    setApiError('')
     try {
       await authService.forgotPassword(data.email)
       setSentEmail(data.email)
       setSent(true)
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number } }
+      if (err?.response?.status === 429) {
+        // A link was already sent recently — show the same "check inbox" state.
+        // This avoids revealing whether the email is registered.
+        setSentEmail(data.email)
+        setSent(true)
+      } else {
+        setApiError('Something went wrong — please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -85,6 +97,14 @@ export default function ForgotPasswordPage() {
               </p>
 
               <form onSubmit={handleSubmit(onSubmit)} style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {apiError && (
+                  <div style={{
+                    padding: '10px 14px',
+                    background: 'var(--danger-soft)',
+                    border: '1px solid color-mix(in oklab, var(--danger) 32%, var(--rule-strong))',
+                    borderRadius: 3, fontSize: 13, color: 'var(--danger)',
+                  }}>{apiError}</div>
+                )}
                 <div className="field">
                   <label className="field-label">Work email</label>
                   <div className={`input lg${errors.email ? ' error' : ''}`}>

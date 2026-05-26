@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
+    FRONTEND_URL: str = "http://localhost:3000"
+    BACKEND_URL: str = "http://localhost:8001"
+
+    # Login lockout
+    LOGIN_MAX_ATTEMPTS: int = 5       # failed attempts before lockout
+    LOGIN_LOCKOUT_MINUTES: int = 30   # how long the lock lasts
 
     # Auth
     SECRET_KEY: str

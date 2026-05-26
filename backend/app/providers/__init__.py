@@ -46,6 +46,19 @@ def get_push_provider() -> PushProvider:
 @lru_cache
 def get_sms_provider() -> SmsProvider:
     if settings.SMS_PROVIDER == "generic_http":
+        # Fall back to the console adapter when SMS_ENDPOINT is not configured so
+        # developers can see outgoing messages in the terminal without needing
+        # real credentials.
+        if not settings.SMS_ENDPOINT:
+            import warnings
+            warnings.warn(
+                "SMS_ENDPOINT is not set — falling back to the console SMS adapter. "
+                "Messages will be printed to stdout. "
+                "Set SMS_ENDPOINT (and credentials) in your .env to send real SMS.",
+                stacklevel=2,
+            )
+            from app.providers.sms.console import ConsoleSmsAdapter
+            return ConsoleSmsAdapter()
         from app.providers.sms.generic_http import GenericHttpSmsAdapter
         return GenericHttpSmsAdapter()
     raise ValueError(f"Unknown SMS provider: {settings.SMS_PROVIDER}")
@@ -59,9 +72,28 @@ def get_whatsapp_provider() -> WhatsAppProvider:
 
 @lru_cache
 def get_email_provider() -> EmailProvider:
+    if settings.EMAIL_PROVIDER == "console":
+        from app.providers.email.console import ConsoleEmailAdapter
+        return ConsoleEmailAdapter()
+
     if settings.EMAIL_PROVIDER == "smtp":
+        # Fall back to the console adapter when SMTP is not configured so
+        # developers can see outgoing emails in the terminal without needing
+        # real credentials.
+        if not settings.SMTP_HOST:
+            import warnings
+            warnings.warn(
+                "SMTP_HOST is not set — falling back to the console email adapter. "
+                "Emails will be printed to stdout. Set SMTP_HOST (and credentials) "
+                "in your .env to send real emails.",
+                stacklevel=2,
+            )
+            from app.providers.email.console import ConsoleEmailAdapter
+            return ConsoleEmailAdapter()
+
         from app.providers.email.smtp import SmtpAdapter
         return SmtpAdapter()
+
     raise ValueError(f"Unknown email provider: {settings.EMAIL_PROVIDER}")
 
 
