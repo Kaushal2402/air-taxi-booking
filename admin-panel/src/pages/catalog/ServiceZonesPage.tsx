@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MapContainer, TileLayer, Polygon, CircleMarker, Marker, Polyline, useMapEvents } from 'react-leaflet'
+import { useNavigate } from 'react-router-dom'
+import { MapContainer, TileLayer, Polygon, CircleMarker, Marker, Polyline, ZoomControl, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import Shell from '../../components/layout/Shell'
@@ -99,9 +100,24 @@ function midpoints(poly: [number, number][]): Array<{ pt: [number, number]; afte
   })
 }
 
+// Flies the map to fit the given polygon whenever it changes (zone selection).
+// Mounted inside MapContainer so useMap() works.
+function MapController({ targetPolygon }: { targetPolygon: [number, number][] | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!targetPolygon || targetPolygon.length < 3) return
+    try {
+      const bounds = L.latLngBounds(targetPolygon.map(([lat, lng]) => L.latLng(lat, lng)))
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14, animate: true })
+    } catch { /* ignore degenerate bounds */ }
+  }, [targetPolygon, map])
+  return null
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function ServiceZonesPage() {
+  const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
   const [mobileTab, setMobileTab] = useState<'list' | 'map' | 'details'>('list')
@@ -119,6 +135,7 @@ export default function ServiceZonesPage() {
   const [validating, setValidating]           = useState(false)
   const [loading, setLoading]                 = useState(true)
   const [saving, setSaving]                   = useState(false)
+  const [publishing, setPublishing]           = useState(false)
   const [apiError, setApiError]               = useState('')
   const [search, setSearch]                   = useState('')
   const [confirmDeactivate, setConfirmDeactivate] = useState<ServiceZone | null>(null)
@@ -247,6 +264,21 @@ export default function ServiceZonesPage() {
       if (selected?.id === z.id) { setSelected(null); setIsNew(false) }
     } catch { setApiError('Failed to deactivate') }
     setConfirmDeactivate(null)
+  }
+
+  const handlePublish = async (z: ServiceZone) => {
+    setPublishing(true); setApiError('')
+    try {
+      const updated = await catalogService.publishServiceZone(z.id)
+      await loadData(showInactive)
+      setSelected(updated)
+      setDraft({ ...updated })
+      setEditPolygon(updated.polygon ? [...updated.polygon] : [])
+      setPolyHistory([])
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } }
+      setApiError(err?.response?.data?.message || 'Publish failed')
+    } finally { setPublishing(false) }
   }
 
   // ── Derived ──────────────────────────────────────────────────
@@ -481,7 +513,7 @@ export default function ServiceZonesPage() {
       {/* Panel footer */}
       <div style={{
         padding: '11px 18px', borderTop: '1px solid var(--rule)',
-        display: 'flex', gap: 8, flexShrink: 0,
+        display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap',
       }}>
         {!isNew && selected && (
           <button
@@ -490,6 +522,17 @@ export default function ServiceZonesPage() {
             onClick={() => setConfirmDeactivate(selected)}
           >
             <Icon name="trash" size={13} />Deactivate
+          </button>
+        )}
+        {!isNew && selected && (
+          <button
+            className="btn sm"
+            onClick={() => handlePublish(selected)}
+            disabled={publishing}
+            title={`Publish zone · currently v${selected.version}`}
+          >
+            <Icon name="check" size={13} />
+            {publishing ? 'Publishing…' : `Publish v${selected.version}`}
           </button>
         )}
         <button className="btn sm" onClick={discard} style={{ marginLeft: 'auto' }}>
@@ -524,6 +567,13 @@ export default function ServiceZonesPage() {
       subtitle={`${zones.length} zones · ${activeCount} active`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
+          {!isMobile && (
+            <>
+              <button className="btn sm" onClick={() => navigate('/catalog/vehicle-classes')}>Vehicle classes</button>
+              <button className="btn sm" onClick={() => navigate('/catalog/aircraft-types')}>Aircraft types</button>
+              <button className="btn sm" onClick={() => navigate('/catalog/air-routes')}>Air routes</button>
+            </>
+          )}
           <button className="btn sm accent" onClick={startNew}><Icon name="plus" size={13} />New zone</button>
         </div>
       }
@@ -664,6 +714,9 @@ export default function ServiceZonesPage() {
               />
 
               <MapClickHandler mode={toolMode} onMapClick={handleMapClick} />
+              {/* Fly to the selected zone's original polygon on selection */}
+              <MapController targetPolygon={selected ? selected.polygon : null} />
+              <ZoomControl position="bottomright" />
 
               {/* Non-selected zones — only selectable in 'move' mode */}
               {zones
@@ -795,6 +848,28 @@ export default function ServiceZonesPage() {
               >
                 <Icon name="refresh" size={12} />
                 {!isMobile && 'Undo'}
+              </button>
+              <button
+                onClick={() => {
+                  if (editPolygon.length === 0) return
+                  setPolyHistory(h => [...h, editPolygon])
+                  setEditPolygon([])
+                }}
+                disabled={editPolygon.length === 0}
+                title="Clear all vertices"
+                style={{
+                  height: 34, padding: isMobile ? '0 9px' : '0 11px',
+                  border: 'none', borderRadius: 0,
+                  background: 'transparent',
+                  color: editPolygon.length === 0 ? 'var(--ink-4)' : 'var(--danger)',
+                  display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 5,
+                  fontFamily: 'var(--font-mono)', fontSize: 10.5,
+                  letterSpacing: '0.08em', textTransform: 'uppercase' as const,
+                  cursor: editPolygon.length === 0 ? 'default' : 'pointer',
+                }}
+              >
+                <Icon name="trash" size={12} />
+                {!isMobile && 'Clear'}
               </button>
             </div>
 

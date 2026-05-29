@@ -231,7 +231,7 @@ export default function VehicleClassesPage() {
 
         {/* ── Right — editor ── */}
         {(!isMobile || mobilePanel === 'editor') && showEditor ? (
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', minWidth: 0 }}>
             {/* Mobile back button */}
             {isMobile && (
               <button

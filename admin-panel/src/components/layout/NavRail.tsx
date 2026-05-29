@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import BrandLockup from './BrandLockup'
 import Icon from '../ui/Icon'
+import { driverService } from '../../services/driverService'
 
 const NAV_GROUPS = [
   {
@@ -16,7 +18,7 @@ const NAV_GROUPS = [
   {
     label: 'People & Fleet',
     items: [
-      { id: 'drivers',   label: 'Drivers',           icon: 'users',    path: '/drivers',  count: '4' },
+      { id: 'drivers',   label: 'Drivers',           icon: 'users',    path: '/drivers' },
       { id: 'vehicles',  label: 'Vehicles & Fleet',  icon: 'car',      path: '/vehicles' },
       { id: 'operators', label: 'Air Operators',     icon: 'building', path: '/operators' },
       { id: 'aircraft',  label: 'Aircraft & Crew',   icon: 'helipad',  path: '/aircraft' },
@@ -64,6 +66,18 @@ interface NavRailProps {
 export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRailProps) {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Dynamic driver badge: shows in_review count (drivers awaiting review)
+  const [driverBadge, setDriverBadge] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    driverService.listDrivers({ per_page: 1 })
+      .then(data => {
+        const count = data.status_counts['in_review'] ?? 0
+        setDriverBadge(count > 0 ? String(count) : undefined)
+      })
+      .catch(() => setDriverBadge(undefined))
+  }, [])
 
   const isActive = (item: { id: string; path: string }) => {
     if (activeId) return item.id === activeId
@@ -131,7 +145,9 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
               >
                 <Icon name={item.icon} size={15} stroke={1.4} style={{ color: 'var(--ink-3)' }} />
                 <span>{item.label}</span>
-                {item.count && <span className="count">{item.count}</span>}
+                {(item.id === 'drivers' ? driverBadge : item.count) && (
+                  <span className="count">{item.id === 'drivers' ? driverBadge : item.count}</span>
+                )}
               </div>
             ))}
           </div>

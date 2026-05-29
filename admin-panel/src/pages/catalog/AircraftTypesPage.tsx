@@ -192,7 +192,7 @@ export default function AircraftTypesPage() {
         }}>
 
           {/* Table card */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', minWidth: 0 }}>
             {/* Table toolbar */}
             <div style={{
               padding: '10px 14px', borderBottom: '1px solid var(--rule)',

@@ -17,6 +17,12 @@ import VehicleClassesPage from './pages/catalog/VehicleClassesPage'
 import ServiceZonesPage from './pages/catalog/ServiceZonesPage'
 import AircraftTypesPage from './pages/catalog/AircraftTypesPage'
 import AirRoutesPage from './pages/catalog/AirRoutesPage'
+import CustomersPage from './pages/customers/CustomersPage'
+import CustomerDetailPage from './pages/customers/CustomerDetailPage'
+import DriverOnboardingPage from './pages/drivers/DriverOnboardingPage'
+import DriverDirectoryPage from './pages/drivers/DriverDirectoryPage'
+import DriverDetailPage from './pages/drivers/DriverDetailPage'
+import DocumentReviewPage from './pages/drivers/DocumentReviewPage'
 
 const DashboardPage = () => (
   <div style={{ padding: 40, color: 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>
@@ -118,6 +124,16 @@ function App() {
           <Route path="/catalog/zones" element={<PrivateRoute><ServiceZonesPage /></PrivateRoute>} />
           <Route path="/catalog/aircraft-types" element={<PrivateRoute><AircraftTypesPage /></PrivateRoute>} />
           <Route path="/catalog/air-routes" element={<PrivateRoute><AirRoutesPage /></PrivateRoute>} />
+
+          {/* Customers */}
+          <Route path="/customers" element={<PrivateRoute><CustomersPage /></PrivateRoute>} />
+          <Route path="/customers/:id" element={<PrivateRoute><CustomerDetailPage /></PrivateRoute>} />
+
+          {/* Drivers */}
+          <Route path="/drivers" element={<PrivateRoute><DriverDirectoryPage /></PrivateRoute>} />
+          <Route path="/drivers/onboarding" element={<PrivateRoute><DriverOnboardingPage /></PrivateRoute>} />
+          <Route path="/drivers/:id" element={<PrivateRoute><DriverDetailPage /></PrivateRoute>} />
+          <Route path="/drivers/:id/documents/:docId" element={<PrivateRoute><DocumentReviewPage /></PrivateRoute>} />
 
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />

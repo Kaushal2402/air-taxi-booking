@@ -246,7 +246,7 @@ export default function AirRoutesPage() {
       }}>
 
         {/* ── Left: routes table ─── */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', minWidth: 0 }}>
           {/* Toolbar */}
           <div style={{
             padding: '10px 14px', borderBottom: '1px solid var(--rule)',
