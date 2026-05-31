@@ -10,6 +10,7 @@ from app.dependencies import get_current_admin_user
 from app.models.admin_user import AdminUser
 from app.models.air_booking import AirBooking
 from app.models.booking import RoadBooking
+from app.models.operator import Operator
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,11 +24,21 @@ class KpiStats(BaseModel):
     live_trips_road: int
     live_trips_air: int
     live_trips_total: int
+    # Driver online stats — TODO: wire to Driver.is_online (Module 07 — real-time driver status not yet tracked)
+    online_drivers: int
+    online_drivers_idle: int
+    online_drivers_on_trip: int
+    online_drivers_total: int
     today_bookings: int
     today_gbv_minor: int
     today_completed: int
     cancel_rate_pct: float
+    # TODO: wire to dispatch ETA engine when real-time tracking available
+    pickup_eta_median_sec: int
+    # Operator stats — real values from Operator table
     active_operators: int
+    active_operators_total: int
+    active_operators_paused: int
     # 14-day sparklines (daily booking counts)
     bookings_14d: List[int]
     revenue_14d_minor: List[int]
@@ -216,6 +227,22 @@ async def get_dashboard(
             kind="air",
         ))
 
+    # Operator counts (real data from Operator table)
+    active_ops_q = await db.execute(
+        select(func.count(Operator.id)).where(Operator.status == "active")
+    )
+    active_operators = active_ops_q.scalar_one() or 0
+
+    total_ops_q = await db.execute(
+        select(func.count(Operator.id))
+    )
+    active_operators_total = total_ops_q.scalar_one() or 0
+
+    paused_ops_q = await db.execute(
+        select(func.count(Operator.id)).where(Operator.status == "paused")
+    )
+    active_operators_paused = paused_ops_q.scalar_one() or 0
+
     # Static alerts (no alert table yet — derived from data thresholds)
     alerts: list[AlertItem] = []
     if cancel_rate > 6:
@@ -231,11 +258,20 @@ async def get_dashboard(
         live_trips_road=live_road,
         live_trips_air=live_air,
         live_trips_total=live_road + live_air,
+        # TODO: wire to Driver.is_online (Module 07 — real-time driver status not yet tracked)
+        online_drivers=0,
+        online_drivers_idle=0,
+        online_drivers_on_trip=0,
+        online_drivers_total=0,
         today_bookings=today_total,
         today_gbv_minor=gbv_road + gbv_air,
         today_completed=today_completed,
         cancel_rate_pct=cancel_rate,
-        active_operators=0,
+        # TODO: wire to dispatch ETA engine when real-time tracking available
+        pickup_eta_median_sec=0,
+        active_operators=active_operators,
+        active_operators_total=active_operators_total,
+        active_operators_paused=active_operators_paused,
         bookings_14d=bookings_14d,
         revenue_14d_minor=revenue_14d,
     )

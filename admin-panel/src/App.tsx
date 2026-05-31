@@ -6,6 +6,7 @@ import { useAuthStore } from './store/authStore'
 import { authService } from './services/authService'
 
 import DashboardPage from './pages/dashboard/DashboardPage'
+import LiveMapPage from './pages/dashboard/LiveMapPage'
 import LoginPage from './pages/auth/LoginPage'
 import TwoFAPage from './pages/auth/TwoFAPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
@@ -151,6 +152,7 @@ function App() {
 
           {/* Protected routes */}
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+          <Route path="/dashboard/live" element={<PrivateRoute><LiveMapPage /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><AdminProfilePage /></PrivateRoute>} />
           <Route path="/profile/security" element={<PrivateRoute><SecurityPage /></PrivateRoute>} />
           <Route path="/admin-users" element={<PrivateRoute><AdminDirectoryPage /></PrivateRoute>} />

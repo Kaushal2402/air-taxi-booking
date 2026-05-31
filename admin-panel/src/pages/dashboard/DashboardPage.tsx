@@ -11,11 +11,18 @@ interface KpiStats {
   live_trips_road: number
   live_trips_air: number
   live_trips_total: number
+  online_drivers: number
+  online_drivers_idle: number
+  online_drivers_on_trip: number
+  online_drivers_total: number
   today_bookings: number
   today_gbv_minor: number
   today_completed: number
   cancel_rate_pct: number
+  pickup_eta_median_sec: number
   active_operators: number
+  active_operators_total: number
+  active_operators_paused: number
   bookings_14d: number[]
   revenue_14d_minor: number[]
 }
@@ -43,14 +50,21 @@ interface DashboardData {
   alerts: AlertItem[]
 }
 
-type Window = 'today' | '7d' | '30d' | '90d'
+type WindowParam = 'today' | '7d' | '30d' | '90d'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => {
+export const fmtMinor = (v: number) => {
   const lakh = v / 100 / 100000
   if (lakh >= 1) return `₹${lakh.toFixed(1)} L`
   return `₹${(v / 100).toLocaleString('en-IN')}`
+}
+
+export const fmtEta = (sec: number) => {
+  if (!sec) return '—'
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
@@ -151,12 +165,160 @@ function TrendChart({ bookings, revenue }: { bookings: number[]; revenue: number
   )
 }
 
+// ── CityMap SVG (exported for use in LiveMapPage) ─────────────────────────────
+
+export interface CityMapProps {
+  showLegend?: boolean
+  height?: number
+  onlineCount?: number
+  onTripCount?: number
+  pickupCount?: number
+  airCount?: number
+}
+
+export function CityMap({ showLegend = true, height = 340, onlineCount, onTripCount, pickupCount, airCount }: CityMapProps) {
+  const roadMarkers = Array.from({ length: 15 }, (_, i) => ({
+    x: 80 + (i % 6) * 110 + Math.sin(i * 1.7) * 30,
+    y: 80 + Math.floor(i / 6) * 100 + Math.cos(i * 2.1) * 25,
+  }))
+  const idleMarkers = Array.from({ length: 8 }, (_, i) => ({
+    x: 60 + (i % 4) * 160 + Math.cos(i * 2.3) * 20,
+    y: 180 + Math.floor(i / 4) * 100 + Math.sin(i * 1.4) * 20,
+  }))
+  const pickupMarkers = Array.from({ length: 5 }, (_, i) => ({
+    x: 100 + i * 140 + Math.sin(i * 3) * 15,
+    y: 130 + (i % 2) * 120,
+  }))
+  const airMarkers = Array.from({ length: 3 }, (_, i) => ({
+    x: 150 + i * 200,
+    y: 60 + (i % 2) * 180,
+  }))
+
+  return (
+    <svg viewBox="0 0 800 340" preserveAspectRatio="xMidYMid slice" style={{ width: '100%', height, display: 'block' }}>
+      <defs>
+        <pattern id="cm-g1" width="48" height="48" patternUnits="userSpaceOnUse">
+          <path d="M48 0 L0 0 0 48" stroke="var(--rule)" strokeWidth="0.5" fill="none" />
+        </pattern>
+        <pattern id="cm-g2" width="12" height="12" patternUnits="userSpaceOnUse">
+          <path d="M12 0 L0 0 0 12" stroke="var(--rule-soft)" strokeWidth="0.3" fill="none" />
+        </pattern>
+        <radialGradient id="cm-vignette" cx="50%" cy="50%" r="60%">
+          <stop offset="60%" stopColor="transparent" />
+          <stop offset="100%" stopColor="var(--surface)" stopOpacity="0.4" />
+        </radialGradient>
+      </defs>
+
+      {/* Base */}
+      <rect width="800" height="340" fill="var(--surface-sunk)" />
+      <rect width="800" height="340" fill="url(#cm-g2)" />
+      <rect width="800" height="340" fill="url(#cm-g1)" opacity="0.6" />
+
+      {/* Park / green areas */}
+      <ellipse cx="640" cy="220" rx="80" ry="50" fill="var(--accent)" opacity="0.07" />
+      <ellipse cx="160" cy="290" rx="60" ry="30" fill="var(--accent)" opacity="0.06" />
+
+      {/* River */}
+      <path d="M-10 300 Q200 260 360 300 Q520 340 800 280" fill="none" stroke="var(--info)" strokeWidth="6" opacity="0.12" strokeLinecap="round" />
+
+      {/* Major arteries */}
+      <g stroke="var(--rule-strong)" strokeWidth="1.8" fill="none" opacity="0.6">
+        <path d="M-10 100 Q200 80 420 140 T820 180" />
+        <path d="M-10 260 Q220 300 480 260 T820 230" />
+        <path d="M120 -10 Q160 150 260 230 T320 350" />
+        <path d="M520 -10 Q540 120 580 240 T620 360" />
+      </g>
+
+      {/* Secondary streets */}
+      <g stroke="var(--rule)" strokeWidth="0.8" fill="none" opacity="0.45">
+        <path d="M-10 50 Q300 70 800 80" />
+        <path d="M-10 200 Q300 220 800 180" />
+        <path d="M280 -10 Q300 170 300 360" />
+        <path d="M430 -10 Q450 160 460 360" />
+        <path d="M-10 160 L820 160" />
+        <path d="M-10 145 L820 145" />
+        <path d="M200 -10 L220 360" />
+        <path d="M680 -10 L660 360" />
+      </g>
+
+      {/* Active route polylines */}
+      <g stroke="var(--accent)" strokeWidth="2" fill="none" opacity="0.35" strokeLinecap="round" strokeDasharray="6 4">
+        <path d="M160 110 Q280 130 380 200 Q440 240 530 260" />
+        <path d="M250 80 Q350 120 460 160 Q540 190 620 240" />
+      </g>
+      <g stroke="var(--ink-3)" strokeWidth="1.5" fill="none" opacity="0.25" strokeLinecap="round" strokeDasharray="4 4">
+        <path d="M80 240 Q180 220 290 240 Q380 255 460 230" />
+      </g>
+
+      {/* Zone labels */}
+      <g fontFamily="IBM Plex Mono, monospace" fontSize="9" letterSpacing="0.08em" fill="var(--ink-3)" opacity="0.7">
+        <text x="340" y="128">Z-N4 · Indiranagar</text>
+        <text x="540" y="85">Z-E2 · Whitefield</text>
+        <text x="110" y="252">Z-S1 · HSR · surge 1.6×</text>
+      </g>
+
+      {/* Idle markers (grey) */}
+      {idleMarkers.map((m, i) => (
+        <circle key={`idle-${i}`} cx={m.x} cy={m.y} r="4" fill="var(--ink-3)" opacity="0.5" />
+      ))}
+
+      {/* Pickup markers (yellow/warn) */}
+      {pickupMarkers.map((m, i) => (
+        <circle key={`pickup-${i}`} cx={m.x} cy={m.y} r="5" fill="var(--warn)" opacity="0.8" />
+      ))}
+
+      {/* On-trip markers (accent green, animated) */}
+      {roadMarkers.map((m, i) => (
+        <circle key={`road-${i}`} cx={m.x} cy={m.y} r="5" fill="var(--accent)" opacity="0.85">
+          <animate attributeName="opacity" values="0.85;0.5;0.85" dur={`${2 + (i % 3) * 0.5}s`} repeatCount="indefinite" />
+        </circle>
+      ))}
+
+      {/* Air markers */}
+      {airMarkers.map((m, i) => (
+        <text key={`air-${i}`} x={m.x} y={m.y} textAnchor="middle" dominantBaseline="middle"
+          fill="var(--ink)" style={{ font: '14px sans-serif' }}>✈</text>
+      ))}
+
+      {/* Corner stats overlay */}
+      <g>
+        <rect x="12" y="12" width="138" height="92" rx="3" fill="var(--surface)" fillOpacity="0.92" stroke="var(--rule)" strokeWidth="0.7" />
+        <text x="20" y="28" fontFamily="IBM Plex Mono, monospace" fontSize="9" letterSpacing="0.10em" fill="var(--ink-3)">LIVE STATUS</text>
+        <circle cx="22" cy="42" r="4" fill="var(--accent)" />
+        <text x="32" y="46" fontFamily="IBM Plex Mono, monospace" fontSize="10" fill="var(--ink)">On trip {onTripCount ?? '—'}</text>
+        <circle cx="22" cy="58" r="4" fill="var(--ink-3)" />
+        <text x="32" y="62" fontFamily="IBM Plex Mono, monospace" fontSize="10" fill="var(--ink)">Idle {onlineCount ?? '—'}</text>
+        <circle cx="22" cy="74" r="4" fill="var(--warn)" />
+        <text x="32" y="78" fontFamily="IBM Plex Mono, monospace" fontSize="10" fill="var(--ink)">Pickup {pickupCount ?? '—'}</text>
+        <text x="22" y="97" fontFamily="IBM Plex Mono, monospace" fontSize="10" fill="var(--ink)">✈ Air {airCount ?? '—'}</text>
+      </g>
+
+      {/* Vignette */}
+      <rect width="800" height="340" fill="url(#cm-vignette)" />
+
+      {/* Legend */}
+      {showLegend && (
+        <g transform="translate(520, 310)">
+          <rect x="-8" y="-14" width="278" height="24" rx="3" fill="var(--surface)" fillOpacity="0.9" stroke="var(--rule)" strokeWidth="0.7" />
+          <circle cx="4" cy="0" r="4" fill="var(--accent)" />
+          <text x="12" y="4" fontFamily="IBM Plex Mono, monospace" fontSize="9" fill="var(--ink-3)">On trip</text>
+          <circle cx="72" cy="0" r="4" fill="var(--ink-3)" />
+          <text x="80" y="4" fontFamily="IBM Plex Mono, monospace" fontSize="9" fill="var(--ink-3)">Idle</text>
+          <circle cx="118" cy="0" r="4" fill="var(--warn)" />
+          <text x="126" y="4" fontFamily="IBM Plex Mono, monospace" fontSize="9" fill="var(--ink-3)">Pickup</text>
+          <text x="176" y="4" fontFamily="IBM Plex Mono, monospace" fontSize="9" fill="var(--ink-3)">✈ Air</text>
+        </g>
+      )}
+    </svg>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const [window, setWindow] = useState<Window>('today')
+  const [window, setWindow] = useState<WindowParam>('today')
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -175,6 +337,22 @@ export default function DashboardPage() {
   const now = new Date()
   const dateLabel = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
+  const cancelTone = (kpi?.cancel_rate_pct ?? 0) > 6 ? 'danger' : (kpi?.cancel_rate_pct ?? 0) > 4 ? 'warn' : 'ok'
+  const completionRate = kpi && kpi.today_bookings > 0
+    ? ((kpi.today_completed / kpi.today_bookings) * 100).toFixed(1)
+    : '0.0'
+
+  // Drivers: show "—" when 0 (TODO: wire to Module 07 live status)
+  const driversValue = loading ? '—' :
+    (kpi?.online_drivers === 0
+      ? '— / —'
+      : `${(kpi?.online_drivers ?? 0).toLocaleString('en-IN')} / ${(kpi?.online_drivers_total ?? 0).toLocaleString('en-IN')}`)
+  const driversFooter = kpi && kpi.online_drivers > 0
+    ? `Idle ${kpi.online_drivers_idle} · On-trip ${kpi.online_drivers_on_trip}`
+    : 'Module 07 not yet wired'
+
+  const operatorsPaused = kpi?.active_operators_paused ?? 0
+
   return (
     <Shell
       activeId="dashboard"
@@ -184,7 +362,7 @@ export default function DashboardPage() {
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ display: 'inline-flex', border: '1px solid var(--rule-strong)', borderRadius: 3, overflow: 'hidden' }}>
-            {(['today', '7d', '30d', '90d'] as Window[]).map((w, i, arr) => (
+            {(['today', '7d', '30d', '90d'] as WindowParam[]).map((w, i, arr) => (
               <button key={w} className="btn sm ghost" onClick={() => setWindow(w)} style={{
                 height: 28, borderRadius: 0,
                 borderRight: i < arr.length - 1 ? '1px solid var(--rule)' : 'none',
@@ -204,12 +382,13 @@ export default function DashboardPage() {
     >
       <div style={{ padding: isMobile ? '12px 16px 28px' : '20px 28px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* KPI strip */}
+        {/* KPI strip — 8 cards */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
           background: 'var(--surface)', border: '1px solid var(--rule)', overflow: 'hidden',
         }}>
+          {/* Row 1 */}
           <KpiCard
             kicker="Live trips"
             value={loading ? '—' : kpi?.live_trips_total ?? 0}
@@ -218,29 +397,53 @@ export default function DashboardPage() {
             footer={kpi ? `Road · ${kpi.live_trips_road} · Air · ${kpi.live_trips_air}` : undefined}
           />
           <KpiCard
+            kicker="Online drivers"
+            value={driversValue}
+            footer={driversFooter}
+          />
+          <KpiCard
             kicker="Today's bookings"
             value={loading ? '—' : (kpi?.today_bookings ?? 0).toLocaleString('en-IN')}
             sparkline={kpi?.bookings_14d}
             sparkColor="var(--ink-3)"
-            footer={kpi ? `Completed · ${kpi.today_completed}` : undefined}
+            footer="vs. last period"
           />
           <KpiCard
             kicker="Today's GBV"
             value={loading ? '—' : fmtMinor(kpi?.today_gbv_minor ?? 0)}
             sparkline={kpi?.revenue_14d_minor}
             sparkColor="var(--accent)"
-            footer="Gross booking value (incl. tax)"
+            footer="Gross booking value"
+          />
+
+          {/* Row 2 */}
+          <KpiCard
+            kicker="Completed"
+            value={loading ? '—' : (kpi?.today_completed ?? 0).toLocaleString('en-IN')}
+            footer={`${completionRate}% completion rate`}
           />
           <KpiCard
             kicker="Cancel rate"
             value={loading ? '—' : `${kpi?.cancel_rate_pct ?? 0}%`}
-            deltaTone={(kpi?.cancel_rate_pct ?? 0) > 6 ? 'danger' : (kpi?.cancel_rate_pct ?? 0) > 4 ? 'warn' : 'ok'}
+            deltaTone={cancelTone}
             delta={kpi ? `${kpi.cancel_rate_pct}%` : undefined}
             footer="Today · road bookings"
           />
+          <KpiCard
+            kicker="Pickup ETA"
+            value={loading ? '—' : fmtEta(kpi?.pickup_eta_median_sec ?? 0)}
+            footer="Median · all classes"
+          />
+          <KpiCard
+            kicker="Active operators"
+            value={loading ? '—' : `${kpi?.active_operators ?? '—'} / ${kpi?.active_operators_total ?? '—'}`}
+            deltaTone={operatorsPaused > 0 ? 'danger' : 'ok'}
+            delta={operatorsPaused > 0 ? `${operatorsPaused} paused` : undefined}
+            footer={operatorsPaused > 0 ? `${operatorsPaused} paused` : 'All operators active'}
+          />
         </div>
 
-        {/* Map placeholder + Alerts */}
+        {/* Map section + Alerts */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2.1fr 1fr', gap: 16, minHeight: 0 }}>
 
           {/* Map panel */}
@@ -255,20 +458,22 @@ export default function DashboardPage() {
                 </h3>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn sm" onClick={() => navigate('/dispatch')}>
+                <button className="btn sm" onClick={() => navigate('/dashboard/live')}>
                   <Icon name="external" size={12} />Full map
                 </button>
               </div>
             </div>
 
-            {/* City grid SVG */}
+            {/* CityMap SVG */}
             <div style={{ flex: 1, minHeight: 320, position: 'relative', background: 'var(--surface-sunk)', overflow: 'hidden' }}>
-              <CityGrid liveRoad={kpi?.live_trips_road ?? 0} liveAir={kpi?.live_trips_air ?? 0} />
-              <div style={{ position: 'absolute', top: 14, right: 14, background: 'var(--surface)', border: '1px solid var(--rule)', padding: '10px 14px', display: 'flex', gap: 18, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                <div><div className="t-label" style={{ padding: 0 }}>Road</div><div style={{ color: 'var(--accent)', marginTop: 3 }}>{kpi?.live_trips_road ?? '—'}</div></div>
-                <div><div className="t-label" style={{ padding: 0 }}>Air</div><div style={{ color: 'var(--ink)', marginTop: 3 }}>{kpi?.live_trips_air ?? '—'}</div></div>
-                <div><div className="t-label" style={{ padding: 0 }}>Total</div><div style={{ color: 'var(--ink)', marginTop: 3 }}>{kpi?.live_trips_total ?? '—'}</div></div>
-              </div>
+              <CityMap
+                showLegend
+                height={320}
+                onlineCount={kpi?.online_drivers_idle}
+                onTripCount={kpi?.online_drivers_on_trip}
+                pickupCount={kpi?.live_trips_road}
+                airCount={kpi?.live_trips_air}
+              />
             </div>
           </div>
 
@@ -304,7 +509,6 @@ export default function DashboardPage() {
                 </div>
               ))}
 
-              {/* Always show a sensible set of static operational reminders */}
               {[
                 { sev: 'info', t: 'Payout run', m: 'Check weekly driver payout queue in Payouts module', mod: 'Payouts' },
                 { sev: 'warn', t: 'KYC queue', m: 'Review pending driver document verifications', mod: 'KYC' },
@@ -396,55 +600,5 @@ export default function DashboardPage() {
         </div>
       </div>
     </Shell>
-  )
-}
-
-// ── City grid SVG (static decorative map) ────────────────────────────────────
-
-function CityGrid({ liveRoad, liveAir }: { liveRoad: number; liveAir: number }) {
-  const dots = Array.from({ length: Math.min(liveRoad, 20) }, (_, i) => ({
-    x: 80 + (i % 6) * 110 + Math.sin(i * 1.7) * 30,
-    y: 80 + Math.floor(i / 6) * 100 + Math.cos(i * 2.1) * 25,
-    kind: 'road',
-  }))
-  const airDots = Array.from({ length: Math.min(liveAir, 6) }, (_, i) => ({
-    x: 150 + i * 130,
-    y: 60 + (i % 2) * 140,
-  }))
-
-  return (
-    <svg viewBox="0 0 800 340" preserveAspectRatio="xMidYMid slice" style={{ width: '100%', height: '100%', display: 'block' }}>
-      <defs>
-        <pattern id="g1" width="48" height="48" patternUnits="userSpaceOnUse">
-          <path d="M48 0 L0 0 0 48" stroke="var(--rule)" strokeWidth="0.5" fill="none" />
-        </pattern>
-        <pattern id="g2" width="12" height="12" patternUnits="userSpaceOnUse">
-          <path d="M12 0 L0 0 0 12" stroke="var(--rule-soft)" strokeWidth="0.3" fill="none" />
-        </pattern>
-      </defs>
-      <rect width="800" height="340" fill="var(--surface-sunk)" />
-      <rect width="800" height="340" fill="url(#g2)" />
-      <rect width="800" height="340" fill="url(#g1)" opacity="0.6" />
-      <g stroke="var(--rule-strong)" strokeWidth="1.2" fill="none" opacity="0.7">
-        <path d="M-10 100 Q200 80 420 140 T820 180" />
-        <path d="M-10 260 Q220 300 480 260 T820 230" />
-        <path d="M120 -10 Q160 150 260 230 T320 350" />
-        <path d="M520 -10 Q540 120 580 240 T620 360" />
-      </g>
-      <g stroke="var(--rule)" strokeWidth="0.6" fill="none" opacity="0.5">
-        <path d="M-10 50 Q300 70 800 80" /><path d="M-10 200 Q300 220 800 180" />
-        <path d="M280 -10 Q300 170 300 360" /><path d="M430 -10 Q450 160 460 360" />
-        <path d="M-10 160 L820 160" />
-      </g>
-      <path d="M-10 300 Q200 260 360 300 Q520 340 800 280" fill="none" stroke="var(--info)" strokeWidth="5" opacity="0.15" strokeLinecap="round" />
-      {dots.map((d, i) => (
-        <circle key={`r${i}`} cx={d.x} cy={d.y} r="5" fill="var(--accent)" opacity="0.85" />
-      ))}
-      {airDots.map((d, i) => (
-        <text key={`a${i}`} x={d.x} y={d.y} textAnchor="middle" dominantBaseline="middle"
-              fill="var(--ink)" style={{ font: '14px sans-serif' }}>✈</text>
-      ))}
-      <rect width="800" height="340" fill="url(#cityVignette)" />
-    </svg>
   )
 }
