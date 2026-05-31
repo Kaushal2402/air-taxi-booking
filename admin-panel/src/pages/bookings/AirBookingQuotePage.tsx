@@ -55,7 +55,7 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
   const [loadingAc, setLoadingAc] = useState(false)
 
   useEffect(() => {
-    operatorService.listOperators({ status: 'active', page_size: 200 })
+    operatorService.listOperators({ page_size: 200 })
       .then(r => setOperators(r.items))
       .catch(() => {})
       .finally(() => setLoadingOps(false))

@@ -372,7 +372,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
   const [loadingAc, setLoadingAc] = useState(false)
 
   useEffect(() => {
-    operatorService.listOperators({ status: 'active', page_size: 200 })
+    operatorService.listOperators({ page_size: 200 })
       .then(r => setOperators(r.items))
       .catch(() => {})
       .finally(() => setLoadingOps(false))
@@ -381,7 +381,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
   useEffect(() => {
     if (!operatorId) { setAircraft([]); setAircraftId(''); return }
     setLoadingAc(true)
-    operatorService.listAircraft({ operator_id: operatorId, status: 'ready', page_size: 100 })
+    operatorService.listAircraft({ operator_id: operatorId, page_size: 100 })
       .then(r => setAircraft(r.items))
       .catch(() => setAircraft([]))
       .finally(() => setLoadingAc(false))
