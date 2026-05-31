@@ -374,12 +374,20 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
 
   useEffect(() => {
     setLoadError(null)
-    operatorService.listOperators({ page_size: 200 })
+    operatorService.listOperators({ page_size: 100 })
       .then(r => setOperators(r.items ?? []))
       .catch((e: unknown) => {
-        const msg = (e as { response?: { data?: { detail?: string }; status?: number } })?.response?.data?.detail
-          ?? (e as { message?: string })?.message
-          ?? 'Failed to load operators'
+        const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+        let msg = 'Failed to load operators'
+        if (typeof detail === 'string') {
+          msg = detail
+        } else if (Array.isArray(detail) && detail.length > 0) {
+          msg = (detail as Array<{ msg?: string; loc?: unknown[] }>)
+            .map(d => d.msg ?? JSON.stringify(d))
+            .join(', ')
+        } else if ((e as { message?: string })?.message) {
+          msg = (e as { message: string }).message
+        }
         setLoadError(msg)
       })
       .finally(() => setLoadingOps(false))
