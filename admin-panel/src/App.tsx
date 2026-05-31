@@ -5,6 +5,7 @@ import { queryClient } from './lib/queryClient'
 import { useAuthStore } from './store/authStore'
 import { authService } from './services/authService'
 
+import DashboardPage from './pages/dashboard/DashboardPage'
 import LoginPage from './pages/auth/LoginPage'
 import TwoFAPage from './pages/auth/TwoFAPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
@@ -23,12 +24,42 @@ import DriverOnboardingPage from './pages/drivers/DriverOnboardingPage'
 import DriverDirectoryPage from './pages/drivers/DriverDirectoryPage'
 import DriverDetailPage from './pages/drivers/DriverDetailPage'
 import DocumentReviewPage from './pages/drivers/DocumentReviewPage'
-
-const DashboardPage = () => (
-  <div style={{ padding: 40, color: 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>
-    Dashboard — coming in Module 02
-  </div>
-)
+import RoadBookingsPage from './pages/bookings/RoadBookingsPage'
+import BookingDetailPage from './pages/bookings/BookingDetailPage'
+import AssistedBookingPage from './pages/bookings/AssistedBookingPage'
+import DisputesPage from './pages/bookings/DisputesPage'
+import AirBookingsPage from './pages/bookings/AirBookingsPage'
+import AirBookingDetailPage from './pages/bookings/AirBookingDetailPage'
+import AirBookingQuotePage from './pages/bookings/AirBookingQuotePage'
+import AirAssistedBookingPage from './pages/bookings/AirAssistedBookingPage'
+import RoadFareRulesPage from './pages/pricing/RoadFareRulesPage'
+import AirFareRulesPage from './pages/pricing/AirFareRulesPage'
+import TaxesPage from './pages/pricing/TaxesPage'
+import FareSimulatorPage from './pages/pricing/FareSimulatorPage'
+import OperatorDirectoryPage from './pages/operators/OperatorDirectoryPage'
+import OperatorDetailPage from './pages/operators/OperatorDetailPage'
+import OperatorOnboardingPage from './pages/operators/OperatorOnboardingPage'
+import AircraftDirectoryPage from './pages/aircraft/AircraftDirectoryPage'
+import AircraftDetailPage from './pages/aircraft/AircraftDetailPage'
+import PilotsCrewPage from './pages/aircraft/PilotsCrewPage'
+import VehicleDirectoryPage from './pages/vehicles/VehicleDirectoryPage'
+import VehicleDetailPage from './pages/vehicles/VehicleDetailPage'
+import VendorDirectoryPage from './pages/vehicles/VendorDirectoryPage'
+import VendorNewPage from './pages/vehicles/VendorNewPage'
+import KycQueuePage from './pages/kyc/KycQueuePage'
+import KycDocumentDetailPage from './pages/kyc/KycDocumentDetailPage'
+import KycExpiryPage from './pages/kyc/KycExpiryPage'
+import PromotionsPage from './pages/promotions/PromotionsPage'
+import ReferralPage from './pages/promotions/ReferralPage'
+import RedemptionAnalyticsPage from './pages/promotions/RedemptionAnalyticsPage'
+import AuditStreamPage from './pages/audit/AuditStreamPage'
+import AuditEventPage from './pages/audit/AuditEventPage'
+import SecurityCompliancePage from './pages/audit/SecurityCompliancePage'
+import AdminDetailPage from './pages/admin-users/AdminDetailPage'
+import InvitesPage from './pages/admin-users/InvitesPage'
+import PlatformSettingsPage from './pages/settings/PlatformSettingsPage'
+import FeatureFlagsPage from './pages/settings/FeatureFlagsPage'
+import MaintenancePage from './pages/settings/MaintenancePage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -134,6 +165,66 @@ function App() {
           <Route path="/drivers/onboarding" element={<PrivateRoute><DriverOnboardingPage /></PrivateRoute>} />
           <Route path="/drivers/:id" element={<PrivateRoute><DriverDetailPage /></PrivateRoute>} />
           <Route path="/drivers/:id/documents/:docId" element={<PrivateRoute><DocumentReviewPage /></PrivateRoute>} />
+
+          {/* Road Bookings */}
+          <Route path="/bookings/road" element={<PrivateRoute><RoadBookingsPage /></PrivateRoute>} />
+          <Route path="/bookings/road/new" element={<PrivateRoute><AssistedBookingPage /></PrivateRoute>} />
+          <Route path="/bookings/road/:id" element={<PrivateRoute><BookingDetailPage /></PrivateRoute>} />
+          <Route path="/bookings/assisted" element={<PrivateRoute><AssistedBookingPage /></PrivateRoute>} />
+          <Route path="/bookings/disputes" element={<PrivateRoute><DisputesPage /></PrivateRoute>} />
+
+          {/* Air Bookings — specific paths BEFORE :id wildcard */}
+          <Route path="/bookings/air/new" element={<PrivateRoute><AirAssistedBookingPage /></PrivateRoute>} />
+          <Route path="/bookings/air/:id/quotes" element={<PrivateRoute><AirBookingQuotePage /></PrivateRoute>} />
+          <Route path="/bookings/air/:id" element={<PrivateRoute><AirBookingDetailPage /></PrivateRoute>} />
+          <Route path="/bookings/air" element={<PrivateRoute><AirBookingsPage /></PrivateRoute>} />
+
+          {/* Pricing */}
+          <Route path="/pricing" element={<Navigate to="/pricing/road" replace />} />
+          <Route path="/pricing/road" element={<PrivateRoute><RoadFareRulesPage /></PrivateRoute>} />
+          <Route path="/pricing/air" element={<PrivateRoute><AirFareRulesPage /></PrivateRoute>} />
+          <Route path="/pricing/taxes" element={<PrivateRoute><TaxesPage /></PrivateRoute>} />
+          <Route path="/pricing/simulator" element={<PrivateRoute><FareSimulatorPage /></PrivateRoute>} />
+
+          {/* Operators */}
+          <Route path="/operators" element={<PrivateRoute><OperatorDirectoryPage /></PrivateRoute>} />
+          <Route path="/operators/new" element={<PrivateRoute><OperatorOnboardingPage /></PrivateRoute>} />
+          <Route path="/operators/:id" element={<PrivateRoute><OperatorDetailPage /></PrivateRoute>} />
+
+          {/* Aircraft & Crew */}
+          <Route path="/aircraft" element={<PrivateRoute><AircraftDirectoryPage /></PrivateRoute>} />
+          <Route path="/aircraft/:id" element={<PrivateRoute><AircraftDetailPage /></PrivateRoute>} />
+          <Route path="/aircraft/crew" element={<PrivateRoute><PilotsCrewPage /></PrivateRoute>} />
+
+          {/* Vehicles */}
+          <Route path="/vehicles" element={<PrivateRoute><VehicleDirectoryPage /></PrivateRoute>} />
+          <Route path="/vehicles/:id" element={<PrivateRoute><VehicleDetailPage /></PrivateRoute>} />
+          <Route path="/vendors" element={<PrivateRoute><VendorDirectoryPage /></PrivateRoute>} />
+          <Route path="/vendors/new" element={<PrivateRoute><VendorNewPage /></PrivateRoute>} />
+
+          {/* KYC */}
+          <Route path="/kyc" element={<PrivateRoute><KycQueuePage /></PrivateRoute>} />
+          <Route path="/kyc/expiry" element={<PrivateRoute><KycExpiryPage /></PrivateRoute>} />
+          <Route path="/kyc/:id" element={<PrivateRoute><KycDocumentDetailPage entityType="driver" /></PrivateRoute>} />
+
+          {/* Promotions */}
+          <Route path="/promotions" element={<PrivateRoute><PromotionsPage /></PrivateRoute>} />
+          <Route path="/promotions/referrals" element={<PrivateRoute><ReferralPage /></PrivateRoute>} />
+          <Route path="/promotions/analytics" element={<PrivateRoute><RedemptionAnalyticsPage /></PrivateRoute>} />
+
+          {/* Audit */}
+          <Route path="/audit" element={<PrivateRoute><AuditStreamPage /></PrivateRoute>} />
+          <Route path="/audit/:id" element={<PrivateRoute><AuditEventPage /></PrivateRoute>} />
+          <Route path="/audit/security" element={<PrivateRoute><SecurityCompliancePage /></PrivateRoute>} />
+
+          {/* Admin users (extra pages) */}
+          <Route path="/admin-users/:id" element={<PrivateRoute><AdminDetailPage /></PrivateRoute>} />
+          <Route path="/admin-users/invites" element={<PrivateRoute><InvitesPage /></PrivateRoute>} />
+
+          {/* Settings */}
+          <Route path="/settings" element={<PrivateRoute><PlatformSettingsPage /></PrivateRoute>} />
+          <Route path="/settings/flags" element={<PrivateRoute><FeatureFlagsPage /></PrivateRoute>} />
+          <Route path="/settings/maintenance" element={<PrivateRoute><MaintenancePage /></PrivateRoute>} />
 
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />

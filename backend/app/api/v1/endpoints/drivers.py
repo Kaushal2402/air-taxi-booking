@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File
+from fastapi import APIRouter, Depends, Query, Request, UploadFile, File
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -21,7 +21,7 @@ from app.schemas.driver import (
     OnboardingQueueResponse,
     StubResponse,
 )
-from app.services import driver_service
+from app.services import audit_service, driver_service
 
 router = APIRouter()
 
@@ -117,58 +117,148 @@ async def update_driver(
 @router.post("/{id}/approve", response_model=DriverResponse)
 async def approve_driver(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.approve_driver(db, id)
+    result = await driver_service.approve_driver(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="driver.approve",
+            target=f"driver:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/{id}/reject", response_model=DriverResponse)
 async def reject_driver(
     id: str,
     body: DriverActionRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.reject_driver(db, id, body.reason)
+    result = await driver_service.reject_driver(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="driver.reject",
+            target=f"driver:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/{id}/suspend", response_model=DriverResponse)
 async def suspend_driver(
     id: str,
     body: DriverActionRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.suspend_driver(db, id, body.reason)
+    result = await driver_service.suspend_driver(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="driver.suspend",
+            target=f"driver:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/{id}/reactivate", response_model=DriverResponse)
 async def reactivate_driver(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.reactivate_driver(db, id)
+    result = await driver_service.reactivate_driver(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="driver.reactivate",
+            target=f"driver:{id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/{id}/deactivate", response_model=DriverResponse)
 async def deactivate_driver(
     id: str,
     body: DriverActionRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.deactivate_driver(db, id, body.reason)
+    result = await driver_service.deactivate_driver(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="driver.deactivate",
+            target=f"driver:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/{id}/force-offline", response_model=DriverResponse)
 async def force_offline(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.force_offline(db, id)
+    result = await driver_service.force_offline(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="driver.force_offline",
+            target=f"driver:{id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Driver documents ──────────────────────────────────────────────────────────
@@ -197,10 +287,25 @@ async def review_document(
     id: str,
     doc_id: str,
     body: DriverDocumentReviewRequest,
+    request: Request,
     admin_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.review_document(db, id, doc_id, body, reviewed_by=admin_user.email)
+    result = await driver_service.review_document(db, id, doc_id, body, reviewed_by=admin_user.email)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin_user.email,
+            actor_role=admin_user.role if hasattr(admin_user, "role") else "Admin",
+            action="driver.document.review",
+            target=f"driver:{id} doc:{doc_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/{id}/documents/{doc_id}/upload", response_model=DriverDocumentResponse)
@@ -259,7 +364,22 @@ async def get_wallet_transactions(
 async def adjust_wallet(
     id: str,
     body: DriverWalletAdjustRequest,
+    request: Request,
     admin_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await driver_service.adjust_wallet(db, id, body, created_by=admin_user.email)
+    result = await driver_service.adjust_wallet(db, id, body, created_by=admin_user.email)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin_user.email,
+            actor_role=admin_user.role if hasattr(admin_user, "role") else "Admin",
+            action="driver.wallet.adjust",
+            target=f"driver:{id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result

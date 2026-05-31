@@ -187,6 +187,10 @@ export default function DriverDirectoryPage() {
   const [page, setPage]               = useState(1)
 
   const [suspendPending, setSuspendPending] = useState<SuspendPending | null>(null)
+  const [sortField, setSortField]   = useState<'trips' | 'rating' | 'acceptance' | 'cancellation' | 'name'>('trips')
+  const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc')
+  const [showSortMenu, setShowSortMenu] = useState(false)
+  const sortRef = useRef<HTMLDivElement>(null)
 
   const loadDrivers = async (opts?: { tab?: TabKey; q?: string; status?: string; kyc?: string; p?: number }) => {
     setLoading(true)
@@ -229,6 +233,15 @@ export default function DriverDirectoryPage() {
     return () => clearTimeout(t)
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!showSortMenu) return
+    const handler = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setShowSortMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showSortMenu])
+
   const handleTab = (tab: TabKey) => {
     setActiveTab(tab)
     setPage(1)
@@ -267,6 +280,52 @@ export default function DriverDirectoryPage() {
     }
   }
 
+  const handleExport = () => {
+    const headers = ['Driver Code', 'Name', 'Phone', 'City', 'Zone', 'Vehicle Class', 'Vehicle Plate', 'Online', 'Trips', 'Rating', 'Acceptance %', 'Cancellation %', 'KYC', 'Status']
+    const rows = drivers.map(d => [
+      d.driver_code ?? '',
+      d.name,
+      d.phone,
+      d.city ?? '',
+      d.zone_code ?? '',
+      d.vehicle_class ?? '',
+      d.vehicle_plate ?? '',
+      d.online_status,
+      d.trips_count,
+      d.rating?.toFixed(2) ?? '',
+      d.acceptance_rate?.toFixed(1) ?? '',
+      d.cancellation_rate.toFixed(1),
+      d.kyc_status,
+      d.status,
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `drivers-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const DRIVER_SORT_OPTIONS: { key: 'trips' | 'rating' | 'acceptance' | 'cancellation' | 'name'; label: string }[] = [
+    { key: 'trips',        label: 'Trips' },
+    { key: 'rating',       label: 'Rating' },
+    { key: 'acceptance',   label: 'Acceptance' },
+    { key: 'cancellation', label: 'Cancellation' },
+    { key: 'name',         label: 'Name' },
+  ]
+
+  const sortedDrivers = [...drivers].sort((a, b) => {
+    let cmp = 0
+    if (sortField === 'name')              cmp = a.name.localeCompare(b.name)
+    else if (sortField === 'trips')        cmp = a.trips_count - b.trips_count
+    else if (sortField === 'rating')       cmp = (a.rating ?? 0) - (b.rating ?? 0)
+    else if (sortField === 'acceptance')   cmp = (a.acceptance_rate ?? 0) - (b.acceptance_rate ?? 0)
+    else if (sortField === 'cancellation') cmp = a.cancellation_rate - b.cancellation_rate
+    return sortDir === 'desc' ? -cmp : cmp
+  })
+
   const TABS: { key: TabKey; label: string; tone?: string }[] = [
     { key: 'all',           label: 'All' },
     { key: 'online',        label: 'Online',        tone: 'var(--accent)' },
@@ -298,7 +357,7 @@ export default function DriverDirectoryPage() {
       subtitle={`${allCount.toLocaleString()} approved · ${onlineCount.toLocaleString()} online · ${reviewCount} in review · ${suspCount} suspended`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm"><Icon name="download" size={13} />Export</button>
+          <button className="btn sm" onClick={handleExport}><Icon name="download" size={13} />Export</button>
           <button className="btn sm">Bulk message</button>
           <button className="btn sm accent" onClick={() => navigate('/drivers/onboarding')}>
             <Icon name="plus" size={13} />Onboard driver
@@ -399,7 +458,45 @@ export default function DriverDirectoryPage() {
             </>
           )}
           <div style={{ flex: 1 }} />
-          <button className="btn sm ghost">Sort · Trips ↓</button>
+          <div ref={sortRef} style={{ position: 'relative' }}>
+            <button
+              className="btn sm ghost"
+              onClick={() => setShowSortMenu(v => !v)}
+            >
+              Sort · {DRIVER_SORT_OPTIONS.find(o => o.key === sortField)?.label} {sortDir === 'desc' ? '↓' : '↑'}
+            </button>
+            {showSortMenu && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 200,
+                background: 'var(--surface)', border: '1px solid var(--rule-strong)',
+                boxShadow: 'var(--shadow-pop)', minWidth: 170, padding: '4px 0',
+              }}>
+                {DRIVER_SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    className="btn ghost"
+                    style={{
+                      width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 12.5,
+                      borderRadius: 0, justifyContent: 'space-between',
+                      color: sortField === opt.key ? 'var(--accent)' : undefined,
+                    }}
+                    onClick={() => {
+                      if (sortField === opt.key) {
+                        setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+                      } else {
+                        setSortField(opt.key)
+                        setSortDir('desc')
+                      }
+                      setShowSortMenu(false)
+                    }}
+                  >
+                    <span>{opt.label}</span>
+                    {sortField === opt.key && <span>{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Content */}
@@ -413,7 +510,7 @@ export default function DriverDirectoryPage() {
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
                   {search || statusFilter ? 'No drivers match your filter.' : 'No drivers yet.'}
                 </div>
-              ) : drivers.map(d => (
+              ) : sortedDrivers.map(d => (
                 <DriverCard key={d.id} driver={d} onClick={() => navigate(`/drivers/${d.id}`)} />
               ))}
             </div>
@@ -446,7 +543,7 @@ export default function DriverDirectoryPage() {
                         {search || statusFilter ? 'No drivers match your filter.' : 'No drivers yet.'}
                       </td>
                     </tr>
-                  ) : drivers.map((d, i) => (
+                  ) : sortedDrivers.map((d, i) => (
                     <tr
                       key={d.id}
                       style={{ cursor: 'pointer' }}

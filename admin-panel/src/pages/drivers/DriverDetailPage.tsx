@@ -154,9 +154,6 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
   const [addError, setAddError]         = useState('')
   const [addSaving, setAddSaving]       = useState(false)
 
-  const reloadDocs = () =>
-    driverService.getDocuments(driverId).then(data => setDocs(data.items)).catch(() => {})
-
   useEffect(() => {
     setLoading(true)
     driverService.getDocuments(driverId)
@@ -771,6 +768,7 @@ export default function DriverDetailPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
 
   const [showSuspendModal, setShowSuspendModal]             = useState(false)
+  const [showRejectModal, setShowRejectModal]               = useState(false)
   const [showForceOfflineDialog, setShowForceOfflineDialog] = useState(false)
   const [showReactivateDialog, setShowReactivateDialog]     = useState(false)
   const [showApproveDialog, setShowApproveDialog]           = useState(false)
@@ -865,13 +863,26 @@ export default function DriverDetailPage() {
     if (!driver) return
     setApiError('')
     try {
-      const updated = await driverService.approveDriver(driver.id)
-      setDriver(updated)
+      await driverService.approveDriver(driver.id)
+      await loadDriver()          // Force fresh state so Approve button vanishes immediately
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string; message?: string } } }
       setApiError(err?.response?.data?.detail || err?.response?.data?.message || 'Failed to approve driver')
     }
     setShowApproveDialog(false)
+  }
+
+  const handleReject = async (reason: string) => {
+    if (!driver) return
+    setApiError('')
+    try {
+      await driverService.rejectDriver(driver.id, reason)
+      await loadDriver()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string; message?: string } } }
+      setApiError(err?.response?.data?.detail || err?.response?.data?.message || 'Failed to reject driver')
+    }
+    setShowRejectModal(false)
   }
 
   const handleDeactivate = async (reason: string) => {
@@ -948,10 +959,15 @@ export default function DriverDetailPage() {
     )
   }
 
+  // Only show Approve when the driver is genuinely awaiting activation
   const canApprove    = driver.status === 'pending' || driver.status === 'in_review'
+  // Suspend makes sense for live / onboarding drivers, not already-suspended or deactivated
   const canSuspend    = driver.status === 'active' || driver.status === 'in_review' || driver.status === 'approved'
   const canReactivate = driver.status === 'suspended'
-  const canDeactivate = driver.status !== 'deactivated'
+  // Deactivate only when suspended (permanent step)
+  const canDeactivate = driver.status === 'suspended'
+  // Reject for pending / in_review drivers
+  const canReject     = driver.status === 'pending' || driver.status === 'in_review'
 
   const TABS: { key: TabKey; label: string }[] = [
     { key: 'overview',      label: 'Overview' },
@@ -974,11 +990,26 @@ export default function DriverDetailPage() {
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn sm"><Icon name="envelope" size={13} />Message</button>
+
+          {/* Approve — only when pending / in_review, disappears once active */}
           {canApprove && (
             <button className="btn sm accent" onClick={() => setShowApproveDialog(true)}>
               <Icon name="check" size={13} />Approve
             </button>
           )}
+
+          {/* Reject — alongside Approve for pending / in_review */}
+          {canReject && (
+            <button
+              className="btn sm"
+              style={{ color: 'var(--danger)', borderColor: 'color-mix(in oklab, var(--danger) 40%, var(--rule))' }}
+              onClick={() => setShowRejectModal(true)}
+            >
+              Reject
+            </button>
+          )}
+
+          {/* Active-driver actions */}
           {driver.online_status === 'online' && (
             <button className="btn sm" onClick={() => setShowForceOfflineDialog(true)}>Force offline</button>
           )}
@@ -991,12 +1022,15 @@ export default function DriverDetailPage() {
               Suspend
             </button>
           )}
+
+          {/* Suspended-driver actions */}
           {canReactivate && (
             <button className="btn sm accent" onClick={() => setShowReactivateDialog(true)}>Reactivate</button>
           )}
-          {canDeactivate && driver.status === 'suspended' && (
+          {canDeactivate && (
             <button className="btn sm ghost" style={{ color: 'var(--ink-3)' }} onClick={() => setShowDeactivateModal(true)}>Deactivate</button>
           )}
+
           <button className="btn sm" onClick={handleEditOpen}>Edit</button>
         </div>
       }
@@ -1128,6 +1162,18 @@ export default function DriverDetailPage() {
         {activeTab === 'disciplinary' && <TabStub />}
         {activeTab === 'audit'        && <TabStub />}
       </div>
+
+      {/* Reject modal */}
+      {showRejectModal && (
+        <ReasonModal
+          title={`Reject ${driver.name}`}
+          placeholder="Reason for rejection (required)…"
+          confirmLabel="Reject driver"
+          variant="danger"
+          onConfirm={handleReject}
+          onCancel={() => setShowRejectModal(false)}
+        />
+      )}
 
       {/* Suspend modal */}
       {showSuspendModal && (

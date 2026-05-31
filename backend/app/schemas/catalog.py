@@ -112,6 +112,8 @@ class ServiceZoneBase(BaseModel):
     surge_cap: float = 2.0
     active_service_codes: Optional[List[str]] = None
     is_active: bool = True
+    operational_status: str = "operational"   # operational | degraded | maintenance
+    status_note: Optional[str] = None
 
     @field_validator("polygon")
     @classmethod
@@ -136,6 +138,8 @@ class ServiceZoneUpdate(BaseModel):
     surge_cap: Optional[float] = None
     active_service_codes: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    operational_status: Optional[str] = None
+    status_note: Optional[str] = None
 
 
 class ServiceZonePublish(BaseModel):

@@ -517,8 +517,8 @@ async def review_document(
     await db.commit()
     await db.refresh(doc)
 
-    # Recompute driver kyc_status based on document states
-    await _recompute_driver_kyc_status(db, driver_id)
+    # Recompute driver kyc_status based on document states (must use UUID, not raw driver_id)
+    await _recompute_driver_kyc_status(db, driver.id)
 
     return doc
 
@@ -587,7 +587,7 @@ async def adjust_wallet(
 
     txn = DriverWalletTransaction(
         id=str(uuid.uuid4()),
-        driver_id=driver_id,
+        driver_id=driver.id,   # always UUID FK, never driver-code string
         direction=data.direction,
         amount_minor=data.amount_minor,
         reason=data.reason,

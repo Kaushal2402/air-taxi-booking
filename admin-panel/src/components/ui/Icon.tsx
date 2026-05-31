@@ -12,7 +12,7 @@ const ICONS: Record<string, string> = {
   logout:    'M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7',
   shield:    'M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z',
   key:       'M14.5 9.5a4 4 0 1 1-3 6L10 17l-2 2H4v-3l5.5-5.5a4 4 0 0 1 5-1Z',
-  check:     'm5 13 4 4L19 7',
+  check:     'M5 13l4 4L19 7',
   close:     'M6 6l12 12M18 6 6 18',
   envelope:  'M3 7l9 6 9-6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z',
   phone:     'M5 4h3l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z',
@@ -59,6 +59,7 @@ const ICONS: Record<string, string> = {
   unlock:    'M18 11V9a6 6 0 0 0-11.91-1M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z',
   trash:     'M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
   pencil:    'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z',
+  camera:    'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2v11Zm-11 0a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
   move:      'M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20',
   mapPin:    'M12 21C12 21 5 13.5 5 8a7 7 0 1 1 14 0c0 5.5-7 13-7 13Zm0-9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z',
   zoomIn:    'M11 4a7 7 0 1 1 0 14A7 7 0 0 1 11 4Zm10 17-4.35-4.35M11 8v6M8 11h6',
@@ -83,9 +84,7 @@ export default function Icon({ name, size = 16, stroke = 1.5, className, style }
       strokeLinecap="round" strokeLinejoin="round"
       className={className} style={style} aria-hidden="true"
     >
-      {d.split('M').filter(Boolean).map((seg, i) => (
-        <path key={i} d={'M' + seg} />
-      ))}
+      <path d={d} />
     </svg>
   )
 }

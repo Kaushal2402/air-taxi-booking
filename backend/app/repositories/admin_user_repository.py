@@ -26,18 +26,47 @@ class AdminUserRepository:
         result = await self.db.execute(select(AdminUser).where(AdminUser.id == user_id, AdminUser.deleted_at.is_(None)))
         return result.scalar_one_or_none()
 
-    async def list_all(self, skip: int = 0, limit: int = 50, exclude_id: str | None = None) -> list[AdminUser]:
+    async def list_all(
+        self,
+        skip: int = 0,
+        limit: int = 50,
+        exclude_id: str | None = None,
+        search: str | None = None,
+        role: str | None = None,
+        status: str | None = None,
+    ) -> list[AdminUser]:
+        from sqlalchemy import or_
         q = select(AdminUser).where(AdminUser.deleted_at.is_(None))
         if exclude_id:
             q = q.where(AdminUser.id != exclude_id)
+        if search:
+            like = f"%{search}%"
+            q = q.where(or_(AdminUser.name.ilike(like), AdminUser.email.ilike(like)))
+        if role:
+            q = q.where(AdminUser.role == role)
+        if status:
+            q = q.where(AdminUser.status == status)
         result = await self.db.execute(q.offset(skip).limit(limit).order_by(AdminUser.created_at.desc()))
         return list(result.scalars().all())
 
-    async def count(self, exclude_id: str | None = None) -> int:
-        from sqlalchemy import func
+    async def count(
+        self,
+        exclude_id: str | None = None,
+        search: str | None = None,
+        role: str | None = None,
+        status: str | None = None,
+    ) -> int:
+        from sqlalchemy import func, or_
         q = select(func.count()).select_from(AdminUser).where(AdminUser.deleted_at.is_(None))
         if exclude_id:
             q = q.where(AdminUser.id != exclude_id)
+        if search:
+            like = f"%{search}%"
+            q = q.where(or_(AdminUser.name.ilike(like), AdminUser.email.ilike(like)))
+        if role:
+            q = q.where(AdminUser.role == role)
+        if status:
+            q = q.where(AdminUser.status == status)
         result = await self.db.execute(q)
         return result.scalar_one()
 
@@ -78,6 +107,8 @@ class AdminUserRepository:
         result = await self.db.execute(
             select(AdminSession)
             .where(AdminSession.refresh_token_hash == token_hash, AdminSession.revoked_at.is_(None))
+            .order_by(AdminSession.created_at.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

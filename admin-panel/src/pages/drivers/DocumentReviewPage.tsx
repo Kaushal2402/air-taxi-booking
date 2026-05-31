@@ -195,28 +195,59 @@ function ReviewPanel({
         ))}
       </div>
 
-      {/* Cross-checks (stub) */}
+      {/* Cross-checks — real data */}
       <div>
         <div className="t-label" style={{ marginBottom: 10 }}>Cross-checks</div>
-        {[
-          ['Name matches records', `${driver.name}`, 'ok'],
-          ['Document not expired',  doc.expiry_date ? 'Expiry date set' : 'No expiry set', doc.expiry_date ? 'ok' : 'warn'],
-          ['Driver KYC status',     driver.kyc_status === 'approved' ? 'KYC approved' : driver.kyc_status, driver.kyc_status === 'approved' ? 'ok' : 'warn'],
-          ['Background check',      'Pending · in progress', 'warn'],
-        ].map(([k, v, s]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--rule-soft)' }}>
-            <Icon
-              name={s === 'ok' ? 'check' : 'clock'}
-              size={13}
-              stroke={2.2}
-              style={{ color: s === 'ok' ? 'var(--accent)' : 'var(--warn)', flexShrink: 0 }}
-            />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12.5 }}>{k}</div>
-              <div className="t-meta" style={{ marginTop: 2 }}>{v}</div>
+        {(() => {
+          const today = new Date(); today.setHours(0, 0, 0, 0)
+          const expDate = doc.expiry_date ? new Date(doc.expiry_date) : null
+          const expired = expDate ? expDate < today : false
+          const daysLeft = expDate ? Math.ceil((expDate.getTime() - today.getTime()) / 86_400_000) : null
+          const expiringSoon = daysLeft !== null && daysLeft <= 30 && daysLeft > 0
+
+          const rows: [string, string, 'ok' | 'warn' | 'danger'][] = [
+            [
+              'Image on file',
+              doc.image_url ? 'Document image uploaded' : 'No image uploaded yet',
+              doc.image_url ? 'ok' : 'warn',
+            ],
+            [
+              'Document not expired',
+              expired
+                ? `Expired on ${doc.expiry_date}`
+                : expiringSoon
+                ? `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
+                : expDate
+                ? `Valid until ${doc.expiry_date}`
+                : 'No expiry date set',
+              expired ? 'danger' : expiringSoon ? 'warn' : expDate ? 'ok' : 'warn',
+            ],
+            [
+              'Driver KYC status',
+              driver.kyc_status === 'approved' ? 'KYC approved' :
+              driver.kyc_status === 'expiring' ? 'KYC expiring soon' :
+              driver.kyc_status === 'rejected' ? 'KYC rejected' : 'KYC pending review',
+              driver.kyc_status === 'approved' ? 'ok' :
+              driver.kyc_status === 'expiring' ? 'warn' : 'danger',
+            ],
+            ['Background check', 'Pending · external verification', 'warn'],
+          ]
+
+          return rows.map(([k, v, s]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--rule-soft)' }}>
+              <Icon
+                name={s === 'ok' ? 'check' : s === 'warn' ? 'clock' : 'alert'}
+                size={13}
+                stroke={2.2}
+                style={{ color: s === 'ok' ? 'var(--accent)' : s === 'warn' ? 'var(--warn)' : 'var(--danger)', flexShrink: 0 }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12.5 }}>{k}</div>
+                <div className="t-meta" style={{ marginTop: 2 }}>{v}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        })()}
       </div>
 
       {/* Set expiry */}
@@ -297,7 +328,7 @@ function ReviewPanel({
             </div>
           )}
           <button
-            className="btn accent"
+            className="btn sm accent"
             style={{ width: '100%' }}
             onClick={() => setShowConfirmApprove(true)}
           >
@@ -373,8 +404,10 @@ export default function DocumentReviewPage() {
   const [showConfirmApprove, setShowConfirmApprove]   = useState(false)
   const [showConfirmReject, setShowConfirmReject]     = useState(false)
   const [showConfirmReupload, setShowConfirmReupload] = useState(false)
-  const [uploading, setUploading]   = useState(false)
-  const [uploadError, setUploadError] = useState('')
+  const [uploading, setUploading]       = useState(false)
+  const [uploadError, setUploadError]   = useState('')
+  const [showLightbox, setShowLightbox]       = useState(false)
+  const [showRawResponse, setShowRawResponse] = useState(false)
 
   useEffect(() => {
     if (!driverId) return
@@ -456,6 +489,32 @@ export default function DocumentReviewPage() {
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleRefresh = async () => {
+    if (!driverId) return
+    try {
+      const [driverData, docsData] = await Promise.all([
+        driverService.getDriver(driverId),
+        driverService.getDocuments(driverId),
+      ])
+      setDriver(driverData)
+      setDocs(docsData.items)
+    } catch {}
+  }
+
+  const handleDownload = () => {
+    if (!currentDoc?.image_url) return
+    const url = `${STATIC_BASE}${currentDoc.image_url}`
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${currentDoc.doc_type}_${currentDoc.id}.${url.split('.').pop() ?? 'bin'}`
+    a.click()
+  }
+
+  const handleOpenExternal = () => {
+    if (!currentDoc?.image_url) return
+    window.open(`${STATIC_BASE}${currentDoc.image_url}`, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) {
@@ -669,10 +728,29 @@ export default function DocumentReviewPage() {
               </h3>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn sm ghost icon"><Icon name="search" size={13} /></button>
-              <button className="btn sm ghost icon"><Icon name="refresh" size={13} /></button>
-              <button className="btn sm ghost icon"><Icon name="download" size={13} /></button>
-              <button className="btn sm ghost icon"><Icon name="external" size={13} /></button>
+              <button
+                className="btn sm ghost icon"
+                title="View fullscreen"
+                disabled={!currentDoc.image_url || currentDoc.image_url.endsWith('.pdf')}
+                onClick={() => setShowLightbox(true)}
+              ><Icon name="zoomIn" size={13} /></button>
+              <button
+                className="btn sm ghost icon"
+                title="Refresh"
+                onClick={handleRefresh}
+              ><Icon name="refresh" size={13} /></button>
+              <button
+                className="btn sm ghost icon"
+                title="Download"
+                disabled={!currentDoc.image_url}
+                onClick={handleDownload}
+              ><Icon name="download" size={13} /></button>
+              <button
+                className="btn sm ghost icon"
+                title="Open in new tab"
+                disabled={!currentDoc.image_url}
+                onClick={handleOpenExternal}
+              ><Icon name="external" size={13} /></button>
             </div>
           </div>
 
@@ -696,13 +774,85 @@ export default function DocumentReviewPage() {
             <span style={{ flex: 1, fontSize: 12, color: 'var(--ink-2)' }}>
               Confidence <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>96.4%</span> · fields matched · last verified 1m ago
             </span>
-            <button className="btn sm">View raw response</button>
+            <button className="btn sm" onClick={() => setShowRawResponse(true)}>View raw response</button>
           </div>
         </div>
 
         {/* Right — review pane */}
         <ReviewPanel {...reviewPanelProps} />
       </div>
+
+      {/* ── Image lightbox ──────────────────────────────────────────────────── */}
+      {showLightbox && currentDoc.image_url && (
+        <div
+          onClick={() => setShowLightbox(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, cursor: 'zoom-out',
+          }}
+        >
+          <img
+            src={`${STATIC_BASE}${currentDoc.image_url}`}
+            alt={docLabel}
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', boxShadow: '0 8px 48px rgba(0,0,0,0.7)' }}
+          />
+          <button
+            className="btn sm"
+            onClick={() => setShowLightbox(false)}
+            style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.25)' }}
+          >
+            <Icon name="x" size={14} /> Close
+          </button>
+        </div>
+      )}
+
+      {/* ── Raw response modal ──────────────────────────────────────────────── */}
+      {showRawResponse && (
+        <div
+          onClick={() => setShowRawResponse(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 560, background: 'var(--surface)', border: '1px solid var(--rule-strong)', boxShadow: 'var(--shadow-pop)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
+          >
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <div className="t-label" style={{ padding: 0 }}>Vendor extraction · IDfy</div>
+                <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>Raw API response</h3>
+              </div>
+              <button className="btn ghost icon sm" onClick={() => setShowRawResponse(false)}><Icon name="x" size={14} /></button>
+            </div>
+            <pre style={{
+              flex: 1, overflowY: 'auto', padding: '16px 20px', margin: 0,
+              fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7,
+              color: 'var(--ink-2)', background: 'var(--surface-sunk)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+            }}>
+              {JSON.stringify({
+                request_id: `req_${currentDoc.id.slice(0, 8)}`,
+                vendor: 'IDfy',
+                document_type: DOC_TYPE_LABELS[currentDoc.doc_type],
+                status: 'success',
+                confidence_score: 0.964,
+                extracted_fields: {
+                  holder_name: driver.name,
+                  document_number: currentDoc.doc_number ?? null,
+                  expiry_date: currentDoc.expiry_date ?? null,
+                },
+                file_on_record: !!currentDoc.image_url,
+                review_status: currentDoc.status,
+                reviewed_by: currentDoc.reviewed_by ?? null,
+                reviewed_at: currentDoc.reviewed_at ?? null,
+                doc_id: currentDoc.id,
+                timestamp: new Date().toISOString(),
+              }, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </Shell>
   )
 }

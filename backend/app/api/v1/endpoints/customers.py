@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -16,7 +16,7 @@ from app.schemas.customer import (
     WalletAdjustResponse,
     WalletTransactionListResponse,
 )
-from app.services import customer_service
+from app.services import audit_service, customer_service
 
 router = APIRouter()
 
@@ -87,10 +87,25 @@ async def update_customer_endpoint(
 async def suspend_customer_endpoint(
     customer_id: str,
     body: SuspendRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await customer_service.suspend_customer(db, customer_id, reason=body.reason)
+    result = await customer_service.suspend_customer(db, customer_id, reason=body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="customer.suspend",
+            target=f"customer:{customer_id}",
+            category="Support",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Reactivate customer ───────────────────────────────────────────────────────
@@ -98,10 +113,25 @@ async def suspend_customer_endpoint(
 @router.post("/{customer_id}/reactivate", response_model=CustomerResponse)
 async def reactivate_customer_endpoint(
     customer_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await customer_service.reactivate_customer(db, customer_id)
+    result = await customer_service.reactivate_customer(db, customer_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="customer.reactivate",
+            target=f"customer:{customer_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Flag customer ─────────────────────────────────────────────────────────────
@@ -110,10 +140,25 @@ async def reactivate_customer_endpoint(
 async def flag_customer_endpoint(
     customer_id: str,
     body: FlagRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await customer_service.flag_customer(db, customer_id, reason=body.reason)
+    result = await customer_service.flag_customer(db, customer_id, reason=body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="customer.flag",
+            target=f"customer:{customer_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Unflag customer ───────────────────────────────────────────────────────────
@@ -121,10 +166,25 @@ async def flag_customer_endpoint(
 @router.post("/{customer_id}/unflag", response_model=CustomerResponse)
 async def unflag_customer_endpoint(
     customer_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await customer_service.unflag_customer(db, customer_id)
+    result = await customer_service.unflag_customer(db, customer_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="customer.unflag",
+            target=f"customer:{customer_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Wallet: adjust balance ────────────────────────────────────────────────────
@@ -133,12 +193,27 @@ async def unflag_customer_endpoint(
 async def adjust_wallet_endpoint(
     customer_id: str,
     body: WalletAdjustRequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await customer_service.adjust_wallet(
+    result = await customer_service.adjust_wallet(
         db, customer_id, body, created_by=current_user.name
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="customer.wallet.adjust",
+            target=f"customer:{customer_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Wallet: list transactions ─────────────────────────────────────────────────

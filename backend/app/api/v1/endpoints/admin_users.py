@@ -38,17 +38,23 @@ class UpdateAdminRequest(BaseModel):
 @router.get("", response_model=PaginatedResponse[AdminUserResponse])
 async def list_admins(
     page: int = 1,
-    per_page: int = 50,
+    page_size: int = 50,
+    search: str | None = None,
+    role: str | None = None,
+    status: str | None = None,
     current_user: AdminUser = Depends(require_role("super_admin", "admin")),
     db=Depends(get_db),
 ):
-    repo = AdminUserRepository(db)
-    skip = (page - 1) * per_page
-    # Exclude the requesting user — they manage others, not themselves
-    users = await repo.list_all(skip=skip, limit=per_page, exclude_id=current_user.id)
-    total = await repo.count(exclude_id=current_user.id)
     import math
-    return PaginatedResponse(items=users, total=total, page=page, per_page=per_page, pages=math.ceil(total / per_page) if per_page else 1)
+    repo = AdminUserRepository(db)
+    skip = (page - 1) * page_size
+    # Exclude the requesting user — they manage others, not themselves
+    users = await repo.list_all(
+        skip=skip, limit=page_size, exclude_id=current_user.id,
+        search=search, role=role, status=status,
+    )
+    total = await repo.count(exclude_id=current_user.id, search=search, role=role, status=status)
+    return PaginatedResponse(items=users, total=total, page=page, per_page=page_size, pages=math.ceil(total / page_size) if page_size else 1)
 
 
 @router.post("/invite", response_model=AdminUserResponse, status_code=201)

@@ -51,6 +51,8 @@ export interface ServiceZone {
   active_service_codes: string[] | null
   is_active: boolean
   version: number
+  operational_status: 'operational' | 'degraded' | 'maintenance'
+  status_note: string | null
   created_at: string
   updated_at: string
 }

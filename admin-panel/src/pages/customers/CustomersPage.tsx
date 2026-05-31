@@ -355,6 +355,10 @@ export default function CustomersPage() {
   const [showAddModal, setShowAddModal]   = useState(false)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [apiError, setApiError]           = useState('')
+  const [sortField, setSortField]   = useState<'ltv' | 'trips' | 'rating' | 'wallet' | 'last_active' | 'joined' | 'name'>('ltv')
+  const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc')
+  const [showSortMenu, setShowSortMenu] = useState(false)
+  const sortRef = useRef<HTMLDivElement>(null)
 
   const loadCustomers = async (opts?: { seg?: SegmentFilter; status?: CustomerStatus | ''; q?: string; p?: number }) => {
     setLoading(true)
@@ -388,6 +392,15 @@ export default function CustomersPage() {
     const t = setTimeout(() => loadCustomers({ q: search, p: 1 }), 350)
     return () => clearTimeout(t)
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!showSortMenu) return
+    const handler = (e: MouseEvent) => {
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setShowSortMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showSortMenu])
 
   const handleSegment = (seg: SegmentFilter) => {
     setSegmentFilter(seg)
@@ -424,6 +437,53 @@ export default function CustomersPage() {
     setPendingAction(null)
   }
 
+  const handleExport = () => {
+    const headers = ['Customer Code', 'Name', 'Phone', 'Segment', 'Trips', 'LTV (₹)', 'Rating', 'Wallet (₹)', 'Last Active', 'Joined', 'Status']
+    const rows = customers.map(c => [
+      c.customer_code ?? '',
+      c.name,
+      c.phone,
+      c.segment,
+      c.trips_count,
+      (c.ltv_minor / 100).toFixed(2),
+      c.rating?.toFixed(2) ?? '',
+      (c.wallet_balance_minor / 100).toFixed(2),
+      c.last_active_at ? new Date(c.last_active_at).toLocaleDateString('en-GB') : '',
+      new Date(c.joined_at).toLocaleDateString('en-GB'),
+      c.status,
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const CUSTOMER_SORT_OPTIONS: { key: 'ltv' | 'trips' | 'rating' | 'wallet' | 'last_active' | 'joined' | 'name'; label: string }[] = [
+    { key: 'ltv',         label: 'LTV' },
+    { key: 'trips',       label: 'Trips' },
+    { key: 'rating',      label: 'Rating' },
+    { key: 'wallet',      label: 'Wallet' },
+    { key: 'last_active', label: 'Last active' },
+    { key: 'joined',      label: 'Joined' },
+    { key: 'name',        label: 'Name' },
+  ]
+
+  const sortedCustomers = [...customers].sort((a, b) => {
+    let cmp = 0
+    if (sortField === 'name')             cmp = a.name.localeCompare(b.name)
+    else if (sortField === 'trips')       cmp = a.trips_count - b.trips_count
+    else if (sortField === 'ltv')         cmp = a.ltv_minor - b.ltv_minor
+    else if (sortField === 'rating')      cmp = (a.rating ?? 0) - (b.rating ?? 0)
+    else if (sortField === 'wallet')      cmp = a.wallet_balance_minor - b.wallet_balance_minor
+    else if (sortField === 'last_active') cmp = (a.last_active_at ? new Date(a.last_active_at).getTime() : 0) - (b.last_active_at ? new Date(b.last_active_at).getTime() : 0)
+    else if (sortField === 'joined')      cmp = new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()
+    return sortDir === 'desc' ? -cmp : cmp
+  })
+
   const SEGMENT_TILES: { l: string; key: SegmentFilter; tone?: string }[] = [
     { l: 'All',        key: 'all' },
     { l: 'VIP · Corp', key: 'vip_corp',  tone: 'var(--accent)' },
@@ -447,7 +507,7 @@ export default function CustomersPage() {
       subtitle={`${total.toLocaleString()} customers`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm"><Icon name="download" size={13} />Export</button>
+          <button className="btn sm" onClick={handleExport}><Icon name="download" size={13} />Export</button>
           <button className="btn sm">Cohorts</button>
           <button className="btn sm accent" onClick={() => setShowAddModal(true)}><Icon name="plus" size={13} />Add customer</button>
         </div>
@@ -536,7 +596,45 @@ export default function CustomersPage() {
             </select>
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn sm ghost">Sort · LTV ↓</button>
+          <div ref={sortRef} style={{ position: 'relative' }}>
+            <button
+              className="btn sm ghost"
+              onClick={() => setShowSortMenu(v => !v)}
+            >
+              Sort · {CUSTOMER_SORT_OPTIONS.find(o => o.key === sortField)?.label} {sortDir === 'desc' ? '↓' : '↑'}
+            </button>
+            {showSortMenu && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 200,
+                background: 'var(--surface)', border: '1px solid var(--rule-strong)',
+                boxShadow: 'var(--shadow-pop)', minWidth: 170, padding: '4px 0',
+              }}>
+                {CUSTOMER_SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    className="btn ghost"
+                    style={{
+                      width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 12.5,
+                      borderRadius: 0, justifyContent: 'space-between',
+                      color: sortField === opt.key ? 'var(--accent)' : undefined,
+                    }}
+                    onClick={() => {
+                      if (sortField === opt.key) {
+                        setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+                      } else {
+                        setSortField(opt.key)
+                        setSortDir('desc')
+                      }
+                      setShowSortMenu(false)
+                    }}
+                  >
+                    <span>{opt.label}</span>
+                    {sortField === opt.key && <span>{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Table */}
@@ -569,7 +667,7 @@ export default function CustomersPage() {
                         {search || segmentFilter !== 'all' || statusFilter ? 'No customers match your filter.' : 'No customers yet.'}
                       </td>
                     </tr>
-                  ) : customers.map(c => (
+                  ) : sortedCustomers.map(c => (
                     <tr
                       key={c.id}
                       style={{ cursor: 'pointer' }}

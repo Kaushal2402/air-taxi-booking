@@ -81,6 +81,8 @@ class ServiceZone(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     active_service_codes: Mapped[Any] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    operational_status: Mapped[str] = mapped_column(String(20), default="operational", nullable=False)
+    status_note: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
 
 
 class AirRoute(Base, UUIDPrimaryKeyMixin, TimestampMixin):

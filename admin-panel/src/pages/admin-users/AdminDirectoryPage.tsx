@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -118,7 +119,7 @@ function RowMenu({ user, onAction }: RowMenuProps) {
   if (!hasActions) return null
 
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }} onClick={e => e.stopPropagation()}>
       <button className="btn ghost icon sm" onClick={() => setOpen(o => !o)}>
         <Icon name="moreVert" size={14} />
       </button>
@@ -166,6 +167,7 @@ function RowMenu({ user, onAction }: RowMenuProps) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function AdminDirectoryPage() {
+  const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isCompact = useIsCompact()
 
@@ -386,6 +388,11 @@ export default function AdminDirectoryPage() {
             <button className="btn sm"><Icon name="download" size={13} />Export</button>
           )}
           {!isMobile && (
+            <button className="btn sm" onClick={() => navigate('/admin-users/access')}>
+              Access requests
+            </button>
+          )}
+          {!isMobile && (
             <button className="btn sm accent" onClick={() => setShowInvite(true)}>
               <Icon name="plus" size={13} />{isCompact ? 'Invite' : 'Invite admin'}
             </button>
@@ -491,7 +498,11 @@ export default function AdminDirectoryPage() {
                 const initials = a.name.split(' ').map(p => p[0]).slice(0, 2).join('')
                 const isSuspended = a.status === 'suspended'
                 return (
-                  <tr key={a.id} style={{ opacity: isSuspended ? 0.65 : 1 }}>
+                  <tr
+                    key={a.id}
+                    style={{ opacity: isSuspended ? 0.65 : 1, cursor: 'pointer' }}
+                    onClick={() => navigate(`/admin-users/${a.id}`)}
+                  >
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div className="avatar" style={{
