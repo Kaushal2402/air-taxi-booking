@@ -370,11 +370,18 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [loadingOps, setLoadingOps] = useState(true)
   const [loadingAc, setLoadingAc] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
+    setLoadError(null)
     operatorService.listOperators({ page_size: 200 })
-      .then(r => setOperators(r.items))
-      .catch(() => {})
+      .then(r => setOperators(r.items ?? []))
+      .catch((e: unknown) => {
+        const msg = (e as { response?: { data?: { detail?: string }; status?: number } })?.response?.data?.detail
+          ?? (e as { message?: string })?.message
+          ?? 'Failed to load operators'
+        setLoadError(msg)
+      })
       .finally(() => setLoadingOps(false))
   }, [])
 
@@ -382,7 +389,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
     if (!operatorId) { setAircraft([]); setAircraftId(''); return }
     setLoadingAc(true)
     operatorService.listAircraft({ operator_id: operatorId, page_size: 100 })
-      .then(r => setAircraft(r.items))
+      .then(r => setAircraft(r.items ?? []))
       .catch(() => setAircraft([]))
       .finally(() => setLoadingAc(false))
   }, [operatorId])
@@ -411,13 +418,20 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
           <button className="btn ghost icon sm" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {loadError && (
+            <div style={{ padding: '8px 12px', background: 'var(--danger-soft)', border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))', borderRadius: 3, fontSize: 12.5, color: 'var(--danger)' }}>
+              {loadError}
+            </div>
+          )}
           <div className="field">
             <label className="field-label">Operator *</label>
             <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
               <select value={operatorId} onChange={e => { setOperatorId(e.target.value); setAircraftId('') }} style={selStyle} disabled={loadingOps}>
-                <option value="">{loadingOps ? 'Loading operators…' : 'Select operator…'}</option>
+                <option value="">
+                  {loadingOps ? 'Loading operators…' : operators.length === 0 ? 'No operators found' : 'Select operator…'}
+                </option>
                 {operators.map(o => (
-                  <option key={o.id} value={o.id}>{o.name}{o.hq_city ? ` · ${o.hq_city}` : ''}</option>
+                  <option key={o.id} value={o.id}>{o.name}{o.hq_city ? ` · ${o.hq_city}` : ''} · {o.status}</option>
                 ))}
               </select>
             </div>
