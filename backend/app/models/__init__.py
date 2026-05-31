@@ -8,6 +8,13 @@ from app.models.admin_email_otp import AdminEmailOTP
 from app.models.catalog import VehicleClass, AircraftType, ServiceZone, AirRoute
 from app.models.customer import Customer, WalletTransaction
 from app.models.driver import Driver, DriverDocument, DriverWalletTransaction
+from app.models.air_booking import (
+    AirBooking,
+    AirBookingPassenger,
+    CharterQuote,
+    AirBookingNote,
+    AirBookingTimeline,
+)
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -15,4 +22,6 @@ __all__ = [
     "VehicleClass", "AircraftType", "ServiceZone", "AirRoute",
     "Customer", "WalletTransaction",
     "Driver", "DriverDocument", "DriverWalletTransaction",
+    "AirBooking", "AirBookingPassenger", "CharterQuote",
+    "AirBookingNote", "AirBookingTimeline",
 ]
