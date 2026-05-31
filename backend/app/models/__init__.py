@@ -8,6 +8,22 @@ from app.models.admin_email_otp import AdminEmailOTP
 from app.models.catalog import VehicleClass, AircraftType, ServiceZone, AirRoute
 from app.models.customer import Customer, WalletTransaction
 from app.models.driver import Driver, DriverDocument, DriverWalletTransaction
+from app.models.operator import Operator, OperatorDocument, Aircraft, Pilot
+from app.models.booking import (
+    RoadBooking,
+    BookingTimelineEvent,
+    BookingFareComponent,
+    BookingAdminNote,
+    Dispute,
+)
+from app.models.vehicle import Vehicle, VehicleDocument
+from app.models.vendor import Vendor
+from app.models.pricing import PricingRule, AirFareRule, TaxRule
+from app.models.settings import PlatformSettings, PlatformToggle, FeatureFlag, KillSwitch, MaintenanceWindow
+from app.models.promotion import Promotion, CouponRedemption
+from app.models.referral import ReferralProgram, Referral
+from app.models.audit import AuditLog, AuditAnomaly
+from app.models.vehicle_maintenance import VehicleMaintenance
 from app.models.air_booking import (
     AirBooking,
     AirBookingPassenger,
@@ -22,6 +38,16 @@ __all__ = [
     "VehicleClass", "AircraftType", "ServiceZone", "AirRoute",
     "Customer", "WalletTransaction",
     "Driver", "DriverDocument", "DriverWalletTransaction",
-    "AirBooking", "AirBookingPassenger", "CharterQuote",
-    "AirBookingNote", "AirBookingTimeline",
+    "Operator", "OperatorDocument", "Aircraft", "Pilot",
+    "RoadBooking", "BookingTimelineEvent", "BookingFareComponent",
+    "BookingAdminNote", "Dispute",
+    "Vehicle", "VehicleDocument",
+    "Vendor",
+    "PricingRule", "AirFareRule", "TaxRule",
+    "PlatformSettings", "PlatformToggle", "FeatureFlag", "KillSwitch", "MaintenanceWindow",
+    "Promotion", "CouponRedemption",
+    "ReferralProgram", "Referral",
+    "AuditLog", "AuditAnomaly",
+    "VehicleMaintenance",
+    "AirBooking", "AirBookingPassenger", "CharterQuote", "AirBookingNote", "AirBookingTimeline",
 ]

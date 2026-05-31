@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import auth, admin_users, catalog
+from app.api.v1.endpoints.air_bookings import router as air_bookings_router
 from app.api.v1.endpoints.customers import router as customers_router
 from app.api.v1.endpoints.drivers import router as drivers_router
-from app.api.v1.endpoints.air_bookings import router as air_bookings_router
 from app.api.v1.endpoints.bookings import road_bookings_router
 from app.api.v1.endpoints.kyc import router as kyc_router
 from app.api.v1.endpoints.operators import operators_router, aircraft_router
