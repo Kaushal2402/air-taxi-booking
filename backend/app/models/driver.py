@@ -48,6 +48,10 @@ class Driver(Base, UUIDPrimaryKeyMixin):
     # Flag
     flag_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Location (Module 06 — live dispatch)
+    current_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    current_lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Timestamps
     joined_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now(), nullable=False
