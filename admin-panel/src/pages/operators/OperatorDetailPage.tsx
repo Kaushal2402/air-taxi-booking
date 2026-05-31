@@ -408,6 +408,7 @@ export default function OperatorDetailPage() {
   }
 
   const showApprove    = ['pending', 'review', 'rejected'].includes(operator.status)
+  const showActivate   = operator.status === 'approved'
   const showRejectBtn  = ['pending', 'review', 'approved'].includes(operator.status)
   const showPauseBtn   = operator.status === 'active'
   const showReactivate = ['paused', 'deactivated'].includes(operator.status)
@@ -421,6 +422,7 @@ export default function OperatorDetailPage() {
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {showApprove    && <button className="btn sm accent" onClick={handleApprove} disabled={actionLoading}>Approve</button>}
+          {showActivate   && <button className="btn sm accent" onClick={handleReactivate} disabled={actionLoading}>Activate</button>}
           {showRejectBtn  && <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => setShowReject(true)}>Reject</button>}
           {showPauseBtn   && <button className="btn sm" onClick={() => setShowPause(true)}>Pause publishing</button>}
           {showReactivate && <button className="btn sm accent" onClick={handleReactivate} disabled={actionLoading}>Reactivate</button>}
