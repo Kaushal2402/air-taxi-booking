@@ -45,6 +45,7 @@ from app.schemas.air_bookings import (
 
 VALID_TRANSITIONS: dict[str, str] = {
     "Requested": "Confirmed",
+    "Quote shared": "Confirmed",
     "Confirmed": "Manifest locked",
     "Manifest locked": "Boarding",
     "Boarding": "Departed",

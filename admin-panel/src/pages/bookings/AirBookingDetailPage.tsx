@@ -10,6 +10,8 @@ import type {
   CancelPreviewResponse,
   ManifestResponse,
 } from '../../services/airBookingsService'
+import { operatorService } from '../../services/operatorService'
+import type { Operator, Aircraft } from '../../services/operatorService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,7 @@ function fmtDateTime(iso: string | null): string {
 
 const STATUS_TRANSITIONS: Record<string, string> = {
   'Requested': 'Confirmed',
+  'Quote shared': 'Confirmed',
   'Confirmed': 'Manifest locked',
   'Manifest locked': 'Boarding',
   'Boarding': 'Departed',
@@ -363,8 +366,29 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [operators, setOperators] = useState<Operator[]>([])
+  const [aircraft, setAircraft] = useState<Aircraft[]>([])
+  const [loadingOps, setLoadingOps] = useState(true)
+  const [loadingAc, setLoadingAc] = useState(false)
+
+  useEffect(() => {
+    operatorService.listOperators({ status: 'active', page_size: 200 })
+      .then(r => setOperators(r.items))
+      .catch(() => {})
+      .finally(() => setLoadingOps(false))
+  }, [])
+
+  useEffect(() => {
+    if (!operatorId) { setAircraft([]); setAircraftId(''); return }
+    setLoadingAc(true)
+    operatorService.listAircraft({ operator_id: operatorId, status: 'ready', page_size: 100 })
+      .then(r => setAircraft(r.items))
+      .catch(() => setAircraft([]))
+      .finally(() => setLoadingAc(false))
+  }, [operatorId])
+
   async function handleSubmit() {
-    if (!operatorId || !aircraftId) { setError('Operator ID and Aircraft ID are required'); return }
+    if (!operatorId || !aircraftId) { setError('Operator and Aircraft are required'); return }
     setSubmitting(true)
     setError(null)
     try {
@@ -377,6 +401,8 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
     }
   }
 
+  const selStyle = { flex: 1, border: 'none', outline: 'none', background: 'transparent', height: 36, fontSize: 12.5, cursor: 'pointer' }
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(15,13,10,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--rule-strong)', width: '100%', maxWidth: 480 }}>
@@ -386,12 +412,26 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="field">
-            <label className="field-label">Operator ID (UUID)</label>
-            <div className="input"><input value={operatorId} onChange={e => setOperatorId(e.target.value)} placeholder="Operator UUID…" /></div>
+            <label className="field-label">Operator *</label>
+            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+              <select value={operatorId} onChange={e => { setOperatorId(e.target.value); setAircraftId('') }} style={selStyle} disabled={loadingOps}>
+                <option value="">{loadingOps ? 'Loading operators…' : 'Select operator…'}</option>
+                {operators.map(o => (
+                  <option key={o.id} value={o.id}>{o.name}{o.hq_city ? ` · ${o.hq_city}` : ''}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="field">
-            <label className="field-label">Aircraft ID (UUID)</label>
-            <div className="input"><input value={aircraftId} onChange={e => setAircraftId(e.target.value)} placeholder="Aircraft UUID…" /></div>
+            <label className="field-label">Aircraft *</label>
+            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+              <select value={aircraftId} onChange={e => setAircraftId(e.target.value)} style={selStyle} disabled={!operatorId || loadingAc}>
+                <option value="">{!operatorId ? 'Select operator first' : loadingAc ? 'Loading aircraft…' : aircraft.length === 0 ? 'No ready aircraft' : 'Select aircraft…'}</option>
+                {aircraft.map(a => (
+                  <option key={a.id} value={a.id}>{a.registration_mark} · {a.seat_capacity} seats{a.range_nm ? ` · ${a.range_nm} nm` : ''}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="field">
             <label className="field-label">Note (optional)</label>
@@ -401,7 +441,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--rule)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn accent" disabled={submitting} onClick={handleSubmit}>
+          <button className="btn accent" disabled={submitting || !operatorId || !aircraftId} onClick={handleSubmit}>
             {submitting ? 'Assigning…' : 'Assign Operator'}
           </button>
         </div>
