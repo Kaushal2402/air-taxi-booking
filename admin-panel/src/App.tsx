@@ -23,6 +23,9 @@ import DriverOnboardingPage from './pages/drivers/DriverOnboardingPage'
 import DriverDirectoryPage from './pages/drivers/DriverDirectoryPage'
 import DriverDetailPage from './pages/drivers/DriverDetailPage'
 import DocumentReviewPage from './pages/drivers/DocumentReviewPage'
+import AirBookingsPage from './pages/bookings/AirBookingsPage'
+import AirBookingDetailPage from './pages/bookings/AirBookingDetailPage'
+import AirBookingQuotePage from './pages/bookings/AirBookingQuotePage'
 
 const DashboardPage = () => (
   <div style={{ padding: 40, color: 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>
@@ -134,6 +137,11 @@ function App() {
           <Route path="/drivers/onboarding" element={<PrivateRoute><DriverOnboardingPage /></PrivateRoute>} />
           <Route path="/drivers/:id" element={<PrivateRoute><DriverDetailPage /></PrivateRoute>} />
           <Route path="/drivers/:id/documents/:docId" element={<PrivateRoute><DocumentReviewPage /></PrivateRoute>} />
+
+          {/* Air Bookings — static paths BEFORE dynamic :id */}
+          <Route path="/bookings/air/quotes/:bookingId" element={<PrivateRoute><AirBookingQuotePage /></PrivateRoute>} />
+          <Route path="/bookings/air/:id" element={<PrivateRoute><AirBookingDetailPage /></PrivateRoute>} />
+          <Route path="/bookings/air" element={<PrivateRoute><AirBookingsPage /></PrivateRoute>} />
 
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />

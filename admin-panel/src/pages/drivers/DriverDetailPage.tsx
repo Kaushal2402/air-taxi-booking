@@ -154,9 +154,6 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
   const [addError, setAddError]         = useState('')
   const [addSaving, setAddSaving]       = useState(false)
 
-  const reloadDocs = () =>
-    driverService.getDocuments(driverId).then(data => setDocs(data.items)).catch(() => {})
-
   useEffect(() => {
     setLoading(true)
     driverService.getDocuments(driverId)
