@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.settings import PlatformSettings
 from app.models.air_booking import (
     AirBooking,
     AirBookingNote,
@@ -645,6 +646,24 @@ async def create_air_booking(
     suffix = ''.join(random.choices(string.digits, k=5))
     booking_ref = f"AC-A5-{suffix}"
 
+    etd_dt = datetime.fromisoformat(req.etd.replace("Z", "+00:00"))
+
+    # Validate minimum advance booking hours from platform settings
+    settings_result = await db.execute(select(PlatformSettings).limit(1))
+    settings = settings_result.scalar_one_or_none()
+    min_advance_hours: float = (
+        settings.air_min_advance_hours
+        if settings and settings.air_min_advance_hours is not None
+        else 2.0
+    )
+    now_utc = datetime.now(timezone.utc)
+    hours_ahead = (etd_dt - now_utc).total_seconds() / 3600
+    if hours_ahead < min_advance_hours:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ETD must be at least {min_advance_hours:.0f} hour(s) in advance (currently {hours_ahead:.1f}h away).",
+        )
+
     booking = AirBooking(
         id=str(uuid.uuid4()),
         booking_ref=booking_ref,
@@ -656,7 +675,8 @@ async def create_air_booking(
         route_from=req.route_from,
         route_to=req.route_to,
         pax_count=req.pax_count,
-        etd=datetime.fromisoformat(req.etd.replace("Z", "+00:00")),
+        etd=etd_dt,
+        scheduled_date=etd_dt.date().isoformat(),
         fare_estimate_minor=req.fare_estimate_minor,
         fare_final_minor=None,
         payment_method=req.payment_method,

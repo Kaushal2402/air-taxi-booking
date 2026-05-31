@@ -9,6 +9,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { bookingsService } from '../../services/bookingsService'
 import { driverService } from '../../services/driverService'
 import { auditService } from '../../services/auditService'
+import { settingsService } from '../../services/settingsService'
 import type {
   RoadBookingDetail,
   CancelBookingBody,
@@ -106,19 +107,38 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
   useEffect(() => {
     bookingsService.getCancelPreview(booking.id)
       .then(p => setPreview(p))
-      .catch(() => {
-        // Fallback to simple estimate if preview fails
+      .catch(async () => {
+        // Fallback: try to read real values from platform settings
         const fare = booking.fare_final_minor ?? booking.fare_estimate_minor
-        setPreview({
-          booking_id: booking.id,
-          fare_minor: fare,
-          cancel_fee_minor: Math.max(5000, Math.round(fare * 0.1)),
-          net_refund_minor: fare - Math.max(5000, Math.round(fare * 0.1)),
-          is_free_window: false,
-          free_window_min: 5,
-          fee_pct: 10,
-          policy: '10% cancellation fee · 5min free window',
-        })
+        try {
+          const s = await settingsService.getSettings()
+          const feePct = s.cancellation_fee_pct ?? 10
+          const freeMin = s.cancellation_free_window_min ?? 5
+          const cancelFee = Math.max(5000, Math.round(fare * feePct / 100))
+          setPreview({
+            booking_id: booking.id,
+            fare_minor: fare,
+            cancel_fee_minor: cancelFee,
+            net_refund_minor: fare - cancelFee,
+            is_free_window: false,
+            free_window_min: freeMin,
+            fee_pct: feePct,
+            policy: `${feePct}% cancellation fee · ${freeMin}min free window`,
+          })
+        } catch {
+          // Last resort static fallback
+          const cancelFee = Math.max(5000, Math.round(fare * 0.1))
+          setPreview({
+            booking_id: booking.id,
+            fare_minor: fare,
+            cancel_fee_minor: cancelFee,
+            net_refund_minor: fare - cancelFee,
+            is_free_window: false,
+            free_window_min: 5,
+            fee_pct: 10,
+            policy: '10% cancellation fee · 5min free window',
+          })
+        }
       })
       .finally(() => setLoadingPreview(false))
   }, [booking.id]) // eslint-disable-line react-hooks/exhaustive-deps
