@@ -250,12 +250,13 @@ export default function SupplySurgePage() {
         ) : undefined
       }
     >
+      <div style={{ padding: isMobile ? '12px 16px 24px' : '20px 28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Hero KPI strip */}
       {stats && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)',
-          gap: 12, marginBottom: 24,
+          gap: 12,
         }}>
           {[
             { label: 'Online drivers', value: stats.online_drivers_total },
@@ -282,7 +283,6 @@ export default function SupplySurgePage() {
         display: 'grid',
         gridTemplateColumns: isMobile || isTablet ? '1fr' : '1fr 320px',
         gap: 20,
-        marginBottom: 24,
       }}>
         {/* Zone heatmap */}
         <div>
@@ -396,6 +396,7 @@ export default function SupplySurgePage() {
           </div>
         </div>
       )}
+      </div>
     </Shell>
   )
 }

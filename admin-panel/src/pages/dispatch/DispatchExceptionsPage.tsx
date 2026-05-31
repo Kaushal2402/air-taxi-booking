@@ -126,12 +126,13 @@ export default function DispatchExceptionsPage() {
         </div>
       }
     >
+      <div style={{ padding: isMobile ? '12px 16px 24px' : '20px 28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* KPI strip */}
       {stats && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)',
-          gap: 12, marginBottom: 20,
+          gap: 12,
         }}>
           {[
             { label: 'Active exceptions', value: stats.active_count, accent: stats.active_count > 5 },
@@ -163,7 +164,6 @@ export default function DispatchExceptionsPage() {
         background: 'var(--surface)',
         border: '1px solid var(--rule)',
         borderRadius: 8,
-        marginBottom: 20,
       }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 600, fontSize: 13 }}>
           Active exceptions
@@ -277,6 +277,8 @@ export default function DispatchExceptionsPage() {
       )}
 
       {/* Resolve modal */}
+      </div>
+
       {resolvingException && (
         <ResolveModal
           exception={resolvingException}
