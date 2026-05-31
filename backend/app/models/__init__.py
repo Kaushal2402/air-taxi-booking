@@ -32,6 +32,7 @@ from app.models.air_booking import (
     AirBookingTimeline,
 )
 from app.models.dispatch import DispatchException, SurgeOverride
+from app.models.support import Ticket, TicketMessage, SlaPolicy
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -52,4 +53,5 @@ __all__ = [
     "VehicleMaintenance",
     "AirBooking", "AirBookingPassenger", "CharterQuote", "AirBookingNote", "AirBookingTimeline",
     "DispatchException", "SurgeOverride",
+    "Ticket", "TicketMessage", "SlaPolicy",
 ]

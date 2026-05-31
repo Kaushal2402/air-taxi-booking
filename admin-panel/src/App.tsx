@@ -63,6 +63,9 @@ import MaintenancePage from './pages/settings/MaintenancePage'
 import DispatchConsolePage from './pages/dispatch/DispatchConsolePage'
 import DispatchExceptionsPage from './pages/dispatch/DispatchExceptionsPage'
 import SupplySurgePage from './pages/dispatch/SupplySurgePage'
+import TicketQueuePage from './pages/support/TicketQueuePage'
+import TicketDetailPage from './pages/support/TicketDetailPage'
+import SlaEscalationPage from './pages/support/SlaEscalationPage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -229,6 +232,11 @@ function App() {
           <Route path="/dispatch/console" element={<PrivateRoute><DispatchConsolePage /></PrivateRoute>} />
           <Route path="/dispatch/exceptions" element={<PrivateRoute><DispatchExceptionsPage /></PrivateRoute>} />
           <Route path="/dispatch/supply" element={<PrivateRoute><SupplySurgePage /></PrivateRoute>} />
+
+          {/* Support — /support/sla MUST be before /support/:ticketId */}
+          <Route path="/support" element={<PrivateRoute><TicketQueuePage /></PrivateRoute>} />
+          <Route path="/support/sla" element={<PrivateRoute><SlaEscalationPage /></PrivateRoute>} />
+          <Route path="/support/:ticketId" element={<PrivateRoute><TicketDetailPage /></PrivateRoute>} />
 
           {/* Settings */}
           <Route path="/settings" element={<PrivateRoute><PlatformSettingsPage /></PrivateRoute>} />

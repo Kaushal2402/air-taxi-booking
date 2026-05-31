@@ -29,6 +29,54 @@ function statusBadge(s: string) {
 
 const STATUS_STEPS = ['open', 'in_progress', 'resolved', 'closed']
 
+// ── Resolve Modal ─────────────────────────────────────────────────────────────
+function ResolveModal({ onConfirm, onClose, resolving }: {
+  onConfirm: (code: string, note: string) => void
+  onClose: () => void
+  resolving: boolean
+}) {
+  const [code, setCode] = useState('')
+  const [note, setNote] = useState('')
+  const [err,  setErr]  = useState('')
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!code) { setErr('Please select a resolution code.'); return }
+    onConfirm(code, note)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 10, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>Mark ticket as resolved</span>
+          <button className="btn sm ghost" onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="field">
+            <label className="field-label">Resolution code <span style={{ color: 'var(--danger,#e53e3e)' }}>*</span></label>
+            <select className="input" value={code} onChange={e => { setCode(e.target.value); setErr('') }} style={{ width: '100%' }}>
+              <option value="">Select code…</option>
+              {RESOLUTION_CODES.map(rc => <option key={rc.value} value={rc.value}>{rc.label}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label">Resolution note <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>(optional)</span></label>
+            <textarea className="input" rows={2} placeholder="Add a note…" value={note} onChange={e => setNote(e.target.value)} style={{ width: '100%', resize: 'vertical' }} />
+          </div>
+          {err && <div style={{ color: 'var(--danger,#e53e3e)', fontSize: 12 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+            <button type="button" className="btn sm ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn sm accent" disabled={resolving}>
+              {resolving ? 'Resolving…' : 'Confirm resolve'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function MessageBubble({ msg }: { msg: TicketMessage }) {
   const isNote = msg.kind === 'internal_note'
   const isAdmin = msg.author_role === 'admin' || msg.author_role === 'agent'
@@ -110,10 +158,12 @@ export default function TicketDetailPage() {
   const [replyBody, setReplyBody] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
 
+  const [showResolveModal, setShowResolveModal] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  // panel-level resolution code (used by the inline panel button)
   const [resolutionCode, setResolutionCode] = useState('')
   const [resolutionNote, setResolutionNote] = useState('')
   const [resolveError, setResolveError] = useState('')
-  const [resolving, setResolving] = useState(false)
 
   const [escalateOpen, setEscalateOpen] = useState(false)
   const [escalateReason, setEscalateReason] = useState('')
@@ -143,15 +193,20 @@ export default function TicketDetailPage() {
     }
   }
 
-  async function handleResolve() {
+  async function handleResolve(code?: string, note?: string) {
     if (!ticket) return
-    if (!resolutionCode) { setResolveError('Select a resolution code first.'); return }
+    const rc = code ?? resolutionCode
+    const rn = note ?? resolutionNote
+    if (!rc) { setResolveError('Select a resolution code first.'); return }
     setResolveError('')
     setResolving(true)
     try {
-      await supportService.resolveTicket(ticket.id, resolutionCode, resolutionNote || undefined)
+      await supportService.resolveTicket(ticket.id, rc, rn || undefined)
       const updated = await supportService.getTicket(ticket.id)
       setTicket(updated)
+      setShowResolveModal(false)
+      setResolutionCode('')
+      setResolutionNote('')
     } catch {
       setResolveError('Failed to resolve ticket.')
     } finally {
@@ -195,8 +250,17 @@ export default function TicketDetailPage() {
   }
 
   const subtitle = `${ticket.ticket_ref} · ${ticket.requester_name} · ${ticket.priority.toUpperCase()}${ticket.linked_booking_id ? ` · Booking #${ticket.linked_booking_id.slice(0, 8)}` : ''}`
+  const isResolvable = ticket.status !== 'resolved' && ticket.status !== 'closed'
 
   return (
+    <>
+    {showResolveModal && (
+      <ResolveModal
+        resolving={resolving}
+        onClose={() => setShowResolveModal(false)}
+        onConfirm={(code, note) => handleResolve(code, note)}
+      />
+    )}
     <Shell
       activeId="support"
       breadcrumb="Operations · Support · Ticket"
@@ -207,10 +271,11 @@ export default function TicketDetailPage() {
           <button className="btn sm ghost" onClick={() => setEscalateOpen(true)}>Escalate</button>
           <button
             className="btn sm accent"
-            onClick={handleResolve}
-            disabled={resolving || ticket.status === 'resolved' || ticket.status === 'closed'}
+            onClick={() => setShowResolveModal(true)}
+            disabled={ticket.status === 'resolved' || ticket.status === 'closed'}
+            title={ticket.status === 'resolved' || ticket.status === 'closed' ? 'Ticket is already ' + ticket.status : 'Mark this ticket as resolved'}
           >
-            {resolving ? 'Resolving…' : 'Resolve'}
+            ✓ Resolve
           </button>
         </div>
       }
@@ -475,10 +540,14 @@ export default function TicketDetailPage() {
             <button
               className="btn sm accent"
               style={{ width: '100%' }}
-              onClick={handleResolve}
-              disabled={resolving || ticket.status === 'resolved' || ticket.status === 'closed'}
+              onClick={() => {
+                if (!resolutionCode) { setResolveError('Select a resolution code first.'); return }
+                handleResolve(resolutionCode, resolutionNote)
+              }}
+              disabled={resolving || !isResolvable}
+              title={!isResolvable ? `Ticket is already ${ticket.status}` : !resolutionCode ? 'Select a resolution code above' : ''}
             >
-              {resolving ? 'Resolving…' : 'Mark as resolved'}
+              {resolving ? 'Resolving…' : isResolvable ? 'Mark as resolved' : `Already ${ticket.status}`}
             </button>
           </div>
         </div>
@@ -530,5 +599,6 @@ export default function TicketDetailPage() {
 
       </div>
     </Shell>
+    </>
   )
 }

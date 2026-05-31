@@ -238,6 +238,30 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
 .input input { flex: 1; border: 0; outline: 0; background: transparent; padding: 0; min-width: 0; font-family: inherit; }
 .input .icon { color: var(--ink-3); flex-shrink: 0; }
 
+/* When .input is used directly on a native element (not a wrapper div),
+   override flex display so placeholder/text aligns correctly */
+input.input,
+select.input {
+  display: block;
+  line-height: 38px;  /* height - 2px borders = vertical centering */
+  -webkit-appearance: none;
+  appearance: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+textarea.input {
+  display: block;
+  height: auto;
+  padding: 8px 12px;
+  line-height: 1.5;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  resize: vertical;
+}
+
 /* nav */
 .nav-section-label {
   font-family: var(--font-mono);
