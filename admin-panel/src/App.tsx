@@ -60,6 +60,9 @@ import InvitesPage from './pages/admin-users/InvitesPage'
 import PlatformSettingsPage from './pages/settings/PlatformSettingsPage'
 import FeatureFlagsPage from './pages/settings/FeatureFlagsPage'
 import MaintenancePage from './pages/settings/MaintenancePage'
+import DispatchConsolePage from './pages/dispatch/DispatchConsolePage'
+import DispatchExceptionsPage from './pages/dispatch/DispatchExceptionsPage'
+import SupplySurgePage from './pages/dispatch/SupplySurgePage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -220,6 +223,12 @@ function App() {
           {/* Admin users (extra pages) */}
           <Route path="/admin-users/:id" element={<PrivateRoute><AdminDetailPage /></PrivateRoute>} />
           <Route path="/admin-users/invites" element={<PrivateRoute><InvitesPage /></PrivateRoute>} />
+
+          {/* Dispatch */}
+          <Route path="/dispatch" element={<Navigate to="/dispatch/console" replace />} />
+          <Route path="/dispatch/console" element={<PrivateRoute><DispatchConsolePage /></PrivateRoute>} />
+          <Route path="/dispatch/exceptions" element={<PrivateRoute><DispatchExceptionsPage /></PrivateRoute>} />
+          <Route path="/dispatch/supply" element={<PrivateRoute><SupplySurgePage /></PrivateRoute>} />
 
           {/* Settings */}
           <Route path="/settings" element={<PrivateRoute><PlatformSettingsPage /></PrivateRoute>} />

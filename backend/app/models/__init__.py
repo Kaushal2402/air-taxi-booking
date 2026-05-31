@@ -31,6 +31,7 @@ from app.models.air_booking import (
     AirBookingNote,
     AirBookingTimeline,
 )
+from app.models.dispatch import DispatchException, SurgeOverride
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -50,4 +51,5 @@ __all__ = [
     "AuditLog", "AuditAnomaly",
     "VehicleMaintenance",
     "AirBooking", "AirBookingPassenger", "CharterQuote", "AirBookingNote", "AirBookingTimeline",
+    "DispatchException", "SurgeOverride",
 ]

@@ -63,6 +63,12 @@ class RoadBooking(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Scheduling
     scheduled_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
+    # Dispatch state (Module 06)
+    dispatch_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_radius_km: Mapped[float] = mapped_column(Float, nullable=False, default=1.5)
+    zone_id: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    zone_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # Denormalized driver snapshot
     driver_vehicle_plate: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     driver_vehicle_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
