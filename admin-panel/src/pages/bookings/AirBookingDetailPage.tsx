@@ -476,6 +476,12 @@ export default function AirBookingDetailPage() {
   const [advancingStatus, setAdvancingStatus] = useState(false)
   const [togglingFlag, setTogglingFlag] = useState(false)
 
+  const [showPassengerForm, setShowPassengerForm] = useState(false)
+  const [savingManifest, setSavingManifest] = useState(false)
+  type PaxDraft = { id?: string; name: string; age: string; id_number: string; body_weight_kg: string; baggage_weight_kg: string; special_notes: string; is_minor: boolean }
+  const emptyPax = (): PaxDraft => ({ name: '', age: '', id_number: '', body_weight_kg: '', baggage_weight_kg: '', special_notes: '', is_minor: false })
+  const [paxDrafts, setPaxDrafts] = useState<PaxDraft[]>([])
+
   const bookingId = id ?? ''
 
   const loadBooking = async () => {
@@ -555,6 +561,43 @@ export default function AirBookingDetailPage() {
       setManifest(m)
       await loadBooking()
     } catch { /* ignore */ }
+  }
+
+  const openPassengerForm = () => {
+    const existing = (manifest?.passengers ?? []).map(p => ({
+      id: p.id,
+      name: p.name,
+      age: p.age != null ? String(p.age) : '',
+      id_number: p.id_number ?? '',
+      body_weight_kg: String(p.body_weight_kg),
+      baggage_weight_kg: String(p.baggage_weight_kg),
+      special_notes: p.special_notes ?? '',
+      is_minor: p.is_minor,
+    }))
+    setPaxDrafts(existing.length > 0 ? existing : [emptyPax()])
+    setShowPassengerForm(true)
+  }
+
+  const handleSaveManifest = async () => {
+    setSavingManifest(true)
+    try {
+      const passengers = paxDrafts
+        .filter(p => p.name.trim())
+        .map(p => ({
+          id: p.id || undefined,
+          name: p.name.trim(),
+          age: p.age ? parseInt(p.age) : undefined,
+          id_number: p.id_number.trim() || undefined,
+          body_weight_kg: parseFloat(p.body_weight_kg) || 0,
+          baggage_weight_kg: parseFloat(p.baggage_weight_kg) || 0,
+          special_notes: p.special_notes.trim() || undefined,
+          is_minor: p.is_minor,
+        }))
+      const m = await airBookingsService.updateManifest(bookingId, { passengers })
+      setManifest(m)
+      setShowPassengerForm(false)
+    } catch { /* ignore */ }
+    setSavingManifest(false)
   }
 
   if (loading) {
@@ -655,6 +698,7 @@ export default function AirBookingDetailPage() {
 
         {activeTab === 'manifest' && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+            {/* Header */}
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div className="t-label">{manifest?.is_locked ? 'Manifest · locked' : 'Manifest · open'}</div>
@@ -663,14 +707,19 @@ export default function AirBookingDetailPage() {
                 </h3>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                {!manifest?.is_locked && (
+                {!manifest?.is_locked && !showPassengerForm && (
+                  <button className="btn sm" onClick={openPassengerForm}>
+                    <Icon name="plus" size={13} /> {(manifest?.passengers.length ?? 0) > 0 ? 'Edit passengers' : 'Add passengers'}
+                  </button>
+                )}
+                {!manifest?.is_locked && (manifest?.passengers.length ?? 0) > 0 && (
                   <button className="btn sm accent" onClick={handleLockManifest}>Lock manifest</button>
                 )}
               </div>
             </div>
 
-            {/* Weight bar */}
-            {manifest && (
+            {/* Weight & balance bar */}
+            {manifest && (manifest.passengers.length > 0 || manifest.mtow_kg) && (
               <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid var(--rule)', background: 'var(--surface-2)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
                   <span className="t-label" style={{ padding: 0 }}>Weight & balance · MTOW</span>
@@ -680,29 +729,85 @@ export default function AirBookingDetailPage() {
                   <span style={{ fontFamily: 'var(--font-serif)', fontSize: 22, color: 'var(--ink)' }}>
                     {manifest.total_weight_kg?.toLocaleString() ?? '—'} / {manifest.mtow_kg?.toLocaleString() ?? '—'} kg
                   </span>
-                  <span className={`badge ${manifest.is_within_limits ? 'ok' : 'danger'}`}>
-                    <span className={`dot ${manifest.is_within_limits ? 'ok' : 'danger'}`} />
-                    {manifest.utilization_pct != null ? manifest.utilization_pct.toFixed(1) : '—'}% · {manifest.is_within_limits ? 'within limits' : 'OVER LIMIT'}
-                  </span>
+                  {manifest.is_within_limits === true && (
+                    <span className="badge ok"><span className="dot ok" />{manifest.utilization_pct?.toFixed(1) ?? '—'}% · within limits</span>
+                  )}
+                  {manifest.is_within_limits === false && (
+                    <span className="badge danger"><span className="dot danger" />{manifest.utilization_pct?.toFixed(1) ?? '—'}% · OVER LIMIT</span>
+                  )}
+                  {manifest.is_within_limits === null && manifest.passengers.length > 0 && (
+                    <span className="badge info"><span className="dot info" />no MTOW data</span>
+                  )}
                 </div>
-                <div style={{ display: 'flex', height: 18, borderRadius: 2, overflow: 'hidden', border: '1px solid var(--rule-strong)' }}>
-                  {[
-                    { l: 'Empty', v: manifest.aircraft_empty_weight_kg, c: 'var(--ink-2)' },
-                    { l: 'Fuel', v: manifest.fuel_weight_kg, c: 'var(--info)' },
-                    { l: 'Pax', v: manifest.total_pax_weight_kg, c: 'var(--accent)' },
-                    { l: 'Bags', v: manifest.total_baggage_weight_kg, c: 'var(--warn)' },
-                    { l: 'Margin', v: Math.max(0, (manifest.mtow_kg ?? 0) - (manifest.total_weight_kg ?? 0)), c: 'var(--surface-sunk)' },
-                  ].map((s, idx) => (
-                    <div
-                      key={s.l}
-                      style={{ width: manifest.mtow_kg ? (s.v / manifest.mtow_kg) * 100 + '%' : '0%', background: s.c, borderRight: idx < 4 ? '1px solid var(--surface)' : 'none' }}
-                      title={`${s.l}: ${s.v} kg`}
-                    />
-                  ))}
+                {manifest.mtow_kg && (
+                  <div style={{ display: 'flex', height: 18, borderRadius: 2, overflow: 'hidden', border: '1px solid var(--rule-strong)' }}>
+                    {[
+                      { l: 'Empty', v: manifest.aircraft_empty_weight_kg ?? 0, c: 'var(--ink-2)' },
+                      { l: 'Fuel', v: manifest.fuel_weight_kg ?? 0, c: 'var(--info)' },
+                      { l: 'Pax', v: manifest.total_pax_weight_kg ?? 0, c: 'var(--accent)' },
+                      { l: 'Bags', v: manifest.total_baggage_weight_kg ?? 0, c: 'var(--warn)' },
+                      { l: 'Margin', v: Math.max(0, (manifest.mtow_kg ?? 0) - (manifest.total_weight_kg ?? 0)), c: 'var(--surface-sunk)' },
+                    ].map((s, idx) => (
+                      <div
+                        key={s.l}
+                        style={{ width: (s.v / manifest.mtow_kg!) * 100 + '%', background: s.c, borderRight: idx < 4 ? '1px solid var(--surface)' : 'none' }}
+                        title={`${s.l}: ${s.v} kg`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Passenger edit form */}
+            {showPassengerForm && !manifest?.is_locked && (
+              <div style={{ padding: '18px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="t-label">Edit passengers</div>
+                {paxDrafts.map((p, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '2fr 1fr 1.5fr 1fr 1fr 1.5fr auto', gap: 8, alignItems: 'end', padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--rule)' }}>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label className="field-label">Name *</label>
+                      <input className="input" value={p.name} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], name: e.target.value }; setPaxDrafts(d) }} placeholder="Full name" />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label className="field-label">Age</label>
+                      <input className="input" type="number" value={p.age} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], age: e.target.value }; setPaxDrafts(d) }} placeholder="—" />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label className="field-label">ID / Passport</label>
+                      <input className="input" value={p.id_number} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], id_number: e.target.value }; setPaxDrafts(d) }} placeholder="—" />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label className="field-label">Body wt (kg) *</label>
+                      <input className="input" type="number" value={p.body_weight_kg} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], body_weight_kg: e.target.value }; setPaxDrafts(d) }} placeholder="70" />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label className="field-label">Baggage (kg)</label>
+                      <input className="input" type="number" value={p.baggage_weight_kg} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], baggage_weight_kg: e.target.value }; setPaxDrafts(d) }} placeholder="0" />
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                      <label className="field-label">Notes</label>
+                      <input className="input" value={p.special_notes} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], special_notes: e.target.value }; setPaxDrafts(d) }} placeholder="—" />
+                    </div>
+                    <button className="btn sm ghost" style={{ alignSelf: 'flex-end' }} onClick={() => setPaxDrafts(paxDrafts.filter((_, j) => j !== i))}>
+                      <Icon name="close" size={12} />
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn sm ghost" onClick={() => setPaxDrafts([...paxDrafts, emptyPax()])}>
+                    <Icon name="plus" size={13} /> Add row
+                  </button>
+                  <span style={{ flex: 1 }} />
+                  <button className="btn sm" onClick={() => setShowPassengerForm(false)}>Cancel</button>
+                  <button className="btn sm accent" disabled={savingManifest || paxDrafts.filter(p => p.name.trim()).length === 0} onClick={handleSaveManifest}>
+                    {savingManifest ? 'Saving…' : 'Save manifest'}
+                  </button>
                 </div>
               </div>
             )}
 
+            {/* Passenger table */}
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="tbl">
                 <thead>
@@ -736,9 +841,18 @@ export default function AirBookingDetailPage() {
                       <td className="t-meta" style={{ color: 'var(--ink-2)' }}>{p.special_notes ?? '—'}</td>
                     </tr>
                   ))}
-                  {(manifest?.passengers.length ?? 0) === 0 && (
+                  {(manifest?.passengers.length ?? 0) === 0 && !showPassengerForm && (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--ink-3)', padding: '24px 0' }}>No passengers in manifest.</td>
+                      <td colSpan={7}>
+                        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ink-3)' }}>
+                          <div style={{ fontSize: 13, marginBottom: 10 }}>No passengers in manifest yet.</div>
+                          {!manifest?.is_locked && (
+                            <button className="btn sm" onClick={openPassengerForm}>
+                              <Icon name="plus" size={13} /> Add passengers
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   )}
                 </tbody>
