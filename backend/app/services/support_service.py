@@ -91,6 +91,7 @@ async def _check_sla_breach(db: AsyncSession, ticket: Ticket) -> bool:
     if breached and not ticket.sla_breached:
         ticket.sla_breached = True
         await db.flush()
+        await db.refresh(ticket)   # re-load server-side updated_at so async access doesn't lazy-load
     return breached
 
 
