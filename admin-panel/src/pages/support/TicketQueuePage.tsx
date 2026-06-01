@@ -1,9 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import { supportService } from '../../services/supportService'
-import type { Ticket, TicketCreatePayload } from '../../services/supportService'
+import type { Ticket } from '../../services/supportService'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
+import { useDebounce } from '../../hooks/useDebounce'
+import { customerService } from '../../services/customerService'
+import type { Customer } from '../../services/customerService'
+import { driverService } from '../../services/driverService'
+import type { Driver } from '../../services/driverService'
+import { bookingsService } from '../../services/bookingsService'
+import type { RoadBookingListItem } from '../../services/bookingsService'
+import { airBookingsService } from '../../services/airBookingsService'
+import type { AirBookingListItem } from '../../services/airBookingsService'
 
 const CATEGORY_OPTIONS = [
   'refunds_billing', 'booking_road', 'booking_air', 'payouts',
@@ -55,45 +64,314 @@ function requesterIcon(type: string) {
   return type === 'customer' ? '👤' : type === 'driver' ? '🚗' : '🏢'
 }
 
-// ── New Ticket Modal ───────────────────────────────────────────────────────────
-const BLANK: TicketCreatePayload = {
-  requester_type: 'customer',
-  requester_id: '',
-  requester_name: '',
-  category: 'refunds_billing',
-  priority: 'med',
-  subject: '',
-  body: '',
-  linked_booking_id: '',
-  linked_transaction_id: '',
+// ── Requester Search Combobox ─────────────────────────────────────────────────
+type RequesterOption = { id: string; name: string; phone: string; label: string }
+
+function RequesterSearch({ requesterType, value, onSelect }: {
+  requesterType: string
+  value: RequesterOption | null
+  onSelect: (opt: RequesterOption | null) => void
+}) {
+  const [query,   setQuery]   = useState(value?.name ?? '')
+  const [results, setResults] = useState<RequesterOption[]>([])
+  const [open,    setOpen]    = useState(false)
+  const [loading, setLoading] = useState(false)
+  const debouncedQuery = useDebounce(query, 300)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Reset query when a value is cleared externally
+  useEffect(() => {
+    if (!value) setQuery('')
+  }, [value])
+
+  useEffect(() => {
+    if (requesterType === 'operator' || !debouncedQuery.trim() || debouncedQuery.length < 2) {
+      setResults([]); return
+    }
+    setLoading(true)
+    const search = debouncedQuery.trim()
+
+    const promise = requesterType === 'customer'
+      ? customerService.listCustomers({ search, per_page: 8 }).then(r =>
+          r.items.map((c: Customer): RequesterOption => ({
+            id: c.id, name: c.name, phone: c.phone,
+            label: `${c.name} · ${c.phone}`,
+          })))
+      : driverService.listDrivers({ search, per_page: 8 }).then(r =>
+          r.items.map((d: Driver): RequesterOption => ({
+            id: d.id, name: d.name, phone: d.phone,
+            label: `${d.name} · ${d.phone}`,
+          })))
+
+    promise
+      .then(opts => { setResults(opts); setOpen(opts.length > 0) })
+      .catch(() => setResults([]))
+      .finally(() => setLoading(false))
+  }, [debouncedQuery, requesterType])
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setQuery(e.target.value)
+    // If user types after a selection, clear it
+    if (value && e.target.value !== value.name) onSelect(null)
+  }
+
+  function handleSelect(opt: RequesterOption) {
+    onSelect(opt)
+    setQuery(opt.name)
+    setOpen(false)
+    setResults([])
+  }
+
+  if (requesterType === 'operator') {
+    return (
+      <input
+        className="input"
+        placeholder="Operator name"
+        value={query}
+        onChange={e => { setQuery(e.target.value); onSelect({ id: 'manual', name: e.target.value, phone: '', label: e.target.value }) }}
+      />
+    )
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          className="input"
+          placeholder={`Search ${requesterType} by name or phone…`}
+          value={query}
+          onChange={handleInputChange}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          style={{ paddingRight: 32 }}
+          autoComplete="off"
+        />
+        {loading && (
+          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--ink-3)' }}>…</span>
+        )}
+        {value && (
+          <button
+            type="button"
+            onClick={() => { onSelect(null); setQuery('') }}
+            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', fontSize: 14, padding: '0 2px' }}
+          >✕</button>
+        )}
+      </div>
+
+      {value && (
+        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'color-mix(in oklab, var(--accent) 8%, var(--surface))', border: '1px solid color-mix(in oklab, var(--accent) 30%, var(--rule))', borderRadius: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>✓ {value.name}</span>
+          <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{value.phone}</span>
+          <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: 'monospace', marginLeft: 'auto' }}>{value.id.slice(0, 8)}…</span>
+        </div>
+      )}
+
+      {open && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: 'var(--surface)', border: '1px solid var(--rule-strong)',
+          borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          marginTop: 4, maxHeight: 220, overflowY: 'auto',
+        }}>
+          {results.map(opt => (
+            <div
+              key={opt.id}
+              onMouseDown={() => handleSelect(opt)}
+              style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid var(--rule-soft)', display: 'flex', alignItems: 'center', gap: 10 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{opt.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{opt.phone}</div>
+              </div>
+              <span style={{ fontSize: 10, color: 'var(--ink-4)', fontFamily: 'monospace', flexShrink: 0 }}>{opt.id.slice(0, 8)}…</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
+// ── Booking Search Combobox ───────────────────────────────────────────────────
+type BookingOption = { id: string; ref: string; label: string; type: 'road' | 'air'; status: string }
+
+function BookingSearch({ requesterName, value, onSelect }: {
+  requesterName: string
+  value: BookingOption | null
+  onSelect: (opt: BookingOption | null) => void
+}) {
+  const [query,   setQuery]   = useState(value?.ref ?? '')
+  const [results, setResults] = useState<BookingOption[]>([])
+  const [open,    setOpen]    = useState(false)
+  const [loading, setLoading] = useState(false)
+  const debouncedQuery = useDebounce(query, 300)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Pre-seed with requester name when they get selected
+  useEffect(() => {
+    if (requesterName && !value && !query) setQuery(requesterName)
+  }, [requesterName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!value) setQuery('')
+  }, [value])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!debouncedQuery.trim() || debouncedQuery.length < 2) { setResults([]); return }
+    setLoading(true)
+    const search = debouncedQuery.trim()
+
+    Promise.allSettled([
+      bookingsService.listBookings({ search, page_size: 6 }),
+      airBookingsService.listAirBookings({ search, page_size: 4 }),
+    ]).then(([roadRes, airRes]) => {
+      const road: BookingOption[] = roadRes.status === 'fulfilled'
+        ? roadRes.value.items.map((b: RoadBookingListItem): BookingOption => ({
+            id: b.id, ref: b.booking_ref, type: 'road', status: b.status,
+            label: `${b.booking_ref} · ${b.pickup_address?.slice(0, 20)} → ${b.drop_address?.slice(0, 20)}`,
+          }))
+        : []
+      const air: BookingOption[] = airRes.status === 'fulfilled'
+        ? airRes.value.items.map((b: AirBookingListItem): BookingOption => ({
+            id: b.id, ref: b.booking_ref, type: 'air', status: b.status,
+            label: `${b.booking_ref} · ${b.route_from} → ${b.route_to}`,
+          }))
+        : []
+      const merged = [...road, ...air]
+      setResults(merged)
+      setOpen(merged.length > 0)
+    }).finally(() => setLoading(false))
+  }, [debouncedQuery])
+
+  function handleSelect(opt: BookingOption) {
+    onSelect(opt)
+    setQuery(opt.ref)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          className="input"
+          placeholder="Search booking ref, customer name…"
+          value={query}
+          onChange={e => { setQuery(e.target.value); if (value && e.target.value !== value.ref) onSelect(null) }}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          style={{ paddingRight: 32 }}
+          autoComplete="off"
+        />
+        {loading && (
+          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--ink-3)' }}>…</span>
+        )}
+        {value && (
+          <button type="button" onClick={() => { onSelect(null); setQuery('') }}
+            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', fontSize: 14, padding: '0 2px' }}>
+            ✕
+          </button>
+        )}
+      </div>
+
+      {value && (
+        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'color-mix(in oklab, var(--accent) 8%, var(--surface))', border: '1px solid color-mix(in oklab, var(--accent) 30%, var(--rule))', borderRadius: 6 }}>
+          <span style={{ fontSize: 10, fontFamily: 'monospace', padding: '2px 6px', background: value.type === 'air' ? 'var(--info-soft,#ebf8ff)' : 'var(--surface-2)', borderRadius: 4, color: 'var(--ink-2)' }}>
+            {value.type === 'air' ? '✈ AIR' : '🚗 ROAD'}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>{value.ref}</span>
+          <span className={`badge ${value.status === 'completed' ? 'ok' : value.status === 'cancelled' ? 'danger' : 'info'}`} style={{ fontSize: 10 }}>{value.status}</span>
+        </div>
+      )}
+
+      {open && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: 'var(--surface)', border: '1px solid var(--rule-strong)',
+          borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          marginTop: 4, maxHeight: 220, overflowY: 'auto',
+        }}>
+          {results.map(opt => (
+            <div key={opt.id} onMouseDown={() => handleSelect(opt)}
+              style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid var(--rule-soft)', display: 'flex', alignItems: 'center', gap: 10 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ fontSize: 10, fontFamily: 'monospace', padding: '2px 5px', background: opt.type === 'air' ? 'var(--info-soft,#ebf8ff)' : 'var(--surface-2)', borderRadius: 4, flexShrink: 0 }}>
+                {opt.type === 'air' ? '✈' : '🚗'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 500 }}>{opt.ref}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.label.split('·').slice(1).join('·').trim()}</div>
+              </div>
+              <span className={`badge ${opt.status === 'completed' ? 'ok' : opt.status === 'cancelled' ? 'danger' : 'info'}`} style={{ fontSize: 10, flexShrink: 0 }}>{opt.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── New Ticket Modal ───────────────────────────────────────────────────────────
 function NewTicketModal({ onClose, onCreated }: {
   onClose: () => void
   onCreated: () => void
 }) {
-  const [form, setForm] = useState<TicketCreatePayload>(BLANK)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [requesterType, setRequesterType]   = useState('customer')
+  const [requester,     setRequester]       = useState<RequesterOption | null>(null)
+  const [linkedBooking, setLinkedBooking]   = useState<BookingOption | null>(null)
+  const [category,      setCategory]        = useState('refunds_billing')
+  const [priority,      setPriority]        = useState('med')
+  const [subject,       setSubject]         = useState('')
+  const [body,          setBody]            = useState('')
+  const [txnId,         setTxnId]           = useState('')
+  const [saving,        setSaving]          = useState(false)
+  const [error,         setError]           = useState('')
 
-  function set(field: keyof TicketCreatePayload, value: string) {
-    setForm(f => ({ ...f, [field]: value }))
+  // Reset requester when type changes
+  function handleTypeChange(t: string) {
+    setRequesterType(t)
+    setRequester(null)
+    setLinkedBooking(null)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.requester_name.trim()) { setError('Requester name is required'); return }
-    if (!form.subject.trim())        { setError('Subject is required'); return }
-    if (!form.body.trim())           { setError('Description is required'); return }
+    if (!requester?.name.trim()) { setError('Select or enter a requester.'); return }
+    if (!subject.trim())         { setError('Subject is required.'); return }
+    if (!body.trim())            { setError('Description is required.'); return }
     setSaving(true); setError('')
     try {
-      const payload: TicketCreatePayload = {
-        ...form,
-        requester_id: form.requester_id.trim() || 'manual',
-        linked_booking_id:     form.linked_booking_id?.trim()     || undefined,
-        linked_transaction_id: form.linked_transaction_id?.trim() || undefined,
-      }
-      await supportService.createTicket(payload)
+      await supportService.createTicket({
+        requester_type:        requesterType,
+        requester_id:          requester.id,
+        requester_name:        requester.name,
+        category,
+        priority,
+        subject:               subject.trim(),
+        body:                  body.trim(),
+        linked_booking_id:     linkedBooking?.id  || undefined,
+        linked_transaction_id: txnId.trim()       || undefined,
+      })
       onCreated()
       onClose()
     } catch {
@@ -104,55 +382,55 @@ function NewTicketModal({ onClose, onCreated }: {
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(0,0,0,0.45)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 16,
-    }}>
-      <div style={{
-        background: 'var(--surface)', borderRadius: 10,
-        width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-      }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 10, width: '100%', maxWidth: 580, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 600, fontSize: 15 }}>New support ticket</span>
           <button className="btn sm ghost" onClick={onClose}>✕</button>
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Requester */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div className="field">
-              <label className="field-label">Requester type</label>
-              <select className="input" value={form.requester_type} onChange={e => set('requester_type', e.target.value)}>
-                <option value="customer">Customer</option>
-                <option value="driver">Driver</option>
-                <option value="operator">Operator</option>
-              </select>
-            </div>
-            <div className="field">
-              <label className="field-label">Requester name *</label>
-              <input className="input" placeholder="Full name" value={form.requester_name} onChange={e => set('requester_name', e.target.value)} />
+
+          {/* Requester type + search */}
+          <div className="field">
+            <label className="field-label">Requester type</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {['customer', 'driver', 'operator'].map(t => (
+                <button
+                  key={t} type="button"
+                  className={requesterType === t ? 'btn sm accent' : 'btn sm ghost'}
+                  style={{ flex: 1, textTransform: 'capitalize' }}
+                  onClick={() => handleTypeChange(t)}
+                >
+                  {t === 'customer' ? '👤' : t === 'driver' ? '🚗' : '🏢'} {t}
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="field">
-            <label className="field-label">Requester ID <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>(optional)</span></label>
-            <input className="input" placeholder="UUID from customers / drivers / operators" value={form.requester_id} onChange={e => set('requester_id', e.target.value)} />
+            <label className="field-label">
+              {requesterType === 'operator' ? 'Operator name *' : `Search ${requesterType} *`}
+              {requesterType !== 'operator' && <span style={{ color: 'var(--ink-3)', fontWeight: 400, fontSize: 11, marginLeft: 6 }}>type 2+ chars to search</span>}
+            </label>
+            <RequesterSearch
+              requesterType={requesterType}
+              value={requester}
+              onSelect={setRequester}
+            />
           </div>
 
           {/* Category + Priority */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
               <label className="field-label">Category</label>
-              <select className="input" value={form.category} onChange={e => set('category', e.target.value)}>
+              <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
                 {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{formatCategory(c)}</option>)}
               </select>
             </div>
             <div className="field">
               <label className="field-label">Priority</label>
-              <select className="input" value={form.priority} onChange={e => set('priority', e.target.value)}>
+              <select className="input" value={priority} onChange={e => setPriority(e.target.value)}>
                 {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
               </select>
             </div>
@@ -160,35 +438,36 @@ function NewTicketModal({ onClose, onCreated }: {
 
           <div className="field">
             <label className="field-label">Subject *</label>
-            <input className="input" placeholder="Brief description of the issue" value={form.subject} onChange={e => set('subject', e.target.value)} />
+            <input className="input" placeholder="Brief description of the issue" value={subject} onChange={e => setSubject(e.target.value)} />
           </div>
 
           <div className="field">
             <label className="field-label">Description *</label>
-            <textarea
-              className="input"
-              rows={4}
-              placeholder="Full details of the issue reported by the customer, driver or operator…"
-              value={form.body}
-              onChange={e => set('body', e.target.value)}
-              style={{ resize: 'vertical' }}
+            <textarea className="input" rows={4} placeholder="Full details of the issue…" value={body} onChange={e => setBody(e.target.value)} style={{ resize: 'vertical' }} />
+          </div>
+
+          {/* Linked booking search */}
+          <div className="field">
+            <label className="field-label">
+              Linked booking <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>(optional)</span>
+              {requester && requesterType !== 'operator' && (
+                <span style={{ color: 'var(--accent)', fontSize: 11, marginLeft: 6 }}>pre-seeded with requester name</span>
+              )}
+            </label>
+            <BookingSearch
+              requesterName={requester?.name ?? ''}
+              value={linkedBooking}
+              onSelect={setLinkedBooking}
             />
           </div>
 
-          {/* Optional links */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div className="field">
-              <label className="field-label">Linked booking ID <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>(optional)</span></label>
-              <input className="input" placeholder="BK-... or UUID" value={form.linked_booking_id ?? ''} onChange={e => set('linked_booking_id', e.target.value)} />
-            </div>
-            <div className="field">
-              <label className="field-label">Transaction ID <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>(optional)</span></label>
-              <input className="input" placeholder="TXN-..." value={form.linked_transaction_id ?? ''} onChange={e => set('linked_transaction_id', e.target.value)} />
-            </div>
+          <div className="field">
+            <label className="field-label">Transaction ID <span style={{ color: 'var(--ink-3)', fontWeight: 400 }}>(optional)</span></label>
+            <input className="input" placeholder="TXN-..." value={txnId} onChange={e => setTxnId(e.target.value)} />
           </div>
 
           <div style={{ padding: '8px 12px', borderRadius: 6, background: 'var(--surface-2)', fontSize: 12, color: 'var(--ink-3)' }}>
-            ℹ️ Tickets created here are on behalf of the customer, driver or operator. The SLA timer starts immediately based on category and priority.
+            ℹ️ Tickets created here are on behalf of the requester. SLA timer starts immediately based on category and priority.
           </div>
 
           {error && (
