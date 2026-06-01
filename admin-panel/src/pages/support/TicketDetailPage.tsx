@@ -29,6 +29,21 @@ function statusBadge(s: string) {
 
 const STATUS_STEPS = ['open', 'in_progress', 'resolved', 'closed']
 
+const STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
+}
+
+// Which statuses can be clicked to from the current status
+const ALLOWED_NEXT: Record<string, string[]> = {
+  open:        ['in_progress'],
+  in_progress: ['resolved', 'closed'],
+  resolved:    ['closed'],
+  closed:      [],
+}
+
 // ── Resolve Modal ─────────────────────────────────────────────────────────────
 function ResolveModal({ onConfirm, onClose, resolving }: {
   onConfirm: (code: string, note: string) => void
@@ -160,6 +175,7 @@ export default function TicketDetailPage() {
 
   const [showResolveModal, setShowResolveModal] = useState(false)
   const [resolving, setResolving] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   // panel-level resolution code (used by the inline panel button)
   const [resolutionCode, setResolutionCode] = useState('')
   const [resolutionNote, setResolutionNote] = useState('')
@@ -211,6 +227,22 @@ export default function TicketDetailPage() {
       setResolveError('Failed to resolve ticket.')
     } finally {
       setResolving(false)
+    }
+  }
+
+  async function handleStatusChange(newStatus: string) {
+    if (!ticket) return
+    // "resolved" must go through the Resolve modal (needs resolution_code)
+    if (newStatus === 'resolved') { setShowResolveModal(true); return }
+    setUpdatingStatus(true)
+    try {
+      await supportService.updateTicketStatus(ticket.id, newStatus)
+      const updated = await supportService.getTicket(ticket.id)
+      setTicket(updated)
+    } catch {
+      // error silently — ticket state unchanged
+    } finally {
+      setUpdatingStatus(false)
     }
   }
 
@@ -362,46 +394,69 @@ export default function TicketDetailPage() {
 
         {/* Right: Context panel */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Status transitions */}
-          <div style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            padding: 16,
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 12 }}>STATUS</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          {/* Status transitions — clickable stepper */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>STATUS</span>
+              {updatingStatus && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Updating…</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               {STATUS_STEPS.map((step, idx) => {
-                const isActive = ticket.status === step
-                const isPast = STATUS_STEPS.indexOf(ticket.status) > idx
+                const currentIdx = STATUS_STEPS.indexOf(ticket.status)
+                const isActive   = ticket.status === step
+                const isPast     = currentIdx > idx
+                const isNext     = ALLOWED_NEXT[ticket.status]?.includes(step)
+                const isClickable = isNext && !updatingStatus
+
                 return (
-                  <div key={step} style={{ textAlign: 'center', flex: 1 }}>
-                    <div style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      background: isActive ? 'var(--accent, #0F8A5F)' : isPast ? 'var(--accent-light, #d1fae5)' : 'var(--border)',
-                      color: isActive ? '#fff' : isPast ? 'var(--accent, #0F8A5F)' : 'var(--ink-3)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      margin: '0 auto 4px',
-                    }}>
-                      {idx + 1}
-                    </div>
-                    <div style={{
-                      fontSize: 10,
-                      color: isActive ? 'var(--accent, #0F8A5F)' : 'var(--ink-3)',
-                      fontWeight: isActive ? 600 : 400,
-                      textTransform: 'capitalize',
-                    }}>
-                      {step.replace('_', ' ')}
-                    </div>
+                  <div key={step} style={{ flex: 1, textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      disabled={!isClickable}
+                      onClick={() => isClickable && handleStatusChange(step)}
+                      title={
+                        isActive     ? `Current status: ${STATUS_LABELS[step]}` :
+                        isPast       ? `Completed: ${STATUS_LABELS[step]}` :
+                        isClickable  ? `Click to mark as ${STATUS_LABELS[step]}` :
+                                       STATUS_LABELS[step]
+                      }
+                      style={{
+                        width: '100%',
+                        padding: '6px 4px',
+                        border: isActive
+                          ? '2px solid var(--accent,#0F8A5F)'
+                          : isClickable
+                          ? '2px dashed var(--accent,#0F8A5F)'
+                          : '1px solid var(--rule)',
+                        borderRadius: 6,
+                        background: isActive
+                          ? 'color-mix(in oklab, var(--accent,#0F8A5F) 12%, var(--surface))'
+                          : isPast
+                          ? 'color-mix(in oklab, var(--accent,#0F8A5F) 6%, var(--surface))'
+                          : 'var(--surface-2)',
+                        cursor: isClickable ? 'pointer' : 'default',
+                        opacity: !isActive && !isPast && !isClickable ? 0.45 : 1,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                        color: isActive ? 'var(--accent,#0F8A5F)' : isPast ? 'var(--accent,#0F8A5F)' : isClickable ? 'var(--ink-2)' : 'var(--ink-4)',
+                        textTransform: 'capitalize',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {isPast ? '✓ ' : isActive ? '● ' : ''}{STATUS_LABELS[step]}
+                      </div>
+                    </button>
                   </div>
                 )
               })}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-4)' }}>
+              {ALLOWED_NEXT[ticket.status]?.length
+                ? `Click ${ALLOWED_NEXT[ticket.status].map(s => STATUS_LABELS[s]).join(' or ')} to advance this ticket`
+                : 'This ticket is closed — no further transitions'}
             </div>
           </div>
 

@@ -130,4 +130,13 @@ export const supportService = {
 
   createSlaPolicy: (body: SlaPolicyCreatePayload) =>
     api.post<SlaPolicy>('/support/sla-policies', body).then(r => r.data),
+
+  updateTicketStatus: (
+    id: string,
+    status: string,
+    resolution_code?: string,
+    resolution_note?: string,
+  ) =>
+    api.post(`/support/tickets/${id}/status`, { status, resolution_code, resolution_note })
+       .then(r => r.data),
 }

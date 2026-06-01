@@ -19,6 +19,7 @@ from app.schemas.support import (
     TicketMessageCreate,
     TicketMessageResponse,
     TicketResolveRequest,
+    TicketStatusUpdateRequest,
 )
 from app.services import support_service
 
@@ -94,6 +95,19 @@ async def add_message(
         author_id=current_user.id,
         author_name=current_user.name,
         author_role=current_user.role,
+    )
+
+
+@router.post("/tickets/{ticket_id}/status")
+async def update_ticket_status(
+    ticket_id: str,
+    body: TicketStatusUpdateRequest,
+    _: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    """Move a ticket to a new status. Validates allowed transitions."""
+    return await support_service.update_status(
+        db, ticket_id, body.status, body.resolution_code, body.resolution_note
     )
 
 

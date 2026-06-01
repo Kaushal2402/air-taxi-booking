@@ -316,6 +316,58 @@ async def add_message(
     return TicketMessageResponse.model_validate(msg)
 
 
+# ── Update status ────────────────────────────────────────────────────────────
+
+# Valid forward-only transitions
+_ALLOWED_TRANSITIONS: dict[str, list[str]] = {
+    "open":        ["in_progress"],
+    "in_progress": ["resolved", "closed"],
+    "resolved":    ["closed"],
+    "closed":      [],          # terminal
+}
+
+async def update_status(
+    db: AsyncSession,
+    ticket_id: str,
+    new_status: str,
+    resolution_code: str | None,
+    resolution_note: str | None,
+) -> dict:
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalar_one_or_none()
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    allowed = _ALLOWED_TRANSITIONS.get(ticket.status, [])
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot move ticket from '{ticket.status}' to '{new_status}'. "
+                   f"Allowed: {allowed or ['none — ticket is closed']}",
+        )
+
+    if new_status == "resolved" and not resolution_code:
+        raise HTTPException(status_code=422, detail="resolution_code is required to resolve a ticket")
+
+    ticket.status = new_status
+    if new_status == "resolved":
+        ticket.resolution_code = resolution_code
+        ticket.resolution_note = resolution_note
+        ticket.resolved_at     = _utcnow()
+
+    await db.flush()
+    await db.refresh(ticket)
+    await db.commit()
+
+    return {
+        "id":             ticket.id,
+        "status":         ticket.status,
+        "resolution_code": ticket.resolution_code,
+        "resolved_at":    ticket.resolved_at,
+        "updated_at":     ticket.updated_at,
+    }
+
+
 # ── Resolve ticket ────────────────────────────────────────────────────────────
 
 async def resolve_ticket(

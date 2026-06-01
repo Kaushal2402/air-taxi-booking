@@ -94,6 +94,12 @@ class TicketEscalateRequest(BaseModel):
     reason: str
 
 
+class TicketStatusUpdateRequest(BaseModel):
+    status: str  # open | in_progress | resolved | closed
+    resolution_code: str | None = None   # required when moving to resolved
+    resolution_note: str | None = None
+
+
 # ── SLA Policy ────────────────────────────────────────────────────────────────
 
 class SlaPolicyResponse(BaseModel):
