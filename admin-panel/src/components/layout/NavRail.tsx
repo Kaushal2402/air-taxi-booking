@@ -3,16 +3,18 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import BrandLockup from './BrandLockup'
 import Icon from '../ui/Icon'
 import { driverService } from '../../services/driverService'
+import { dispatchService } from '../../services/dispatchService'
+import { supportService } from '../../services/supportService'
 
 const NAV_GROUPS = [
   {
     label: 'Operations',
     items: [
       { id: 'dashboard',  label: 'Dashboard',         icon: 'pie',     path: '/dashboard' },
-      { id: 'dispatch',   label: 'Live Dispatch',     icon: 'bolt',    path: '/dispatch',  count: '12' },
+      { id: 'dispatch',   label: 'Live Dispatch',     icon: 'bolt',    path: '/dispatch' },
       { id: 'bookings-r', label: 'Bookings · Road',   icon: 'car',     path: '/bookings/road' },
       { id: 'bookings-a', label: 'Bookings · Air',    icon: 'plane',   path: '/bookings/air' },
-      { id: 'support',    label: 'Support & Tickets', icon: 'inbox',   path: '/support', count: '37' },
+      { id: 'support',    label: 'Support & Tickets', icon: 'inbox',   path: '/support' },
     ],
   },
   {
@@ -68,16 +70,42 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
   const location = useLocation()
 
   // Dynamic driver badge: shows in_review count (drivers awaiting review)
-  const [driverBadge, setDriverBadge] = useState<string | undefined>(undefined)
+  const [driverBadge,   setDriverBadge]   = useState<string | undefined>(undefined)
+  const [dispatchBadge, setDispatchBadge] = useState<string | undefined>(undefined)
+  const [supportBadge,  setSupportBadge]  = useState<string | undefined>(undefined)
 
-  useEffect(() => {
+  function fetchBadges() {
+    // Drivers awaiting review
     driverService.listDrivers({ per_page: 1 })
       .then(data => {
         const count = data.status_counts['in_review'] ?? 0
         setDriverBadge(count > 0 ? String(count) : undefined)
       })
       .catch(() => setDriverBadge(undefined))
-  }, [])
+
+    // Live dispatch queue depth
+    dispatchService.getQueueStats()
+      .then(stats => {
+        const n = stats.total_in_queue ?? 0
+        setDispatchBadge(n > 0 ? String(n) : undefined)
+      })
+      .catch(() => setDispatchBadge(undefined))
+
+    // Open + in-progress support tickets
+    supportService.listTickets({ page: 1, page_size: 1, status: 'open' })
+      .then(res => {
+        const n = res.total ?? 0
+        setSupportBadge(n > 0 ? String(n) : undefined)
+      })
+      .catch(() => setSupportBadge(undefined))
+  }
+
+  useEffect(() => {
+    fetchBadges()
+    // Refresh every 60 s so counts stay roughly current
+    const timer = setInterval(fetchBadges, 60_000)
+    return () => clearInterval(timer)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isActive = (item: { id: string; path: string }) => {
     if (activeId) return item.id === activeId
@@ -145,9 +173,14 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
               >
                 <Icon name={item.icon} size={15} stroke={1.4} style={{ color: 'var(--ink-3)' }} />
                 <span>{item.label}</span>
-                {(item.id === 'drivers' ? driverBadge : item.count) && (
-                  <span className="count">{item.id === 'drivers' ? driverBadge : item.count}</span>
-                )}
+                {(() => {
+                  const badge =
+                    item.id === 'drivers'  ? driverBadge   :
+                    item.id === 'dispatch' ? dispatchBadge :
+                    item.id === 'support'  ? supportBadge  :
+                    (item as { count?: string }).count
+                  return badge ? <span className="count">{badge}</span> : null
+                })()}
               </div>
             ))}
           </div>
