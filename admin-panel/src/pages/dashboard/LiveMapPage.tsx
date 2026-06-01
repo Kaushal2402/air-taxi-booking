@@ -128,17 +128,16 @@ export default function LiveMapPage() {
   const alerts = data?.alerts ?? []
   const liveBookings = data?.live_bookings ?? []
 
-  // TODO: wire to Driver real-time status (Module 07) — static splits for now
+  // Driver counts — real data from Driver.online_status (Module 07 DB field)
   const totalOnline = kpi?.online_drivers ?? 0
   const totalDrivers = kpi?.online_drivers_total ?? 0
   const onTripCount = kpi?.online_drivers_on_trip ?? 0
   const idleCount = kpi?.online_drivers_idle ?? 0
   const pickupCount = Math.max(0, totalOnline - onTripCount - idleCount)
   const airFlyingCount = kpi?.live_trips_air ?? 0
-  const airGroundCount = 2 // TODO: wire to Module 07
+  const airGroundCount = 0 // TODO: wire to air ground status from Module 10 (Aircraft)
 
-  // Driver header: show "—" when 0 (Module 07 not yet wired)
-  const driversHeader = totalOnline === 0 ? '— / —' : `${totalOnline.toLocaleString('en-IN')} / ${totalDrivers.toLocaleString('en-IN')}`
+  const driversHeader = `${totalOnline.toLocaleString('en-IN')} / ${totalDrivers.toLocaleString('en-IN')}`
 
   // Demo trip for side panel
   const demoTrip = liveBookings[0] ?? {

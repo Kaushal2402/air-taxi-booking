@@ -10,6 +10,7 @@ from app.dependencies import get_current_admin_user
 from app.models.admin_user import AdminUser
 from app.models.air_booking import AirBooking
 from app.models.booking import RoadBooking
+from app.models.driver import Driver
 from app.models.operator import Operator
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -24,7 +25,7 @@ class KpiStats(BaseModel):
     live_trips_road: int
     live_trips_air: int
     live_trips_total: int
-    # Driver online stats — TODO: wire to Driver.is_online (Module 07 — real-time driver status not yet tracked)
+    # Driver online stats — from Driver.online_status + Driver.status
     online_drivers: int
     online_drivers_idle: int
     online_drivers_on_trip: int
@@ -227,6 +228,28 @@ async def get_dashboard(
             kind="air",
         ))
 
+    # Driver online counts (real data — Driver.online_status + Driver.status)
+    online_drivers_q = await db.execute(
+        select(func.count(Driver.id)).where(Driver.online_status == "online")
+    )
+    online_drivers = online_drivers_q.scalar_one() or 0
+
+    online_idle_q = await db.execute(
+        select(func.count(Driver.id)).where(
+            Driver.online_status == "online",
+            Driver.id.notin_(
+                select(RoadBooking.driver_id).where(RoadBooking.status.in_(LIVE_ROAD))
+            )
+        )
+    )
+    online_drivers_idle = online_idle_q.scalar_one() or 0
+    online_drivers_on_trip = max(0, online_drivers - online_drivers_idle)
+
+    total_drivers_q = await db.execute(
+        select(func.count(Driver.id)).where(Driver.status == "active")
+    )
+    online_drivers_total = total_drivers_q.scalar_one() or 0
+
     # Operator counts (real data from Operator table)
     active_ops_q = await db.execute(
         select(func.count(Operator.id)).where(Operator.status == "active")
@@ -258,11 +281,10 @@ async def get_dashboard(
         live_trips_road=live_road,
         live_trips_air=live_air,
         live_trips_total=live_road + live_air,
-        # TODO: wire to Driver.is_online (Module 07 — real-time driver status not yet tracked)
-        online_drivers=0,
-        online_drivers_idle=0,
-        online_drivers_on_trip=0,
-        online_drivers_total=0,
+        online_drivers=online_drivers,
+        online_drivers_idle=online_drivers_idle,
+        online_drivers_on_trip=online_drivers_on_trip,
+        online_drivers_total=online_drivers_total,
         today_bookings=today_total,
         today_gbv_minor=gbv_road + gbv_air,
         today_completed=today_completed,

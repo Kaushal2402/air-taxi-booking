@@ -342,14 +342,11 @@ export default function DashboardPage() {
     ? ((kpi.today_completed / kpi.today_bookings) * 100).toFixed(1)
     : '0.0'
 
-  // Drivers: show "—" when 0 (TODO: wire to Module 07 live status)
   const driversValue = loading ? '—' :
-    (kpi?.online_drivers === 0
-      ? '— / —'
-      : `${(kpi?.online_drivers ?? 0).toLocaleString('en-IN')} / ${(kpi?.online_drivers_total ?? 0).toLocaleString('en-IN')}`)
-  const driversFooter = kpi && kpi.online_drivers > 0
+    `${(kpi?.online_drivers ?? 0).toLocaleString('en-IN')} / ${(kpi?.online_drivers_total ?? 0).toLocaleString('en-IN')}`
+  const driversFooter = kpi
     ? `Idle ${kpi.online_drivers_idle} · On-trip ${kpi.online_drivers_on_trip}`
-    : 'Module 07 not yet wired'
+    : undefined
 
   const operatorsPaused = kpi?.active_operators_paused ?? 0
 
