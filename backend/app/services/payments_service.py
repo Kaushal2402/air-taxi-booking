@@ -5,13 +5,18 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
-from app.models.payment import Payment, PaymentStatus, Refund, ReconciliationBatch, ReconciliationUnmatched
+from app.models.payment import Payment, PaymentMethod, PaymentStatus, Refund, ReconciliationBatch, ReconciliationUnmatched
+from app.models.booking import RoadBooking
+from app.models.customer import Customer
 from app.schemas.payments import (
+    BookingSearchResult,
     BreakdownItem,
     BatchItem,
     BatchListResponse,
     GatewaySummary,
     InstrumentDetail,
+    ManualEntryRequest,
+    ManualEntryResponse,
     PaymentDetail,
     PaymentKPIs,
     PaymentListItem,
@@ -20,6 +25,8 @@ from app.schemas.payments import (
     RefundRequest,
     RefundResponse,
     RefundSummary,
+    RerunMatchResponse,
+    ResolveAllResponse,
     TimelineEvent,
     UnmatchedItem,
     UnmatchedResponse,
@@ -376,4 +383,141 @@ async def list_unmatched_items(db) -> UnmatchedResponse:
             )
             for r in rows
         ]
+    )
+
+
+# ── search_booking ────────────────────────────────────────────────────────────
+
+async def search_booking(db, booking_ref: str) -> BookingSearchResult | None:
+    """Look up a booking by ref and return the fields needed for manual entry."""
+    q = select(RoadBooking).where(RoadBooking.booking_ref == booking_ref.strip().upper())
+    result = await db.execute(q)
+    booking: RoadBooking | None = result.scalars().first()
+    if not booking:
+        return None
+
+    # Resolve customer name
+    customer_name = ""
+    if booking.customer_id:
+        cq = select(Customer).where(Customer.id == booking.customer_id)
+        cr = await db.execute(cq)
+        customer: Customer | None = cr.scalars().first()
+        if customer:
+            customer_name = customer.name
+
+    # Use final fare if available, else estimate; model stores minor units (paise) if > 10000 else rupees
+    raw_fare = booking.fare_final_minor or booking.fare_estimate_minor or 0
+    # Detect if stored in paise (values > 100000 are almost certainly paise)
+    gross_rupees = raw_fare // 100 if raw_fare > 100000 else raw_fare
+
+    service = booking.vehicle_class or booking.service_type or ""
+
+    return BookingSearchResult(
+        booking_ref=booking.booking_ref,
+        customer_id=booking.customer_id or "",
+        customer_name=customer_name,
+        service=service,
+        gross_amount=gross_rupees,
+    )
+
+
+# ── create_manual_entry ────────────────────────────────────────────────────────
+
+async def create_manual_entry(db, req: ManualEntryRequest) -> ManualEntryResponse:
+    txn_id = f"MAN-{uuid.uuid4().hex[:8].upper()}"
+    now = _now()
+
+    # validate / coerce method enum
+    try:
+        method_enum = PaymentMethod(req.method.lower())
+    except ValueError:
+        method_enum = PaymentMethod.cash
+
+    payment = Payment(
+        id=txn_id,
+        customer_id=req.customer_id,
+        customer_name=req.customer_name,
+        booking_ref=req.booking_ref,
+        service=req.service,
+        method=method_enum,
+        vpa=req.vpa,
+        gross_amount=req.gross_amount,
+        gateway_fee=req.gateway_fee,
+        net_amount=req.net_amount,
+        status=PaymentStatus(req.status) if req.status in [s.value for s in PaymentStatus] else PaymentStatus.captured,
+        gateway_ref=req.gateway_ref,
+        currency=req.currency,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(payment)
+    await db.commit()
+    await db.refresh(payment)
+
+    return ManualEntryResponse(
+        id=txn_id,
+        message="Manual entry created successfully",
+        created_at=now,
+    )
+
+
+# ── rerun_match ────────────────────────────────────────────────────────────────
+
+async def rerun_match(db) -> RerunMatchResponse:
+    """Re-run reconciliation matching: set all pending batches to matched if
+    their matched_count equals transaction_count, otherwise leave as variance."""
+    q = select(ReconciliationBatch)
+    result = await db.execute(q)
+    batches = result.scalars().all()
+
+    matched = 0
+    unmatched = 0
+    now = _now()
+
+    for b in batches:
+        if b.matched_count >= b.transaction_count:
+            b.status = "matched"
+            matched += 1
+        else:
+            b.status = "variance"
+            unmatched += 1
+        b.updated_at = now
+
+    await db.commit()
+
+    return RerunMatchResponse(
+        message=f"Match re-run complete. {matched} matched, {unmatched} with variance.",
+        matched_count=matched,
+        unmatched_count=unmatched,
+    )
+
+
+# ── resolve_all_unmatched ──────────────────────────────────────────────────────
+
+async def resolve_all_unmatched(db) -> ResolveAllResponse:
+    """Mark all unmatched items as resolved (delete from queue) and
+    update related batches to matched."""
+    count_q = select(func.count()).select_from(ReconciliationUnmatched)
+    count_result = await db.execute(count_q)
+    resolved_count = count_result.scalar() or 0
+
+    # delete all unmatched records
+    from sqlalchemy import delete as sa_delete
+    await db.execute(sa_delete(ReconciliationUnmatched))
+
+    # update all variance batches to matched
+    q = select(ReconciliationBatch).where(ReconciliationBatch.status != "matched")
+    result = await db.execute(q)
+    batches = result.scalars().all()
+    now = _now()
+    for b in batches:
+        b.status = "matched"
+        b.matched_count = b.transaction_count
+        b.updated_at = now
+
+    await db.commit()
+
+    return ResolveAllResponse(
+        message=f"All {resolved_count} unmatched items resolved.",
+        resolved_count=resolved_count,
     )

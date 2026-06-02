@@ -87,6 +87,36 @@ export interface RefundResponse {
   created_at: string
 }
 
+export interface BookingSearchResult {
+  booking_ref: string
+  customer_id: string
+  customer_name: string
+  service: string
+  gross_amount: number
+}
+
+export interface ManualEntryRequest {
+  customer_name: string
+  customer_id?: string
+  booking_ref?: string
+  service?: string
+  method: string
+  vpa?: string
+  gross_amount: number
+  gateway_fee?: number
+  net_amount: number
+  status?: string
+  gateway_ref?: string
+  currency?: string
+  notes?: string
+}
+
+export interface ManualEntryResponse {
+  id: string
+  message: string
+  created_at: string
+}
+
 export interface GatewaySummary {
   name: string
   ref: string
@@ -134,6 +164,17 @@ export interface UnmatchedResponse {
   items: UnmatchedItem[]
 }
 
+export interface RerunMatchResponse {
+  message: string
+  matched_count: number
+  unmatched_count: number
+}
+
+export interface ResolveAllResponse {
+  message: string
+  resolved_count: number
+}
+
 export const paymentsService = {
   listTransactions: (params: {
     page?: number
@@ -146,6 +187,12 @@ export const paymentsService = {
     date_from?: string
     date_to?: string
   }) => api.get<PaymentListResponse>('/payments', { params }).then(r => r.data),
+
+  searchBooking: (ref: string) =>
+    api.get<BookingSearchResult>('/payments/booking-search', { params: { ref } }).then(r => r.data),
+
+  createManualEntry: (body: ManualEntryRequest) =>
+    api.post<ManualEntryResponse>('/payments', body).then(r => r.data),
 
   getTransaction: (txnId: string) =>
     api.get<PaymentDetail>(`/payments/${txnId}`).then(r => r.data),
@@ -161,4 +208,10 @@ export const paymentsService = {
 
   listUnmatchedItems: () =>
     api.get<UnmatchedResponse>('/payments/reconciliation/unmatched').then(r => r.data),
+
+  rerunMatch: () =>
+    api.post<RerunMatchResponse>('/payments/reconciliation/rerun').then(r => r.data),
+
+  resolveAll: () =>
+    api.post<ResolveAllResponse>('/payments/reconciliation/resolve-all').then(r => r.data),
 }

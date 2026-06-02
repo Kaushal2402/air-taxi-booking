@@ -168,3 +168,50 @@ class UnmatchedItem(BaseModel):
 
 class UnmatchedResponse(BaseModel):
     items: List[UnmatchedItem]
+
+
+# ── Booking search result (for manual entry auto-fill) ────────────────────────
+
+class BookingSearchResult(BaseModel):
+    booking_ref: str
+    customer_id: str
+    customer_name: str
+    service: str
+    gross_amount: int   # in rupees (fare_final_minor / 100 if paise, else as-is)
+
+
+# ── Manual entry ───────────────────────────────────────────────────────────────
+
+class ManualEntryRequest(BaseModel):
+    customer_name: str
+    customer_id: str = "MANUAL"
+    booking_ref: str = ""
+    service: str = ""
+    method: str          # upi / card / wallet / netbanking / corporate / cash
+    vpa: str | None = None
+    gross_amount: int
+    gateway_fee: int = 0
+    net_amount: int
+    status: str = "captured"
+    gateway_ref: str | None = None
+    currency: str = "INR"
+    notes: str | None = None
+
+
+class ManualEntryResponse(BaseModel):
+    id: str
+    message: str
+    created_at: datetime
+
+
+# ── Reconciliation actions ─────────────────────────────────────────────────────
+
+class RerunMatchResponse(BaseModel):
+    message: str
+    matched_count: int
+    unmatched_count: int
+
+
+class ResolveAllResponse(BaseModel):
+    message: str
+    resolved_count: int

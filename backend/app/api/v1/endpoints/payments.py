@@ -7,11 +7,16 @@ from app.dependencies import get_current_admin_user
 from app.models.admin_user import AdminUser
 from app.schemas.payments import (
     BatchListResponse,
+    BookingSearchResult,
+    ManualEntryRequest,
+    ManualEntryResponse,
     PaymentDetail,
     PaymentListResponse,
     ReconciliationSummaryResponse,
     RefundRequest,
     RefundResponse,
+    RerunMatchResponse,
+    ResolveAllResponse,
     UnmatchedResponse,
 )
 from app.services import payments_service
@@ -49,6 +54,29 @@ async def list_transactions(
     )
 
 
+@router.post("", response_model=ManualEntryResponse, status_code=201)
+async def create_manual_entry(
+    body: ManualEntryRequest,
+    _: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    return await payments_service.create_manual_entry(db, body)
+
+
+# ── Booking search (for manual entry auto-fill) — BEFORE /{txn_id} ───────────
+
+@router.get("/booking-search", response_model=BookingSearchResult)
+async def search_booking(
+    ref: str = Query(..., description="Booking reference e.g. BK-RD-88421"),
+    _: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    result = await payments_service.search_booking(db, ref)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Booking '{ref}' not found")
+    return result
+
+
 # ── Reconciliation — these MUST be defined before /{txn_id} ───────────────────
 
 @router.get("/reconciliation/summary", response_model=ReconciliationSummaryResponse)
@@ -76,6 +104,22 @@ async def list_unmatched_items(
     db=Depends(get_db),
 ):
     return await payments_service.list_unmatched_items(db)
+
+
+@router.post("/reconciliation/rerun", response_model=RerunMatchResponse)
+async def rerun_match(
+    _: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    return await payments_service.rerun_match(db)
+
+
+@router.post("/reconciliation/resolve-all", response_model=ResolveAllResponse)
+async def resolve_all_unmatched(
+    _: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    return await payments_service.resolve_all_unmatched(db)
 
 
 # ── Single transaction (must be AFTER /reconciliation/* routes) ───────────────
