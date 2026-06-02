@@ -67,6 +67,9 @@ import SupplySurgePage from './pages/dispatch/SupplySurgePage'
 import TicketQueuePage from './pages/support/TicketQueuePage'
 import TicketDetailPage from './pages/support/TicketDetailPage'
 import SlaEscalationPage from './pages/support/SlaEscalationPage'
+import PaymentsPage from './pages/payments/PaymentsPage'
+import TransactionDetailPage from './pages/payments/TransactionDetailPage'
+import ReconciliationPage from './pages/payments/ReconciliationPage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -234,6 +237,11 @@ function App() {
           <Route path="/dispatch/console" element={<PrivateRoute><DispatchConsolePage /></PrivateRoute>} />
           <Route path="/dispatch/exceptions" element={<PrivateRoute><DispatchExceptionsPage /></PrivateRoute>} />
           <Route path="/dispatch/supply" element={<PrivateRoute><SupplySurgePage /></PrivateRoute>} />
+
+          {/* Payments — /payments/reconciliation MUST be before /payments/:txnId */}
+          <Route path="/payments" element={<PrivateRoute><PaymentsPage /></PrivateRoute>} />
+          <Route path="/payments/reconciliation" element={<PrivateRoute><ReconciliationPage /></PrivateRoute>} />
+          <Route path="/payments/:txnId" element={<PrivateRoute><TransactionDetailPage /></PrivateRoute>} />
 
           {/* Support — /support/sla MUST be before /support/:ticketId */}
           <Route path="/support" element={<PrivateRoute><TicketQueuePage /></PrivateRoute>} />
