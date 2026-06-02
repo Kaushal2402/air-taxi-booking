@@ -33,6 +33,7 @@ from app.models.air_booking import (
 )
 from app.models.dispatch import DispatchException, SurgeOverride
 from app.models.support import Ticket, TicketMessage, SlaPolicy
+from app.models.payment import Payment, Refund, ReconciliationBatch, ReconciliationUnmatched
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -54,4 +55,5 @@ __all__ = [
     "AirBooking", "AirBookingPassenger", "CharterQuote", "AirBookingNote", "AirBookingTimeline",
     "DispatchException", "SurgeOverride",
     "Ticket", "TicketMessage", "SlaPolicy",
+    "Payment", "Refund", "ReconciliationBatch", "ReconciliationUnmatched",
 ]
