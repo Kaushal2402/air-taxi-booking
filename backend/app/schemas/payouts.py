@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import List
+
+from pydantic import BaseModel
+
+from app.models.payout import AdjustmentType, PayeeStatus, PayoutRunStatus, PayoutRunType
+
+
+# ── Payout Run ─────────────────────────────────────────────────────────────────
+
+class PayoutRunCreate(BaseModel):
+    run_ref: str
+    run_type: PayoutRunType
+    period_label: str
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    scheduled_at: datetime | None = None
+    notes: str | None = None
+
+
+class PayoutRunUpdate(BaseModel):
+    status: PayoutRunStatus | None = None
+    scheduled_at: datetime | None = None
+    notes: str | None = None
+    rejection_reason: str | None = None
+
+
+class PayoutRunResponse(BaseModel):
+    id: str
+    run_ref: str
+    run_type: PayoutRunType
+    status: PayoutRunStatus
+    period_label: str
+    period_start: datetime | None
+    period_end: datetime | None
+    payee_count: int
+    gross_amount: float
+    deduction_amount: float
+    hold_amount: float
+    net_amount: float
+    scheduled_at: datetime | None
+    approved_by: str | None
+    approved_at: datetime | None
+    rejection_reason: str | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PayoutRunListResponse(BaseModel):
+    items: List[PayoutRunResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ── Payout Payee ───────────────────────────────────────────────────────────────
+
+class PayoutPayeeCreate(BaseModel):
+    entity_type: str
+    entity_id: str
+    entity_name: str
+    entity_ref: str | None = None
+    trip_count: int = 0
+    gross_amount: float = 0
+    incentive_amount: float = 0
+    deduction_amount: float = 0
+    hold_amount: float = 0
+    net_amount: float = 0
+    bank_account_ref: str | None = None
+    hold_reason: str | None = None
+
+
+class PayoutPayeeUpdate(BaseModel):
+    status: PayeeStatus | None = None
+    hold_reason: str | None = None
+    utr_number: str | None = None
+
+
+class AdjustmentResponse(BaseModel):
+    id: str
+    adjustment_type: AdjustmentType
+    description: str
+    amount: float
+    reference: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PayoutPayeeResponse(BaseModel):
+    id: str
+    run_id: str
+    entity_type: str
+    entity_id: str
+    entity_name: str
+    entity_ref: str | None
+    trip_count: int
+    gross_amount: float
+    incentive_amount: float
+    deduction_amount: float
+    hold_amount: float
+    net_amount: float
+    status: PayeeStatus
+    bank_account_ref: str | None
+    utr_number: str | None
+    paid_at: datetime | None
+    hold_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+    adjustments: List[AdjustmentResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
+class PayoutPayeeListResponse(BaseModel):
+    items: List[PayoutPayeeResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# ── Adjustment ────────────────────────────────────────────────────────────────
+
+class AdjustmentCreate(BaseModel):
+    adjustment_type: AdjustmentType
+    description: str
+    amount: float
+    reference: str | None = None
+
+
+# ── Approve / Reject ─────────────────────────────────────────────────────────
+
+class ApproveRunRequest(BaseModel):
+    notes: str | None = None
+
+
+class RejectRunRequest(BaseModel):
+    reason: str

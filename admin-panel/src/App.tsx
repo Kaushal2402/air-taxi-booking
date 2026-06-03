@@ -70,6 +70,9 @@ import SlaEscalationPage from './pages/support/SlaEscalationPage'
 import PaymentsPage from './pages/payments/PaymentsPage'
 import TransactionDetailPage from './pages/payments/TransactionDetailPage'
 import ReconciliationPage from './pages/payments/ReconciliationPage'
+import PayoutRunsPage from './pages/payouts/PayoutRunsPage'
+import PayoutRunDetailPage from './pages/payouts/PayoutRunDetailPage'
+import DriverStatementPage from './pages/payouts/DriverStatementPage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -242,6 +245,12 @@ function App() {
           <Route path="/payments" element={<PrivateRoute><PaymentsPage /></PrivateRoute>} />
           <Route path="/payments/reconciliation" element={<PrivateRoute><ReconciliationPage /></PrivateRoute>} />
           <Route path="/payments/:txnId" element={<PrivateRoute><TransactionDetailPage /></PrivateRoute>} />
+
+          {/* Payouts — /payouts/payees/:id MUST be before /payouts/runs/:runId */}
+          <Route path="/payouts" element={<PrivateRoute><PayoutRunsPage /></PrivateRoute>} />
+          <Route path="/payouts/runs" element={<PrivateRoute><PayoutRunsPage /></PrivateRoute>} />
+          <Route path="/payouts/runs/:runId" element={<PrivateRoute><PayoutRunDetailPage /></PrivateRoute>} />
+          <Route path="/payouts/payees/:payeeId" element={<PrivateRoute><DriverStatementPage /></PrivateRoute>} />
 
           {/* Support — /support/sla MUST be before /support/:ticketId */}
           <Route path="/support" element={<PrivateRoute><TicketQueuePage /></PrivateRoute>} />
