@@ -197,6 +197,7 @@ interface QuoteCardProps {
 function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
   const [pushing, setPushing] = useState(false)
   const [declining, setDeclining] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const breakdown = [
     ['Base · hourly', quote.base_fare_minor],
@@ -209,13 +210,17 @@ function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
 
   async function handlePush() {
     setPushing(true)
-    try { await airBookingsService.pushQuote(bookingId, quote.id); onAction() } catch { /* ignore */ }
+    setActionError(null)
+    try { await airBookingsService.pushQuote(bookingId, quote.id); onAction() }
+    catch { setActionError('Failed to push quote to customer. Please try again.') }
     setPushing(false)
   }
 
   async function handleDecline() {
     setDeclining(true)
-    try { await airBookingsService.declineQuote(bookingId, quote.id); onAction() } catch { /* ignore */ }
+    setActionError(null)
+    try { await airBookingsService.declineQuote(bookingId, quote.id); onAction() }
+    catch { setActionError('Failed to decline quote. Please try again.') }
     setDeclining(false)
   }
 
@@ -308,6 +313,11 @@ function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
         </div>
       )}
 
+      {actionError && (
+        <div style={{ padding: '8px 22px', background: 'var(--danger-soft)', borderTop: '1px solid var(--danger-muted)', fontSize: 12, color: 'var(--danger)' }}>
+          {actionError}
+        </div>
+      )}
       {!isDeclined && (
         <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', display: 'flex', gap: 8 }}>
           <button className="btn sm" style={{ flex: 1 }} disabled={declining} onClick={handleDecline}>
