@@ -582,7 +582,7 @@ export default function VehicleDirectoryPage() {
           <button className="btn sm accent" onClick={() => setShowAddVehicle(true)}>
             <Icon name="plus" size={13} />Add vehicle
           </button>
-          <button className="btn sm" onClick={() => navigate('/vehicles/vendors')}>Fleet owners</button>
+          <button className="btn sm" onClick={() => navigate('/vendors')}>Fleet owners</button>
         </div>
       }
     >
