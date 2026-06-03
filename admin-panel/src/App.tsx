@@ -73,6 +73,9 @@ import ReconciliationPage from './pages/payments/ReconciliationPage'
 import PayoutRunsPage from './pages/payouts/PayoutRunsPage'
 import PayoutRunDetailPage from './pages/payouts/PayoutRunDetailPage'
 import DriverStatementPage from './pages/payouts/DriverStatementPage'
+import ReportLibraryPage from './pages/reports/ReportLibraryPage'
+import RevenueReportPage from './pages/reports/RevenueReportPage'
+import ReportBuilderPage from './pages/reports/ReportBuilderPage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -245,6 +248,11 @@ function App() {
           <Route path="/payments" element={<PrivateRoute><PaymentsPage /></PrivateRoute>} />
           <Route path="/payments/reconciliation" element={<PrivateRoute><ReconciliationPage /></PrivateRoute>} />
           <Route path="/payments/:txnId" element={<PrivateRoute><TransactionDetailPage /></PrivateRoute>} />
+
+          {/* Reports — /reports/builder and /reports/exports MUST be before /reports/:templateId */}
+          <Route path="/reports" element={<PrivateRoute><ReportLibraryPage /></PrivateRoute>} />
+          <Route path="/reports/builder" element={<PrivateRoute><ReportBuilderPage /></PrivateRoute>} />
+          <Route path="/reports/:templateId" element={<PrivateRoute><RevenueReportPage /></PrivateRoute>} />
 
           {/* Payouts — /payouts/payees/:id MUST be before /payouts/runs/:runId */}
           <Route path="/payouts" element={<PrivateRoute><PayoutRunsPage /></PrivateRoute>} />
