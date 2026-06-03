@@ -19,6 +19,7 @@ from app.api.v1.endpoints.support import router as support_router
 from app.api.v1.endpoints.payments import router as payments_router
 from app.api.v1.endpoints.payouts import router as payouts_router
 from app.api.v1.endpoints.reports import router as reports_router
+from app.api.v1.endpoints.branding import router as branding_router
 
 api_router = APIRouter()
 
@@ -46,3 +47,4 @@ api_router.include_router(support_router,        prefix="/support",        tags=
 api_router.include_router(payments_router,       prefix="/payments",       tags=["payments"])
 api_router.include_router(payouts_router,        prefix="/payouts",        tags=["Payouts"])
 api_router.include_router(reports_router,        prefix="/reports",        tags=["Reports"])
+api_router.include_router(branding_router,       prefix="/branding",       tags=["Branding"])

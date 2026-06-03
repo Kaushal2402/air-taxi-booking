@@ -76,6 +76,9 @@ import DriverStatementPage from './pages/payouts/DriverStatementPage'
 import ReportLibraryPage from './pages/reports/ReportLibraryPage'
 import RevenueReportPage from './pages/reports/RevenueReportPage'
 import ReportBuilderPage from './pages/reports/ReportBuilderPage'
+import BrandProfilesPage from './pages/branding/BrandProfilesPage'
+import ThemeEditorPage from './pages/branding/ThemeEditorPage'
+import TouchpointsPage from './pages/branding/TouchpointsPage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -248,6 +251,11 @@ function App() {
           <Route path="/payments" element={<PrivateRoute><PaymentsPage /></PrivateRoute>} />
           <Route path="/payments/reconciliation" element={<PrivateRoute><ReconciliationPage /></PrivateRoute>} />
           <Route path="/payments/:txnId" element={<PrivateRoute><TransactionDetailPage /></PrivateRoute>} />
+
+          {/* Branding — /branding/:profileId/touchpoints MUST be before /branding/:profileId */}
+          <Route path="/branding" element={<PrivateRoute><BrandProfilesPage /></PrivateRoute>} />
+          <Route path="/branding/:profileId/touchpoints" element={<PrivateRoute><TouchpointsPage /></PrivateRoute>} />
+          <Route path="/branding/:profileId" element={<PrivateRoute><ThemeEditorPage /></PrivateRoute>} />
 
           {/* Reports — /reports/builder and /reports/exports MUST be before /reports/:templateId */}
           <Route path="/reports" element={<PrivateRoute><ReportLibraryPage /></PrivateRoute>} />
