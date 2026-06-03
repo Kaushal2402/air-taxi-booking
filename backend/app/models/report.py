@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, JSON, String, Text, Boolean
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -58,7 +58,7 @@ class ReportSchedule(Base):
     __tablename__ = "report_schedules"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    template_id = Column(String(36), nullable=False)
+    template_id = Column(String(36), ForeignKey("report_templates.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(128), nullable=False)
     frequency = Column(Enum(ReportFrequency), nullable=False)
     format = Column(Enum(ReportFormat), nullable=False)
@@ -78,7 +78,7 @@ class ReportExport(Base):
     __tablename__ = "report_exports"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    template_id = Column(String(36), nullable=True)
+    template_id = Column(String(36), ForeignKey("report_templates.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(128), nullable=False)
     format = Column(Enum(ReportFormat), nullable=False)
     status = Column(Enum(ReportStatus), nullable=False, default=ReportStatus.running)

@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, JSON, String, Text, Boolean
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -62,7 +62,7 @@ class BrandAsset(Base):
     __tablename__ = "brand_assets"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    profile_id = Column(String(36), nullable=False)
+    profile_id = Column(String(36), ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False)
     asset_type = Column(String(64), nullable=False)  # wordmark, app_icon, splash, email_header, favicon, invoice_logo
     name = Column(String(128), nullable=False)
     format = Column(String(32), nullable=True)
@@ -88,7 +88,7 @@ class BrandTouchpoint(Base):
     __tablename__ = "brand_touchpoints"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    profile_id = Column(String(36), nullable=False)
+    profile_id = Column(String(36), ForeignKey("brand_profiles.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(128), nullable=False)
     description = Column(String(256), nullable=True)
     coverage = Column(String(64), nullable=True)
