@@ -34,6 +34,9 @@ from app.models.air_booking import (
 from app.models.dispatch import DispatchException, SurgeOverride
 from app.models.support import Ticket, TicketMessage, SlaPolicy
 from app.models.payment import Payment, Refund, ReconciliationBatch, ReconciliationUnmatched
+from app.models.payout import PayoutRun, PayoutPayee, PayoutAdjustment
+from app.models.report import ReportTemplate, ReportSchedule, ReportExport
+from app.models.branding import BrandProfile, BrandAsset, BrandTouchpoint
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -56,4 +59,7 @@ __all__ = [
     "DispatchException", "SurgeOverride",
     "Ticket", "TicketMessage", "SlaPolicy",
     "Payment", "Refund", "ReconciliationBatch", "ReconciliationUnmatched",
+    "PayoutRun", "PayoutPayee", "PayoutAdjustment",
+    "ReportTemplate", "ReportSchedule", "ReportExport",
+    "BrandProfile", "BrandAsset", "BrandTouchpoint",
 ]
