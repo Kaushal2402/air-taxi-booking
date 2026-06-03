@@ -5,7 +5,7 @@ import Icon from '../../components/ui/Icon'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { payoutsService } from '../../services/payoutsService'
-import type { PayoutRun } from '../../services/payoutsService'
+import type { PayoutRun, PayoutRunType, CreatePayoutRun } from '../../services/payoutsService'
 
 const fmtINR = (n: number) =>
   '₹ ' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -20,6 +20,121 @@ function runTypeLabel(t: string) {
   }
 }
 
+// ── New Run Modal ──────────────────────────────────────────────────────────────
+interface NewRunModalProps {
+  onClose: () => void
+  onCreated: (runId: string) => void
+}
+
+function NewRunModal({ onClose, onCreated }: NewRunModalProps) {
+  const [runType, setRunType] = useState<PayoutRunType>('driver_weekly')
+  const [periodLabel, setPeriodLabel] = useState('')
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleCreate = async () => {
+    if (!periodLabel.trim()) { setError('Period label is required'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const body: CreatePayoutRun = {
+        run_type: runType,
+        period_label: periodLabel.trim(),
+        period_start: periodStart || null,
+        period_end: periodEnd || null,
+        notes: notes || undefined,
+      }
+      const run = await payoutsService.createRun(body)
+      onCreated(run.id)
+    } catch {
+      setError('Failed to create payout run. Please try again.')
+      setSaving(false)
+    }
+  }
+
+  const fieldStyle = { display: 'flex', flexDirection: 'column' as const, gap: 4 }
+  const labelStyle = { fontSize: 11, fontWeight: 600 as const, color: 'var(--ink-3)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }
+  const inputStyle = { height: 34, padding: '0 10px', width: '100%', fontSize: 13 }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,20,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 4, width: '100%', maxWidth: 480, boxShadow: 'var(--shadow-pop)' }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>New payout run</div>
+            <div className="t-meta" style={{ marginTop: 3 }}>Configure the run — payees can be added after creation</div>
+          </div>
+          <button className="btn icon sm ghost" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+
+        {/* Form */}
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {error && (
+            <div style={{ padding: '10px 14px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 13, color: 'var(--danger)' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={fieldStyle}>
+            <label style={labelStyle}>Run type *</label>
+            <select className="input" style={inputStyle} value={runType} onChange={e => setRunType(e.target.value as PayoutRunType)}>
+              <option value="driver_weekly">Driver · Weekly</option>
+              <option value="operator_monthly">Operator · Monthly</option>
+              <option value="referral">Referral payouts</option>
+              <option value="vendor">Vendor payout</option>
+            </select>
+          </div>
+
+          <div style={fieldStyle}>
+            <label style={labelStyle}>Period label * <span style={{ fontWeight: 400, textTransform: 'none' }}>(e.g. "Week 22 · 26 May – 1 Jun 2026")</span></label>
+            <input
+              className="input"
+              style={inputStyle}
+              placeholder="Week XX · DD Mon – DD Mon YYYY"
+              value={periodLabel}
+              onChange={e => setPeriodLabel(e.target.value)}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Period start</label>
+              <input className="input" style={inputStyle} type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Period end</label>
+              <input className="input" style={inputStyle} type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={fieldStyle}>
+            <label style={labelStyle}>Notes</label>
+            <input className="input" style={inputStyle} placeholder="Optional notes…" value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--rule)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="btn sm" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn sm accent" onClick={handleCreate} disabled={saving}>
+            {saving
+              ? <><Icon name="refresh" size={13} style={{ animation: 'spin 1s linear infinite' }} />Creating…</>
+              : <><Icon name="plus" size={13} />Create run</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function PayoutRunsPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -31,6 +146,7 @@ export default function PayoutRunsPage() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showNewRun, setShowNewRun] = useState(false)
   const [approving, setApproving] = useState<PayoutRun | null>(null)
   const [rejecting, setRejecting] = useState<PayoutRun | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -95,7 +211,7 @@ export default function PayoutRunsPage() {
           <button className="btn sm">
             <Icon name="download" size={13} />Export
           </button>
-          <button className="btn sm accent" onClick={() => navigate('/payouts/runs/new')}>
+          <button className="btn sm accent" onClick={() => setShowNewRun(true)}>
             <Icon name="plus" size={13} />New run
           </button>
         </>
@@ -224,6 +340,17 @@ export default function PayoutRunsPage() {
           )}
         </div>
       </div>
+
+      {/* New Run Modal */}
+      {showNewRun && (
+        <NewRunModal
+          onClose={() => setShowNewRun(false)}
+          onCreated={(runId) => {
+            setShowNewRun(false)
+            navigate(`/payouts/runs/${runId}`)
+          }}
+        />
+      )}
 
       {/* Approve confirm */}
       <ConfirmDialog

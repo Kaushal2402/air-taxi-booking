@@ -73,6 +73,14 @@ export interface PayoutPayeeListResponse {
   page_size: number
 }
 
+export interface CreatePayoutRun {
+  run_type: PayoutRunType
+  period_label: string
+  period_start?: string | null
+  period_end?: string | null
+  notes?: string
+}
+
 export const payoutsService = {
   listRuns: (params?: {
     page?: number
@@ -85,7 +93,7 @@ export const payoutsService = {
   getRun: (id: string) =>
     api.get<PayoutRun>(`/payouts/runs/${id}`).then(r => r.data),
 
-  createRun: (body: Partial<PayoutRun>) =>
+  createRun: (body: CreatePayoutRun) =>
     api.post<PayoutRun>('/payouts/runs', body).then(r => r.data),
 
   updateRun: (id: string, body: Partial<PayoutRun>) =>
