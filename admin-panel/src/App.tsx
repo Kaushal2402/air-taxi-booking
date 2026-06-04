@@ -79,6 +79,12 @@ import ReportBuilderPage from './pages/reports/ReportBuilderPage'
 import BrandProfilesPage from './pages/branding/BrandProfilesPage'
 import ThemeEditorPage from './pages/branding/ThemeEditorPage'
 import TouchpointsPage from './pages/branding/TouchpointsPage'
+import RolesListPage from './pages/rbac/RolesListPage'
+import RoleEditorPage from './pages/rbac/RoleEditorPage'
+import PermissionsCatalogPage from './pages/rbac/PermissionsCatalogPage'
+import NotificationTemplatesPage from './pages/notifications/NotificationTemplatesPage'
+import TemplateEditorPage from './pages/notifications/TemplateEditorPage'
+import DeliveryLogPage from './pages/notifications/DeliveryLogPage'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -277,6 +283,16 @@ function App() {
           <Route path="/settings" element={<PrivateRoute><PlatformSettingsPage /></PrivateRoute>} />
           <Route path="/settings/flags" element={<PrivateRoute><FeatureFlagsPage /></PrivateRoute>} />
           <Route path="/settings/maintenance" element={<PrivateRoute><MaintenancePage /></PrivateRoute>} />
+
+          {/* RBAC — /rbac/permissions MUST be before /rbac/roles/:id */}
+          <Route path="/rbac" element={<PrivateRoute><RolesListPage /></PrivateRoute>} />
+          <Route path="/rbac/permissions" element={<PrivateRoute><PermissionsCatalogPage /></PrivateRoute>} />
+          <Route path="/rbac/roles/:id" element={<PrivateRoute><RoleEditorPage /></PrivateRoute>} />
+
+          {/* Notifications — /notifications/delivery MUST be before /notifications/:id/edit */}
+          <Route path="/notifications" element={<PrivateRoute><NotificationTemplatesPage /></PrivateRoute>} />
+          <Route path="/notifications/delivery" element={<PrivateRoute><DeliveryLogPage /></PrivateRoute>} />
+          <Route path="/notifications/:id/edit" element={<PrivateRoute><TemplateEditorPage /></PrivateRoute>} />
 
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />
