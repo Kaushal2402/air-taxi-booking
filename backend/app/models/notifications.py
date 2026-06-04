@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import enum
 
+from typing import Optional
+
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,12 +42,12 @@ class NotificationTemplate(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=NotificationStatus.draft)
     category: Mapped[str] = mapped_column(String(50), nullable=False, default=NotificationCategory.transactional)
 
-    push_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    push_body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sms_body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    email_subject: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    email_body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    wa_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    push_title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    push_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sms_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    email_subject: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    email_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    wa_body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     priority: Mapped[str] = mapped_column(String(50), nullable=False, default="normal")
     quiet_hours_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -53,13 +55,13 @@ class NotificationTemplate(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     dedup_window_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
 
     sent_30d: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    open_rate: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    open_rate: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
 
 class NotificationLog(Base, UUIDPrimaryKeyMixin):
     __tablename__ = "notification_logs"
 
-    template_id: Mapped[str | None] = mapped_column(
+    template_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("notification_templates.id", ondelete="SET NULL"), nullable=True, index=True
     )
     template_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
@@ -78,5 +80,5 @@ class NotificationBroadcast(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     channel: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     message: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
-    scheduled_at: Mapped[str | None] = mapped_column(UTCDateTime(), nullable=True)
+    scheduled_at: Mapped[Optional[str]] = mapped_column(UTCDateTime(), nullable=True)
     estimated_reach: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

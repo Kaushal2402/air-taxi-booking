@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import enum
 
+from typing import Optional
+
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,4 +48,4 @@ class RolePermission(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False, index=True
     )
     state: Mapped[str] = mapped_column(String(20), nullable=False, default=PermissionState.none)
-    scope_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scope_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
