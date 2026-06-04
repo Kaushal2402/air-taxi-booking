@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import HTTPException
@@ -56,8 +58,12 @@ async def get_run(db: AsyncSession, run_id: str) -> PayoutRun:
 
 
 async def create_run(db: AsyncSession, data: Dict[str, Any]) -> PayoutRun:
+    # Auto-generate run_ref: PR-YYYYMMDD-XXXX  e.g. PR-20260604-A3F1
+    now = datetime.now(timezone.utc)
+    short_id = uuid.uuid4().hex[:4].upper()
+    data["run_ref"] = f"PR-{now.strftime('%Y%m%d')}-{short_id}"
+    data.setdefault("status", PayoutRunStatus.draft)
     run = PayoutRun(**data)
-    run.status = PayoutRunStatus.draft
     db.add(run)
     await db.commit()
     await db.refresh(run)
