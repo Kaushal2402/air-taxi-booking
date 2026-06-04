@@ -38,7 +38,7 @@ class NotificationTemplate(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     template_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     event_trigger: Mapped[str] = mapped_column(String(200), nullable=False, default="")
-    channels: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON array
+    channels: Mapped[str] = mapped_column(String(500), nullable=False, default="[]")  # JSON array e.g. '["push","sms"]'
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=NotificationStatus.draft)
     category: Mapped[str] = mapped_column(String(50), nullable=False, default=NotificationCategory.transactional)
 
@@ -78,7 +78,7 @@ class NotificationBroadcast(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     audience_description: Mapped[str] = mapped_column(String(300), nullable=False, default="")
     channel: Mapped[str] = mapped_column(String(100), nullable=False, default="")
-    message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # TEXT cannot have DEFAULT in MySQL strict mode
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     scheduled_at: Mapped[Optional[str]] = mapped_column(UTCDateTime(), nullable=True)
     estimated_reach: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

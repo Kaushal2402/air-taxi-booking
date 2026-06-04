@@ -37,6 +37,8 @@ from app.models.payment import Payment, Refund, ReconciliationBatch, Reconciliat
 from app.models.payout import PayoutRun, PayoutPayee, PayoutAdjustment
 from app.models.report import ReportTemplate, ReportSchedule, ReportExport
 from app.models.branding import BrandProfile, BrandAsset, BrandTouchpoint
+from app.models.rbac import Role, PermissionCatalog, RolePermission
+from app.models.notifications import NotificationTemplate, NotificationLog, NotificationBroadcast
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -62,4 +64,6 @@ __all__ = [
     "PayoutRun", "PayoutPayee", "PayoutAdjustment",
     "ReportTemplate", "ReportSchedule", "ReportExport",
     "BrandProfile", "BrandAsset", "BrandTouchpoint",
+    "Role", "PermissionCatalog", "RolePermission",
+    "NotificationTemplate", "NotificationLog", "NotificationBroadcast",
 ]
