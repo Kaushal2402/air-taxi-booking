@@ -16,6 +16,7 @@
       "mcp__scheduled-tasks__*(*)",
       "mcp__computer-use__*(*)",
       "mcp__Claude_in_Chrome__*(*)",
+      "mcp__github__*(*)",
       "Agent(*)",
       "Task(*)"
     ]
