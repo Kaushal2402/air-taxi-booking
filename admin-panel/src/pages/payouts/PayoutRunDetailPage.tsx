@@ -32,6 +32,7 @@ export default function PayoutRunDetailPage() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [approving, setApproving] = useState(false)
   const [rejecting, setRejecting] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
@@ -40,8 +41,15 @@ export default function PayoutRunDetailPage() {
 
   const PAGE_SIZE = 20
 
+  // Guard: if runId is "new" or missing, redirect to list immediately
+  useEffect(() => {
+    if (!runId || runId === 'new') {
+      navigate('/payouts', { replace: true })
+    }
+  }, [runId, navigate])
+
   const load = useCallback(async () => {
-    if (!runId) return
+    if (!runId || runId === 'new') return
     setLoading(true)
     try {
       const [runData, payeesData] = await Promise.all([
@@ -52,7 +60,7 @@ export default function PayoutRunDetailPage() {
       setPayees(payeesData.items)
       setTotalPayees(payeesData.total)
     } catch {
-      // ignore
+      setError('Failed to load payout run. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -92,6 +100,17 @@ export default function PayoutRunDetailPage() {
       <Shell activeId="payouts" title="Loading…">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: 'var(--ink-4)' }}>
           Loading payout run…
+        </div>
+      </Shell>
+    )
+  }
+
+  if (error && !run) {
+    return (
+      <Shell activeId="payouts" breadcrumb="Finance · Payouts · Run" title="Error">
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 16 }}>{error}</div>
+          <button className="btn sm" onClick={() => navigate('/payouts')}>← Back to payout runs</button>
         </div>
       </Shell>
     )
