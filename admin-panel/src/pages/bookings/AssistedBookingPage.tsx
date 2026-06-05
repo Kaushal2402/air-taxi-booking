@@ -7,13 +7,21 @@ import { bookingsService } from '../../services/bookingsService'
 import { customerService } from '../../services/customerService'
 import { catalogService } from '../../services/catalogService'
 import { pricingService } from '../../services/pricingService'
+import { settingsService } from '../../services/settingsService'
 import type { Customer } from '../../services/customerService'
 import type { VehicleClass } from '../../services/catalogService'
 import type { RoadRule } from '../../services/pricingService'
+import { useFormatMoney } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
+
+/** Format a Date as the value string expected by datetime-local inputs: "YYYY-MM-DDTHH:MM" */
+function toDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 /**
  * Compute fare estimate using a live road fare rule.
@@ -143,6 +151,7 @@ interface SummaryProps {
 }
 
 function BookingSummary({ form, distanceKm, fareMinor }: SummaryProps) {
+  const fmtMinor = useFormatMoney()
   return (
     <>
       <div className="t-label" style={{ marginBottom: 10 }}>Summary</div>
@@ -207,8 +216,10 @@ function BookingSummary({ form, distanceKm, fareMinor }: SummaryProps) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AssistedBookingPage() {
+  const fmtMinor = useFormatMoney()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const toggles = usePlatformStore(s => s.toggles)
 
   const [step, setStep] = useState<Step>('customer')
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
@@ -217,6 +228,33 @@ export default function AssistedBookingPage() {
   const [searchingCustomer, setSearchingCustomer] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Advance booking bounds from platform settings
+  const [minScheduledAt, setMinScheduledAt] = useState('')
+  const [maxScheduledAt, setMaxScheduledAt] = useState('')
+  const [maxActiveRides, setMaxActiveRides] = useState(2)
+  const [customerActiveCount, setCustomerActiveCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    settingsService.getSettings().then(s => {
+      const minMin = s.min_advance_minutes ?? 15
+      const maxDays = s.max_advance_days ?? 7
+      const now = new Date()
+      const minDt = new Date(now.getTime() + minMin * 60 * 1000)
+      const maxDt = new Date(now.getTime() + maxDays * 24 * 60 * 60 * 1000)
+      setMinScheduledAt(toDatetimeLocal(minDt))
+      setMaxScheduledAt(toDatetimeLocal(maxDt))
+      setMaxActiveRides(s.max_active_bookings_per_rider ?? 2)
+    }).catch(() => {})
+  }, [])
+
+  // Check customer's active booking count when customer is selected
+  useEffect(() => {
+    if (!form.customer) { setCustomerActiveCount(null); return }
+    bookingsService.listBookings({ customer_id: form.customer.id, status: 'Requested,Accepted,Arrived,InProgress', per_page: 10 })
+      .then(r => setCustomerActiveCount(r.total ?? r.items.length))
+      .catch(() => setCustomerActiveCount(null))
+  }, [form.customer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dynamic vehicle class + fare rule data
   const [vehicleClasses, setVehicleClasses] = useState<VehicleClass[]>([])
@@ -266,6 +304,14 @@ export default function AssistedBookingPage() {
     if (step === 'route') {
       if (!form.pickupAddress.trim()) errs.pickup = 'Pickup address is required'
       if (!form.dropAddress.trim()) errs.drop = 'Drop address is required'
+      if (form.when === 'scheduled') {
+        if (!form.scheduledAt) {
+          errs.scheduledAt = 'Scheduled time is required'
+        } else {
+          if (minScheduledAt && form.scheduledAt < minScheduledAt) errs.scheduledAt = 'Too soon — must meet minimum advance notice'
+          if (maxScheduledAt && form.scheduledAt > maxScheduledAt) errs.scheduledAt = 'Too far ahead — exceeds maximum advance booking window'
+        }
+      }
     }
     if (step === 'payment' && !form.internalReason.trim()) errs.internalReason = 'Internal reason is required for assisted bookings'
     setErrors(errs)
@@ -288,6 +334,10 @@ export default function AssistedBookingPage() {
     if (!form.pickupAddress.trim()) { setErrors({ pickup: 'Pickup is required' }); return }
     if (!form.dropAddress.trim()) { setErrors({ drop: 'Drop is required' }); return }
     if (!form.internalReason.trim()) { setErrors({ internalReason: 'Internal reason is required' }); return }
+    if (customerActiveCount !== null && customerActiveCount >= maxActiveRides) {
+      setErrors({ customer: `Rider limit reached (${customerActiveCount}/${maxActiveRides} active rides)` })
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -363,27 +413,45 @@ export default function AssistedBookingPage() {
               </div>
 
               {form.customer ? (
-                <div style={{
-                  padding: '14px 16px',
-                  border: '1px solid color-mix(in oklab, var(--accent) 22%, var(--rule-strong))',
-                  borderRadius: 3, background: 'color-mix(in oklab, var(--accent) 8%, var(--surface))',
-                  display: 'flex', alignItems: 'center', gap: 14,
-                }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface-sunk)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink)', flexShrink: 0 }}>
-                    {form.customer.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, color: 'var(--ink)' }}>{form.customer.name}</div>
-                    <div className="t-meta" style={{ marginTop: 3 }}>
-                      {form.customer.phone} · {form.customer.trips_count} rides
-                      {form.customer.rating != null && ` · ${form.customer.rating.toFixed(2)} ★`}
+                <>
+                  <div style={{
+                    padding: '14px 16px',
+                    border: '1px solid color-mix(in oklab, var(--accent) 22%, var(--rule-strong))',
+                    borderRadius: 3, background: 'color-mix(in oklab, var(--accent) 8%, var(--surface))',
+                    display: 'flex', alignItems: 'center', gap: 14,
+                  }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface-sunk)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink)', flexShrink: 0 }}>
+                      {form.customer.name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
                     </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, color: 'var(--ink)' }}>{form.customer.name}</div>
+                      <div className="t-meta" style={{ marginTop: 3 }}>
+                        {form.customer.phone} · {form.customer.trips_count} rides
+                        {form.customer.rating != null && ` · ${form.customer.rating.toFixed(2)} ★`}
+                      </div>
+                    </div>
+                    <span className="badge ok"><Icon name="check" size={10} stroke={2.4} />Loaded</span>
+                    <button className="btn sm ghost" onClick={() => { patchForm('customer', null); setCustomerResults([]); setCustomerActiveCount(null) }}>
+                      <Icon name="close" size={12} />Change
+                    </button>
                   </div>
-                  <span className="badge ok"><Icon name="check" size={10} stroke={2.4} />Loaded</span>
-                  <button className="btn sm ghost" onClick={() => { patchForm('customer', null); setCustomerResults([]) }}>
-                    <Icon name="close" size={12} />Change
-                  </button>
-                </div>
+                  {customerActiveCount !== null && customerActiveCount >= maxActiveRides && (
+                    <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--danger-soft)', border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))', borderRadius: 3, fontSize: 12.5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)', fontWeight: 500, marginBottom: 3 }}>
+                        <Icon name="alert" size={13} /> Rider limit reached
+                      </div>
+                      <div style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                        This customer already has <strong>{customerActiveCount}</strong> active booking(s) — limit is <strong>{maxActiveRides}</strong>. Complete or cancel existing rides before creating a new one.
+                      </div>
+                    </div>
+                  )}
+                  {customerActiveCount !== null && customerActiveCount > 0 && customerActiveCount < maxActiveRides && (
+                    <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--warn-soft)', border: '1px solid color-mix(in oklab, var(--warn) 28%, var(--rule))', borderRadius: 3, fontSize: 12, color: 'var(--ink-2)' }}>
+                      <Icon name="alert" size={12} style={{ marginRight: 6, color: 'var(--warn)' }} />
+                      Customer has <strong>{customerActiveCount}</strong> active booking(s) — {maxActiveRides - customerActiveCount} slot(s) remaining.
+                    </div>
+                  )}
+                </>
               ) : (
                 <div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -465,7 +533,7 @@ export default function AssistedBookingPage() {
                     <select value={form.when} onChange={e => patchForm('when', e.target.value as 'now' | 'scheduled')}
                       style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 13 }}>
                       <option value="now">Now · ASAP</option>
-                      <option value="scheduled">Scheduled</option>
+                      {toggles.scheduled_rides && <option value="scheduled">Scheduled</option>}
                     </select>
                   </div>
                 </div>
@@ -473,8 +541,15 @@ export default function AssistedBookingPage() {
                   <div className="field">
                     <label className="field-label">Scheduled at</label>
                     <div className="input">
-                      <input type="datetime-local" value={form.scheduledAt} onChange={e => patchForm('scheduledAt', e.target.value)} />
+                      <input
+                        type="datetime-local"
+                        value={form.scheduledAt}
+                        min={minScheduledAt || undefined}
+                        max={maxScheduledAt || undefined}
+                        onChange={e => patchForm('scheduledAt', e.target.value)}
+                      />
                     </div>
+                    {errors.scheduledAt && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>{errors.scheduledAt}</div>}
                   </div>
                 )}
                 <div className="field">
@@ -570,7 +645,7 @@ export default function AssistedBookingPage() {
                 <div className="t-meta">Choose how the customer will be billed.</div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
-                {PAYMENT_METHODS.map(pm => (
+                {PAYMENT_METHODS.filter(pm => pm.key !== 'cash' || toggles.cash_payments).map(pm => (
                   <div
                     key={pm.key}
                     onClick={() => patchForm('paymentMethod', pm.key)}

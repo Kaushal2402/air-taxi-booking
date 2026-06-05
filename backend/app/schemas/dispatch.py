@@ -40,8 +40,11 @@ class QueueStatsResponse(BaseModel):
     online_drivers_count: int
     avg_pickup_eta_seconds: int
     auto_dispatch_rate: float
-    stuck_over_60s: int
+    stuck_over_timeout: int          # bookings older than driver_acceptance_timeout_sec
     no_driver_count: int
+    auto_assign_enabled: bool
+    ping_ttl_sec: int
+    max_dispatch_retries: int
 
 
 # ── Eligible Drivers ──────────────────────────────────────────────────────────

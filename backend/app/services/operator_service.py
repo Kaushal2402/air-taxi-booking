@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.models.operator import Aircraft, Operator, OperatorDocument, Pilot
+from app.services.settings_service import get_settings
 from app.schemas.operators import (
     AircraftListResponse,
     AircraftResponse,
@@ -83,6 +84,12 @@ async def list_operators(
 
 
 async def create_operator(db: AsyncSession, data: dict) -> Operator:
+    # Use platform default commission if not explicitly provided
+    commission_pct = data.get("commission_pct")
+    if commission_pct is None:
+        platform = await get_settings(db)
+        commission_pct = platform.default_commission_pct
+
     operator = Operator(
         id=str(uuid.uuid4()),
         name=data["name"],
@@ -90,6 +97,7 @@ async def create_operator(db: AsyncSession, data: dict) -> Operator:
         hq_city=data.get("hq_city"),
         cert_type=data.get("cert_type"),
         notes=data.get("notes"),
+        commission_pct=commission_pct,
         status="pending",
     )
     db.add(operator)

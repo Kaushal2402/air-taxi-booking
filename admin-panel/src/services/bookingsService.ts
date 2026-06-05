@@ -251,6 +251,7 @@ export const bookingsService = {
   listBookings: (params?: {
     page?: number
     page_size?: number
+    per_page?: number
     search?: string
     status?: string
     service_type?: string
@@ -258,6 +259,7 @@ export const bookingsService = {
     date_to?: string
     flagged?: boolean
     payment_method?: string
+    customer_id?: string
   }) =>
     api.get<BookingListResponse>('/bookings/road', { params }).then(r => r.data),
 

@@ -7,17 +7,17 @@ import { airBookingsService } from '../../services/airBookingsService'
 import type { CharterQuote, AirBookingDetail } from '../../services/airBookingsService'
 import { operatorService } from '../../services/operatorService'
 import type { Operator, Aircraft } from '../../services/operatorService'
+import { settingsService } from '../../services/settingsService'
+import { useFormatMoney, formatTimeHM } from '../../lib/utils'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const fmtL = (minor: number) => '₹' + (minor / 10000000).toFixed(2) + ' L'
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
+function toDatetimeLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 function fmtTime(iso: string | null): string {
   if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
-  } catch { return iso }
+  try { return formatTimeHM(iso) } catch { return iso }
 }
 
 // ── Add Quote Form ────────────────────────────────────────────────────────────
@@ -54,6 +54,20 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
   const [loadingOps, setLoadingOps] = useState(true)
   const [loadingAc, setLoadingAc] = useState(false)
 
+  // Advance booking bounds from platform settings
+  const [minEtd, setMinEtd] = useState('')
+  const [maxEtd, setMaxEtd] = useState('')
+
+  useEffect(() => {
+    settingsService.getSettings().then(s => {
+      const minHours = s.air_min_advance_hours ?? 2
+      const maxDays = s.max_advance_days ?? 7
+      const now = new Date()
+      setMinEtd(toDatetimeLocal(new Date(now.getTime() + minHours * 60 * 60 * 1000)))
+      setMaxEtd(toDatetimeLocal(new Date(now.getTime() + maxDays * 24 * 60 * 60 * 1000)))
+    }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     operatorService.listOperators({ page_size: 100 })
       .then(r => setOperators(r.items))
@@ -80,6 +94,16 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
     if (!form.operator_id || !form.aircraft_id || !form.base_fare_minor) {
       setError('Operator, Aircraft, and Base fare are required.')
       return
+    }
+    if (form.etd) {
+      if (minEtd && form.etd < minEtd) {
+        setError('ETD is too soon — must meet minimum advance notice for air bookings.')
+        return
+      }
+      if (maxEtd && form.etd > maxEtd) {
+        setError('ETD is too far ahead — exceeds maximum advance booking window.')
+        return
+      }
     }
     setSubmitting(true)
     setError(null)
@@ -160,7 +184,18 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
 
         {field('Depart ICAO', 'depart_icao', 'text', 'VOBG')}
         {field('Arrive ICAO', 'arrive_icao', 'text', 'VIIJ')}
-        {field('ETD', 'etd', 'datetime-local', '')}
+        <div className="field">
+          <label className="field-label">ETD</label>
+          <div className="input">
+            <input
+              type="datetime-local"
+              value={form.etd}
+              min={minEtd || undefined}
+              max={maxEtd || undefined}
+              onChange={e => set('etd', e.target.value)}
+            />
+          </div>
+        </div>
         {field('ETA', 'eta', 'datetime-local', '')}
         {field('Base fare (minor/paise)', 'base_fare_minor', 'number', '108000000')}
         {field('Positioning (minor)', 'positioning_minor', 'number', '0')}
@@ -340,6 +375,8 @@ function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AirBookingQuotePage() {
+  const fmtMinor = useFormatMoney()
+  const fmtL = (minor: number) => fmtMinor(minor / 100)  // minor→major then format as compact
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()

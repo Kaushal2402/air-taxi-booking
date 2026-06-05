@@ -3,6 +3,21 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { dispatchService } from '../../services/dispatchService'
 import type { SupplyResponse, SupplyZone, SurgeOverride } from '../../services/dispatchService'
+import { settingsService } from '../../services/settingsService'
+import { formatDateTime } from '../../lib/utils'
+
+/** Returns true if the current local time falls inside a HH:MM–HH:MM window (overnight-safe). */
+function isInQuietWindow(start: string, end: string): boolean {
+  const now = new Date()
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  const startMin = sh * 60 + sm
+  const endMin   = eh * 60 + em
+  return startMin <= endMin
+    ? nowMin >= startMin && nowMin < endMin
+    : nowMin >= startMin || nowMin < endMin
+}
 
 function zoneToneColor(dsRatio: number): string {
   if (dsRatio > 1.6) return 'rgba(211, 47, 47, 0.08)'
@@ -22,7 +37,7 @@ function zoneToneBorder(dsRatio: number): string {
 
 function fmtDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+    return formatDateTime(iso)
   } catch {
     return iso
   }
@@ -49,6 +64,23 @@ export default function SupplySurgePage() {
 
   // Mobile: show form in modal
   const [showMobileForm, setShowMobileForm] = useState(false)
+
+  // Quiet hours settings
+  const [quietEnabled, setQuietEnabled] = useState(false)
+  const [quietStart, setQuietStart] = useState('23:00')
+  const [quietEnd, setQuietEnd] = useState('05:00')
+  const [quietAction, setQuietAction] = useState('cap_surge')
+
+  useEffect(() => {
+    settingsService.getSettings().then(s => {
+      setQuietEnabled(s.quiet_hours_enabled ?? false)
+      setQuietStart(s.quiet_hours_start ?? '23:00')
+      setQuietEnd(s.quiet_hours_end ?? '05:00')
+      setQuietAction(s.quiet_hours_action ?? 'cap_surge')
+    }).catch(() => {})
+  }, [])
+
+  const quietActive = quietEnabled && isInQuietWindow(quietStart, quietEnd)
 
   const loadData = useCallback(async () => {
     try {
@@ -148,6 +180,11 @@ export default function SupplySurgePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)' }}>
           <span>1.0×</span><span>2.0×</span>
         </div>
+        {quietActive && quietAction === 'cap_surge' && overrideMultiplier > 1.0 && (
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--warn)', fontWeight: 500 }}>
+            Quiet hours active — surge capped at 1.0× until {quietEnd}
+          </div>
+        )}
       </div>
 
       <div className="field" style={{ marginBottom: 12 }}>
@@ -215,7 +252,8 @@ export default function SupplySurgePage() {
           className="btn accent"
           style={{ flex: 1 }}
           onClick={handleSubmitOverride}
-          disabled={submittingOverride || !overrideZoneId || !overrideReason}
+          disabled={submittingOverride || !overrideZoneId || !overrideReason || (quietActive && quietAction === 'cap_surge' && overrideMultiplier > 1.0)}
+          title={quietActive && quietAction === 'cap_surge' && overrideMultiplier > 1.0 ? `Surge capped at 1.0× during quiet hours (${quietStart}–${quietEnd})` : undefined}
         >
           {submittingOverride ? 'Applying…' : 'Apply override'}
         </button>
@@ -251,6 +289,24 @@ export default function SupplySurgePage() {
       }
     >
       <div style={{ padding: isMobile ? '12px 16px 24px' : '20px 28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Quiet hours active banner */}
+      {quietActive && (
+        <div style={{ padding: '12px 16px', background: 'var(--warn-soft)', border: '1px solid color-mix(in oklab, var(--warn) 30%, var(--rule-strong))', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🌙</span>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--warn)' }}>
+              Quiet hours active · {quietStart}–{quietEnd}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2 }}>
+              {quietAction === 'cap_surge'
+                ? 'Surge is capped at 1.0× — overrides above 1.0× will be rejected.'
+                : 'New bookings are paused — ride requests are not accepted during this window.'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero KPI strip */}
       {stats && (
         <div style={{

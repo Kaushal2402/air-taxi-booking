@@ -7,6 +7,7 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { dispatchService } from '../../services/dispatchService'
 import type { QueueItem, QueueStats, EligibleDriversResponse } from '../../services/dispatchService'
+import { settingsService } from '../../services/settingsService'
 
 // Fix Leaflet default icon paths when bundled with Vite
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
@@ -76,6 +77,8 @@ export default function DispatchConsolePage() {
   const [assigning, setAssigning] = useState(false)
   const [expandingRadius, setExpandingRadius] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [radiusStepKm, setRadiusStepKm] = useState(1.0)
+  const [radiusMaxKm, setRadiusMaxKm] = useState(10.0)
 
   // Mobile state: 'queue' | 'drivers'
   const [mobilePanel, setMobilePanel] = useState<'queue' | 'drivers'>('queue')
@@ -113,9 +116,13 @@ export default function DispatchConsolePage() {
     }
   }, [])
 
-  // Initial load
+  // Initial load — queue + radius settings
   useEffect(() => {
     loadQueue()
+    settingsService.getSettings().then(s => {
+      if (s.dispatch_radius_step_m != null) setRadiusStepKm(s.dispatch_radius_step_m / 1000)
+      if (s.dispatch_max_radius_m != null) setRadiusMaxKm(s.dispatch_max_radius_m / 1000)
+    }).catch(() => {})
   }, [loadQueue])
 
   // Auto-refresh every 5s
@@ -288,10 +295,13 @@ export default function DispatchConsolePage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span className="t-meta" style={{ fontSize: 10 }}>
-                {item.dispatch_attempts} attempts · r={item.current_radius_km}km · {item.eligible_count} eligible
+                {item.dispatch_attempts}/{stats?.max_dispatch_retries ?? '?'} attempts · r={item.current_radius_km}km · {item.eligible_count} eligible
               </span>
               {item.exception_type && (
                 <span className="badge danger" style={{ fontSize: 10 }}>{item.exception_type}</span>
+              )}
+              {stats && item.age_seconds > stats.ping_ttl_sec && !item.exception_type && (
+                <span className="badge warn" style={{ fontSize: 10 }}>TTL exceeded</span>
               )}
             </div>
           </div>
@@ -377,15 +387,26 @@ export default function DispatchConsolePage() {
         }}>
           {[
             { label: 'Avg pickup ETA', value: fmtEta(stats.avg_pickup_eta_seconds) },
-            { label: 'Auto-dispatch rate', value: `${stats.auto_dispatch_rate}%` },
-            { label: 'Stuck >60s', value: String(stats.stuck_over_60s) },
+            { label: `Stuck >${stats.ping_ttl_sec}s`, value: String(stats.stuck_over_timeout) },
             { label: 'No-driver', value: String(stats.no_driver_count) },
+            { label: 'Max retries', value: String(stats.max_dispatch_retries) },
           ].map(({ label, value }) => (
             <div key={label} style={{ fontSize: 12 }}>
               <div className="t-meta">{label}</div>
               <div style={{ fontWeight: 600 }}>{value}</div>
             </div>
           ))}
+          <div style={{ fontSize: 12 }}>
+            <div className="t-meta">Auto-assign</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: stats.auto_assign_enabled ? 'var(--accent)' : 'var(--danger)',
+                flexShrink: 0,
+              }} />
+              {stats.auto_assign_enabled ? 'On' : 'Off'}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -523,9 +544,13 @@ export default function DispatchConsolePage() {
               className="btn ghost sm"
               style={{ flex: 1, fontSize: 11 }}
               onClick={handleExpandRadius}
-              disabled={expandingRadius}
+              disabled={expandingRadius || (selectedItem ? selectedItem.current_radius_km >= radiusMaxKm : false)}
             >
-              {expandingRadius ? '…' : 'Expand radius +1km'}
+              {expandingRadius
+                ? '…'
+                : selectedItem && selectedItem.current_radius_km >= radiusMaxKm
+                  ? `Max radius (${radiusMaxKm}km)`
+                  : `Expand +${radiusStepKm}km`}
             </button>
             <button className="btn ghost sm" style={{ flex: 1, fontSize: 11 }} onClick={handleNotifyCustomer}>
               Notify customer
