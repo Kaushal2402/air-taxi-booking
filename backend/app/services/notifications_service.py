@@ -13,6 +13,7 @@ from app.schemas.notifications import (
     NotificationTemplateResponse,
     NotificationTemplateUpdate,
 )
+from app.services.settings_service import get_settings, is_in_quiet_window
 
 
 def _serialize(tmpl: NotificationTemplate) -> NotificationTemplateResponse:
@@ -174,6 +175,19 @@ async def list_delivery_log(
 
 
 async def create_broadcast(db: AsyncSession, body: BroadcastCreate) -> NotificationBroadcast:
+    # Block immediate (non-scheduled) broadcasts during quiet hours unless override is set
+    if not body.scheduled_at:
+        platform = await get_settings(db)
+        if is_in_quiet_window(platform) and not getattr(body, 'quiet_hours_override', False):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Broadcasts are suppressed during quiet hours "
+                    f"({platform.quiet_hours_start}–{platform.quiet_hours_end}). "
+                    "Schedule for later or enable the quiet-hours override on the template."
+                ),
+            )
+
     broadcast = NotificationBroadcast(
         audience_description=body.audience_description,
         channel=body.channel,

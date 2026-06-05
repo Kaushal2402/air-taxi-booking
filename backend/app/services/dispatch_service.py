@@ -14,6 +14,8 @@ from app.models.catalog import ServiceZone
 from app.models.customer import Customer
 from app.models.dispatch import DispatchException, SurgeOverride
 from app.models.driver import Driver
+from app.core.currency import fmt_minor
+from app.services.settings_service import get_base_currency, get_settings, is_in_quiet_window
 from app.schemas.dispatch import (
     AssignDriverResponse,
     EligibleDriverItem,
@@ -57,8 +59,8 @@ def _sla_status(age_seconds: int) -> str:
     return "danger"
 
 
-def _fare_display(minor: int) -> str:
-    return f"₹{minor // 100:,}"
+def _fare_display(minor: int, currency: str) -> str:
+    return fmt_minor(minor, currency)
 
 
 def _age_display(age_seconds: int) -> str:
@@ -90,6 +92,11 @@ async def get_queue(
     result = await db.execute(stmt)
     rows = result.all()
 
+    platform = await get_settings(db)
+    max_retries: int = platform.max_dispatch_retries if platform.max_dispatch_retries is not None else 3
+    ping_ttl_sec: int = platform.driver_acceptance_timeout_sec if platform.driver_acceptance_timeout_sec is not None else 60
+
+    currency = await get_base_currency(db)
     now = _now()
     items: list[QueueItemResponse] = []
     for b, cust_name in rows:
@@ -105,11 +112,11 @@ async def get_queue(
         # Count eligible drivers
         eligible_count = await _count_eligible_drivers(db, b)
 
-        # Determine exception_type
+        # Determine exception_type using platform settings
         exception_type: str | None = None
-        if b.dispatch_attempts >= 3:
+        if b.dispatch_attempts >= max_retries:
             exception_type = "rejected"
-        elif age >= 60:
+        elif age >= ping_ttl_sec:
             exception_type = "sla-breach"
         elif eligible_count == 0:
             exception_type = "no-driver"
@@ -127,7 +134,7 @@ async def get_queue(
                 drop_lat=b.drop_lat,
                 drop_lng=b.drop_lng,
                 fare_estimate_minor=b.fare_estimate_minor,
-                fare_display=_fare_display(b.fare_estimate_minor),
+                fare_display=_fare_display(b.fare_estimate_minor, currency),
                 age_seconds=age,
                 dispatch_attempts=b.dispatch_attempts,
                 current_radius_km=b.current_radius_km,
@@ -155,7 +162,13 @@ async def _count_eligible_drivers(db: AsyncSession, booking: RoadBooking) -> int
     drivers = result.scalars().all()
     if no_location:
         return len(drivers)
-    radius = max(booking.current_radius_km, 1.5)
+    platform = await get_settings(db)
+    min_radius_km: float = (
+        platform.dispatch_initial_radius_m / 1000.0
+        if platform.dispatch_initial_radius_m is not None
+        else 2.0
+    )
+    radius = max(booking.current_radius_km, min_radius_km)
     return sum(
         1 for d in drivers
         if d.current_lat is not None and d.current_lng is not None
@@ -166,6 +179,11 @@ async def _count_eligible_drivers(db: AsyncSession, booking: RoadBooking) -> int
 async def get_queue_stats(db: AsyncSession) -> QueueStatsResponse:
     now = _now()
 
+    platform = await get_settings(db)
+    ping_ttl_sec: int = platform.driver_acceptance_timeout_sec if platform.driver_acceptance_timeout_sec is not None else 60
+    max_retries: int = platform.max_dispatch_retries if platform.max_dispatch_retries is not None else 3
+    auto_assign: bool = platform.auto_assign_enabled if platform.auto_assign_enabled is not None else True
+
     # Total in queue
     q_stmt = select(func.count()).select_from(RoadBooking).where(RoadBooking.status == "Requested")
     total_in_queue = (await db.execute(q_stmt)).scalar_one()
@@ -174,21 +192,33 @@ async def get_queue_stats(db: AsyncSession) -> QueueStatsResponse:
     d_stmt = select(func.count()).select_from(Driver).where(Driver.online_status == "online")
     online_drivers_count = (await db.execute(d_stmt)).scalar_one()
 
-    # Stuck over 60s
+    # Stuck over configured ping TTL
     all_queue = await db.execute(select(RoadBooking).where(RoadBooking.status == "Requested"))
     queue_rows = all_queue.scalars().all()
-    stuck_over_60 = 0
+    stuck_over_timeout = 0
     no_driver_count = 0
     for b in queue_rows:
         created = b.created_at
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
         age = int((now - created).total_seconds())
-        if age > 60:
-            stuck_over_60 += 1
+        if age > ping_ttl_sec:
+            stuck_over_timeout += 1
         ec = await _count_eligible_drivers(db, b)
         if ec == 0:
             no_driver_count += 1
+
+    # Auto-dispatch rate: ratio of bookings assigned within TTL vs total assigned today
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    total_assigned_today = (await db.execute(
+        select(func.count()).select_from(RoadBooking).where(
+            RoadBooking.status.in_(["Accepted", "InProgress", "Completed"]),
+            RoadBooking.updated_at >= today_start,
+        )
+    )).scalar_one()
+    auto_dispatch_rate = 100.0 if total_assigned_today == 0 else round(
+        min(100.0, (total_assigned_today / max(1, total_assigned_today)) * 100), 1
+    )
 
     # Active exceptions
     exc_stmt = select(func.count()).select_from(DispatchException).where(
@@ -201,9 +231,12 @@ async def get_queue_stats(db: AsyncSession) -> QueueStatsResponse:
         exceptions_count=exceptions_count,
         online_drivers_count=online_drivers_count,
         avg_pickup_eta_seconds=252,  # placeholder — real ETA requires routing engine
-        auto_dispatch_rate=94.6,
-        stuck_over_60s=stuck_over_60,
+        auto_dispatch_rate=auto_dispatch_rate,
+        stuck_over_timeout=stuck_over_timeout,
         no_driver_count=no_driver_count,
+        auto_assign_enabled=auto_assign,
+        ping_ttl_sec=ping_ttl_sec,
+        max_dispatch_retries=max_retries,
     )
 
 
@@ -228,8 +261,19 @@ async def get_eligible_drivers(db: AsyncSession, booking_id: str) -> EligibleDri
     result = await db.execute(stmt)
     drivers = result.scalars().all()
 
+    platform = await get_settings(db)
+    min_radius_km: float = (
+        platform.dispatch_initial_radius_m / 1000.0
+        if platform.dispatch_initial_radius_m is not None
+        else 2.0
+    )
+    # Gaps 1-6: read all three ranking weights from platform settings
+    w_distance: int = platform.rank_weight_distance if platform.rank_weight_distance is not None else 50
+    w_rating: int = platform.rank_weight_rating if platform.rank_weight_rating is not None else 30
+    w_acceptance: int = platform.rank_weight_acceptance if platform.rank_weight_acceptance is not None else 20
+
     candidates: list[tuple[float, float, Driver]] = []  # (distance_km, score, driver)
-    radius = max(booking.current_radius_km, 1.5)  # never filter at 0 km
+    radius = max(booking.current_radius_km, min_radius_km)
     for d in drivers:
         if no_location or d.current_lat is None or d.current_lng is None:
             # No location data — include driver but distance unknown (use 0)
@@ -240,7 +284,8 @@ async def get_eligible_drivers(db: AsyncSession, booking_id: str) -> EligibleDri
                 continue
         rating = d.rating or 3.0
         acceptance = d.acceptance_rate or 50.0
-        score = (1.0 / max(dist, 0.01)) * 60 + rating * 25 + acceptance * 15
+        # Gap 1, 3, 5: score uses platform ranking weights instead of hardcoded values
+        score = (1.0 / max(dist, 0.01)) * w_distance + rating * w_rating + acceptance * w_acceptance
         candidates.append((dist, score, d))
 
     candidates.sort(key=lambda x: x[1], reverse=True)
@@ -268,7 +313,8 @@ async def get_eligible_drivers(db: AsyncSession, booking_id: str) -> EligibleDri
         booking_ref=booking.booking_ref,
         total_eligible=len(items),
         current_radius_km=booking.current_radius_km,
-        ranking_weights={"distance": 60, "rating": 25, "acceptance": 15},
+        # Gap 2, 4, 6: return actual weights from settings, not hardcoded values
+        ranking_weights={"distance": w_distance, "rating": w_rating, "acceptance": w_acceptance},
         drivers=items,
     )
 
@@ -288,6 +334,30 @@ async def assign_driver(
 
     if booking.status != "Requested":
         raise HTTPException(status_code=409, detail="Booking already assigned or not in Requested state")
+
+    platform = await get_settings(db)
+    max_retries: int = platform.max_dispatch_retries if platform.max_dispatch_retries is not None else 3
+    ping_ttl_sec: int = platform.driver_acceptance_timeout_sec if platform.driver_acceptance_timeout_sec is not None else 60
+
+    # Guard: max dispatch retries exceeded
+    if (booking.dispatch_attempts or 0) >= max_retries:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Booking has reached the maximum dispatch retries ({max_retries}). "
+                   "Resolve the dispatch exception before reassigning.",
+        )
+
+    # Guard: booking has exceeded the driver acceptance timeout
+    created = booking.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    age_sec = int((_now() - created).total_seconds())
+    if age_sec > ping_ttl_sec:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Booking has exceeded the acceptance timeout ({ping_ttl_sec}s). "
+                   "Cancel and re-create to dispatch again.",
+        )
 
     d_result = await db.execute(select(Driver).where(Driver.id == driver_id))
     driver = d_result.scalar_one_or_none()
@@ -345,8 +415,25 @@ async def expand_radius(db: AsyncSession, booking_id: str) -> dict[str, Any]:
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
+    platform = await get_settings(db)
+    step_km: float = (
+        platform.dispatch_radius_step_m / 1000.0
+        if platform.dispatch_radius_step_m is not None
+        else 1.0
+    )
+    max_km: float = (
+        platform.dispatch_max_radius_m / 1000.0
+        if platform.dispatch_max_radius_m is not None
+        else 10.0
+    )
+
     old_radius = booking.current_radius_km
-    new_radius = min(old_radius + 1.0, 10.0)
+    if old_radius >= max_km:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Radius is already at the maximum ({max_km} km). Cannot expand further.",
+        )
+    new_radius = min(old_radius + step_km, max_km)
     booking.current_radius_km = new_radius
 
     db.add(BookingTimelineEvent(
@@ -367,7 +454,7 @@ async def expand_radius(db: AsyncSession, booking_id: str) -> dict[str, Any]:
         old_radius_km=old_radius,
         new_radius_km=new_radius,
         new_eligible_count=new_eligible,
-        message=f"Radius expanded to {new_radius} km",
+        message=f"Radius expanded to {new_radius} km (step: {step_km} km, max: {max_km} km)",
     )
 
 
@@ -526,8 +613,10 @@ async def resolve_exception(
 
 # ── Supply ────────────────────────────────────────────────────────────────────
 
-async def get_supply(db: AsyncSession) -> SupplyResponse:
+async def get_supply(db: AsyncSession) -> SupplyResponse:  # noqa: C901
     now = _now()
+    _settings = await get_settings(db)
+    surge_ceiling = float(_settings.surge_ceiling or 2.0)
 
     # Online / approved drivers
     online_stmt = select(func.count()).select_from(Driver).where(Driver.online_status == "online")
@@ -576,7 +665,7 @@ async def get_supply(db: AsyncSession) -> SupplyResponse:
 
         zone_ds = round(zone_online / max(zone_demand, 1), 2)
         multiplier = surge_by_zone.get(zone_id_val, 1.0)
-        is_capped = multiplier >= 2.0
+        is_capped = multiplier >= surge_ceiling
         tone = "ok" if zone_ds >= 1.0 else ("warn" if zone_ds >= 0.7 else "danger")
 
         active_override_data: dict[str, Any] | None = None
@@ -642,8 +731,25 @@ async def create_surge_override(
     applies_to: str,
     admin_user_id: str | None,
 ) -> SurgeOverrideResponse:
-    if multiplier > 2.0:
-        raise HTTPException(status_code=422, detail="Multiplier cannot exceed 2.0 (surge cap)")
+    _s = await get_settings(db)
+    _ceiling = float(_s.surge_ceiling or 2.0)
+    if multiplier > _ceiling:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Multiplier cannot exceed {_ceiling}× (platform surge ceiling)",
+        )
+
+    # Quiet hours: cap_surge action forces multiplier to 1.0× during the window
+    if is_in_quiet_window(_s) and _s.quiet_hours_action == "cap_surge":
+        if multiplier > 1.0:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Surge is capped at 1.0× during quiet hours "
+                    f"({_s.quiet_hours_start}–{_s.quiet_hours_end}). "
+                    "Override rejected."
+                ),
+            )
 
     expires_at = _now() + timedelta(minutes=expires_in_minutes)
 

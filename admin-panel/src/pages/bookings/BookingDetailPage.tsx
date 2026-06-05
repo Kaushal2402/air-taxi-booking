@@ -25,6 +25,7 @@ import type {
 } from '../../services/bookingsService'
 import type { Driver } from '../../services/driverService'
 import type { AuditEventSummary } from '../../services/auditService'
+import { useFormatMoney, useCurrencySymbol, formatTimeHM, formatDateTime } from '../../lib/utils'
 
 // Fix leaflet default icon paths (needed when bundled with Vite)
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
@@ -36,7 +37,6 @@ L.Icon.Default.mergeOptions({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 function bStatusBadge(s: string) {
   const map: Record<string, { tone: string; dot: boolean }> = {
@@ -66,17 +66,7 @@ function initials(name: string | null | undefined): string {
 }
 
 function formatTs(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
-  } catch { return iso }
-}
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('en-IN', {
-      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false
-    })
-  } catch { return iso }
+  try { return formatTimeHM(iso) } catch { return iso }
 }
 
 // ── Cancel Modal ──────────────────────────────────────────────────────────────
@@ -97,6 +87,7 @@ const CANCEL_REASONS = [
 ]
 
 function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
+  const fmtMinor = useFormatMoney()
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
   const [destination, setDestination] = useState<'original' | 'wallet' | 'none'>('original')
@@ -104,6 +95,17 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<CancelPreview | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(true)
+  const [noShowWaitMin, setNoShowWaitMin] = useState(5)
+  const [noShowFeePct, setNoShowFeePct] = useState(25)
+
+  useEffect(() => {
+    settingsService.getSettings().then(s => {
+      const dest = s.refund_destination_default as 'original' | 'wallet' | 'none'
+      if (dest) setDestination(dest)
+      setNoShowWaitMin(s.no_show_wait_minutes ?? 5)
+      setNoShowFeePct(s.no_show_fee_pct ?? 25)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     bookingsService.getCancelPreview(booking.id)
@@ -144,8 +146,11 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
       .finally(() => setLoadingPreview(false))
   }, [booking.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cancelFee = preview?.cancel_fee_minor ?? 0
-  const netRefund = preview?.net_refund_minor ?? 0
+  const isNoShow = reason === 'Customer no-show'
+  const fare = booking.fare_final_minor ?? booking.fare_estimate_minor
+  const noShowFeeMinor = Math.max(5000, Math.round(fare * noShowFeePct / 100))
+  const cancelFee = isNoShow ? noShowFeeMinor : (preview?.cancel_fee_minor ?? 0)
+  const netRefund = fare - cancelFee
   const needsApproval = netRefund > 200000
 
   const handleConfirm = async () => {
@@ -235,6 +240,19 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
             </div>
           </div>
 
+          {/* No-show policy banner */}
+          {isNoShow && (
+            <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--warn-soft)', border: '1px solid color-mix(in oklab, var(--warn) 30%, var(--rule-strong))', borderRadius: 3, fontSize: 12.5 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--warn)', fontWeight: 500, marginBottom: 4 }}>
+                <Icon name="clock" size={13} /> No-show policy
+              </div>
+              <div style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                Driver must wait <strong>{noShowWaitMin} min</strong> before marking no-show.
+                A <strong>{noShowFeePct}%</strong> no-show fee applies.
+              </div>
+            </div>
+          )}
+
           {/* Refund preview — from settings */}
           <div style={{ marginTop: 20, padding: '18px 20px', background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 3 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -254,8 +272,10 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
               <tbody>
                 {[
                   ['Original fare', fmtMinor(preview?.fare_minor ?? 0), 'var(--ink-2)'],
-                  ['Cancellation fee' + (preview?.is_free_window ? ' (waived)' : ` · ${preview?.fee_pct ?? 10}%`),
-                   cancelFee === 0 ? '₹0' : `−${fmtMinor(cancelFee)}`, 'var(--warn)'],
+                  [isNoShow
+                    ? `No-show fee · ${noShowFeePct}%`
+                    : 'Cancellation fee' + (preview?.is_free_window ? ' (waived)' : ` · ${preview?.fee_pct ?? 10}%`),
+                   cancelFee === 0 ? fmtMinor(0) : `−${fmtMinor(cancelFee)}`, 'var(--warn)'],
                 ].map(([k, v, c]) => (
                   <tr key={k}>
                     <td style={{ padding: '8px 0', border: 0, fontSize: 13, color: 'var(--ink-2)' }}>{k}</td>
@@ -296,7 +316,7 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
                 <span className="t-label" style={{ padding: 0, color: 'var(--warn)' }}>Two-person rule · Finance approval required</span>
               </div>
               <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--ink-2)' }}>
-                Refund of {fmtMinor(netRefund)} exceeds ₹2,000. Finance Manager approval required.
+                Refund of {fmtMinor(netRefund)} exceeds {fmtMinor(200000)}. Finance Manager approval required.
               </div>
             </div>
           ) : (
@@ -306,7 +326,7 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
                 <span className="t-label" style={{ padding: 0, color: 'var(--info)' }}>Two-person rule · refund under threshold</span>
               </div>
               <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--ink-2)' }}>
-                {fmtMinor(netRefund)} is below the ₹2,000 threshold. You can process this directly.
+                {fmtMinor(netRefund)} is below the {fmtMinor(200000)} threshold. You can process this directly.
               </div>
             </div>
           )}
@@ -480,6 +500,7 @@ interface AdjustFareModalProps {
 }
 
 function AdjustFareModal({ booking, onClose, onConfirm }: AdjustFareModalProps) {
+  const sym = useCurrencySymbol()
   const current = booking.fare_final_minor ?? booking.fare_estimate_minor
   const [newFare, setNewFare] = useState(String(current / 100))
   const [reason, setReason] = useState('')
@@ -514,7 +535,7 @@ function AdjustFareModal({ booking, onClose, onConfirm }: AdjustFareModalProps) 
             <div style={{ fontSize: 20, fontFamily: 'var(--font-serif)', color: 'var(--ink-3)' }}>{fmtMinor(current)}</div>
           </div>
           <div className="field">
-            <label className="field-label">New fare (₹) <span style={{ color: 'var(--danger)' }}>*</span></label>
+            <label className="field-label">New fare ({sym}) <span style={{ color: 'var(--danger)' }}>*</span></label>
             <div className="input">
               <input type="number" min={0} step={0.01} value={newFare} onChange={e => setNewFare(e.target.value)} />
             </div>
@@ -544,12 +565,21 @@ interface RefundModalProps {
 }
 
 function RefundModal({ booking, onClose, onConfirm }: RefundModalProps) {
+  const sym = useCurrencySymbol()
+  const fmtMinor = useFormatMoney()
   const fare = booking.fare_final_minor ?? booking.fare_estimate_minor
   const [amount, setAmount] = useState(String(fare / 100))
   const [destination, setDestination] = useState<'original' | 'wallet'>('original')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    settingsService.getSettings().then(s => {
+      const dest = s.refund_destination_default as 'original' | 'wallet'
+      if (dest === 'original' || dest === 'wallet') setDestination(dest)
+    }).catch(() => {})
+  }, [])
 
   const handleConfirm = async () => {
     const amountMinor = Math.round(parseFloat(amount) * 100)
@@ -575,7 +605,7 @@ function RefundModal({ booking, onClose, onConfirm }: RefundModalProps) {
         <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {error && <div style={{ padding: '8px 12px', background: 'var(--danger-soft)', border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))', borderRadius: 3, fontSize: 12.5, color: 'var(--danger)' }}>{error}</div>}
           <div className="field">
-            <label className="field-label">Refund amount (₹) <span style={{ color: 'var(--danger)' }}>*</span></label>
+            <label className="field-label">Refund amount ({sym}) <span style={{ color: 'var(--danger)' }}>*</span></label>
             <div className="input">
               <input type="number" min={0} step={0.01} value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
@@ -932,14 +962,14 @@ function ResolveDisputeModal({ booking, onClose, onConfirm }: ResolveDisputeModa
           {needsAmount && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="field">
-                <label className="field-label">Refund amount (₹)</label>
+                <label className="field-label">Refund amount ({sym})</label>
                 <div className="input">
                   <input type="number" min={0} step={0.01} value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="0.00" />
                 </div>
                 <div className="field-help">Max: {fmtMinor(fare)}</div>
               </div>
               <div className="field">
-                <label className="field-label">Driver clawback (₹)</label>
+                <label className="field-label">Driver clawback ({sym})</label>
                 <div className="input">
                   <input type="number" min={0} step={0.01} value={clawback} onChange={e => setClawback(e.target.value)} placeholder="Optional" />
                 </div>
@@ -978,6 +1008,8 @@ const NEXT_STATUS: Record<string, AdvanceStatusBody['status']> = {
 type TabName = 'overview' | 'map' | 'fare' | 'payments' | 'audit'
 
 export default function BookingDetailPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -1371,7 +1403,7 @@ export default function BookingDetailPage() {
                     ['Fare estimate', fmtMinor(booking.fare_estimate_minor)],
                     ['Fare final', booking.fare_final_minor != null ? fmtMinor(booking.fare_final_minor) : 'Pending'],
                     ['Promo code', booking.promo_code ?? 'None'],
-                    ['Promo discount', booking.promo_discount_minor > 0 ? `−${fmtMinor(booking.promo_discount_minor)}` : '₹0'],
+                    ['Promo discount', booking.promo_discount_minor > 0 ? `−${fmtMinor(booking.promo_discount_minor)}` : fmtMinor(0)],
                     ['Status', booking.status],
                   ].map(([k, v]) => (
                     <div key={k} style={{ padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 3 }}>

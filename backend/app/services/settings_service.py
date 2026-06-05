@@ -103,7 +103,7 @@ _DEFAULT_TOGGLES = [
     {"key": "cash_payments",   "name": "Cash payments",        "description": "Accept cash for road trips (not air)",     "enabled": True},
     {"key": "scheduled_rides", "name": "Scheduled rides",      "description": "Book up to 7 days ahead",                  "enabled": True},
     {"key": "in_app_tipping",  "name": "In-app tipping",       "description": "Riders can tip drivers post-trip",         "enabled": True},
-    {"key": "carbon_offset",   "name": "Carbon offset",        "description": "Optional ₹5 offset per trip",             "enabled": False},
+    {"key": "carbon_offset",   "name": "Carbon offset",        "description": "Optional 5-unit offset per trip (charged in base currency)", "enabled": False},
 ]
 
 _DEFAULT_FLAGS = [
@@ -201,6 +201,44 @@ async def get_settings(db: AsyncSession) -> PlatformSettings:
     return row
 
 
+async def get_base_currency(db: AsyncSession) -> str:
+    """Return the platform's configured base currency code (e.g. 'INR')."""
+    settings = await get_settings(db)
+    return settings.base_currency or "INR"
+
+
+def _parse_hhmm(t: str) -> tuple[int, int]:
+    """Parse 'HH:MM' into (hour, minute). Returns (0, 0) on any error."""
+    try:
+        h, m = t.split(":")
+        return int(h), int(m)
+    except Exception:
+        return 0, 0
+
+
+def is_in_quiet_window(settings: PlatformSettings) -> bool:
+    """Return True if quiet hours are enabled and the current UTC time is inside the window."""
+    if not settings.quiet_hours_enabled:
+        return False
+    if not settings.quiet_hours_start or not settings.quiet_hours_end:
+        return False
+
+    now_utc = datetime.now(timezone.utc)
+    now_min = now_utc.hour * 60 + now_utc.minute
+
+    sh, sm = _parse_hhmm(settings.quiet_hours_start)
+    eh, em = _parse_hhmm(settings.quiet_hours_end)
+    start_min = sh * 60 + sm
+    end_min   = eh * 60 + em
+
+    if start_min <= end_min:
+        # Same-day window e.g. 09:00–17:00
+        return start_min <= now_min < end_min
+    else:
+        # Overnight window e.g. 23:00–05:00
+        return now_min >= start_min or now_min < end_min
+
+
 async def update_settings(db: AsyncSession, data: dict) -> PlatformSettings:
     row = await get_settings(db)
     data["last_edited_at"] = datetime.now(timezone.utc)
@@ -231,6 +269,18 @@ async def update_toggle(db: AsyncSession, key: str, enabled: bool) -> PlatformTo
     await db.commit()
     await db.refresh(row)
     return row
+
+
+async def get_toggle(db: AsyncSession, key: str) -> bool:
+    """Return the enabled state for a toggle key. Defaults to True if not found (safe for unknown keys)."""
+    result = await db.execute(select(PlatformToggle).where(PlatformToggle.key == key))
+    row = result.scalar_one_or_none()
+    if row is None:
+        # Seed toggles so the row exists on next call
+        await list_toggles(db)
+        result2 = await db.execute(select(PlatformToggle).where(PlatformToggle.key == key))
+        row = result2.scalar_one_or_none()
+    return row.enabled if row is not None else True
 
 
 # ── Feature Flags ─────────────────────────────────────────────────────────────

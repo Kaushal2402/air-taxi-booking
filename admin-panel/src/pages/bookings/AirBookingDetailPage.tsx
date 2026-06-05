@@ -12,10 +12,11 @@ import type {
 } from '../../services/airBookingsService'
 import { operatorService } from '../../services/operatorService'
 import type { Operator, Aircraft } from '../../services/operatorService'
+import { settingsService } from '../../services/settingsService'
+import { useFormatMoney, formatDateTimeCompact } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 function statusBadge(s: AirBookingStatus) {
   const map: Record<string, string> = {
@@ -42,9 +43,7 @@ function statusBadge(s: AirBookingStatus) {
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
-  } catch { return iso }
+  try { return formatDateTimeCompact(iso) } catch { return iso }
 }
 
 // ── Status advance config ─────────────────────────────────────────────────────
@@ -79,14 +78,27 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [noShowWaitMin, setNoShowWaitMin] = useState(5)
+  const [baseCancelFeePct, setBaseCancelFeePct] = useState(10)
 
+  useEffect(() => {
+    settingsService.getSettings().then(s => {
+      const dest = s.refund_destination_default as 'original' | 'wallet' | 'wire'
+      if (dest === 'original' || dest === 'wallet' || dest === 'wire') setRefundDest(dest)
+      setNoShowWaitMin(s.no_show_wait_minutes ?? 5)
+      setBaseCancelFeePct(s.cancellation_fee_pct ?? 10)
+    }).catch(() => {})
+  }, [])
+
+  // Tiers are derived from the platform base cancellation fee pct (same formula as backend)
   const CANCEL_TIERS = [
-    { l: '> 48h before', pct: 0 },
-    { l: '24–48h before', pct: 25 },
-    { l: '4–24h before', pct: 50 },
-    { l: '< 4h before / no-show', pct: 100 },
+    { l: '> 48h before',           pct: 0 },
+    { l: '24–48h before',          pct: Math.round(baseCancelFeePct * 0.25) },
+    { l: '4–24h before',           pct: Math.round(baseCancelFeePct * 0.5)  },
+    { l: '< 4h before / no-show',  pct: Math.round(baseCancelFeePct)        },
   ]
 
+  const isNoShow = reason.toLowerCase().includes('no-show')
   const currentTierPct = preview?.fee_pct ?? null
 
   async function handleSubmit() {
@@ -235,6 +247,19 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
                     </div>
                   </div>
                 </div>
+
+                {/* No-show policy banner */}
+                {isNoShow && (
+                  <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--warn-soft)', border: '1px solid color-mix(in oklab, var(--warn) 30%, var(--rule-strong))', borderRadius: 3, fontSize: 12.5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--warn)', fontWeight: 500, marginBottom: 3 }}>
+                      <Icon name="clock" size={13} /> No-show policy
+                    </div>
+                    <div style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                      Driver must wait <strong>{noShowWaitMin} min</strong> before marking no-show.
+                      A <strong>{Math.round(baseCancelFeePct)}%</strong> fee applies.
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 3 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -477,6 +502,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
 type ActiveTab = 'overview' | 'manifest' | 'notes' | 'timeline'
 
 export default function AirBookingDetailPage() {
+  const fmtMinor = useFormatMoney()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()

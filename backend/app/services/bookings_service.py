@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.core.currency import fmt_major, fmt_minor
+from app.services.settings_service import get_base_currency, get_toggle, get_settings, is_in_quiet_window
 from app.models.settings import PlatformSettings
 from app.models.booking import (
     BookingAdminNote,
@@ -144,6 +146,7 @@ async def list_bookings(
     date_to: str | None = None,
     flagged: bool | None = None,
     payment_method: str | None = None,
+    customer_id: str | None = None,
 ) -> Tuple[List[dict], int, Dict[str, Any]]:
     """Return (items_as_dicts, total, stats_dict)."""
 
@@ -194,6 +197,8 @@ async def list_bookings(
         filters.append(RoadBooking.flagged == flagged)
     if payment_method:
         filters.append(RoadBooking.payment_method == payment_method)
+    if customer_id:
+        filters.append(RoadBooking.customer_id == customer_id)
 
     where_clause = and_(*filters) if filters else True  # type: ignore[arg-type]
 
@@ -368,6 +373,71 @@ async def create_assisted_booking(
     data: AssistedBookingCreate,
     created_by_id: str,
 ) -> dict:
+    # ── Toggle enforcement ────────────────────────────────────────────────────
+    if data.payment_method == "cash" and not await get_toggle(db, "cash_payments"):
+        raise ValidationException("Cash payments are currently disabled on this platform.")
+
+    if data.scheduled_at and not await get_toggle(db, "scheduled_rides"):
+        raise ValidationException("Scheduled rides are currently disabled on this platform.")
+
+    # ── Quiet hours enforcement ───────────────────────────────────────────────
+    _qh_platform = await get_settings(db)
+    if is_in_quiet_window(_qh_platform) and _qh_platform.quiet_hours_action == "pause_bookings":
+        raise ValidationException(
+            f"New bookings are paused during quiet hours "
+            f"({_qh_platform.quiet_hours_start}–{_qh_platform.quiet_hours_end}). "
+            "Please try again later."
+        )
+
+    # ── Max simultaneous active rides per rider ───────────────────────────────
+    if data.customer_id:
+        _plat = await get_settings(db)
+        max_active: int = _plat.max_active_bookings_per_rider if _plat.max_active_bookings_per_rider is not None else 2
+        active_count: int = (
+            await db.execute(
+                select(func.count(RoadBooking.id)).where(
+                    and_(
+                        RoadBooking.customer_id == data.customer_id,
+                        RoadBooking.status.in_(["Requested", "Accepted", "Arrived", "InProgress"]),
+                    )
+                )
+            )
+        ).scalar_one()
+        if active_count >= max_active:
+            raise ValidationException(
+                f"Customer already has {active_count} active booking(s) "
+                f"(limit: {max_active}). Complete or cancel existing rides first."
+            )
+
+    # ── Advance booking window validation ────────────────────────────────────
+    if data.scheduled_at:
+        platform = await get_settings(db)
+        now_utc = datetime.now(timezone.utc)
+
+        # Parse scheduled_at to timezone-aware datetime
+        sched = data.scheduled_at
+        if isinstance(sched, str):
+            sched = datetime.fromisoformat(sched.replace("Z", "+00:00"))
+        if sched.tzinfo is None:
+            sched = sched.replace(tzinfo=timezone.utc)
+
+        minutes_ahead = (sched - now_utc).total_seconds() / 60
+        days_ahead = minutes_ahead / 1440
+
+        min_advance_minutes: int = platform.min_advance_minutes if platform.min_advance_minutes is not None else 15
+        max_advance_days: int = platform.max_advance_days if platform.max_advance_days is not None else 7
+
+        if minutes_ahead < min_advance_minutes:
+            raise ValidationException(
+                f"Scheduled time must be at least {min_advance_minutes} minute(s) in advance "
+                f"(currently {int(minutes_ahead)} min away)."
+            )
+        if days_ahead > max_advance_days:
+            raise ValidationException(
+                f"Scheduled time cannot be more than {max_advance_days} day(s) in advance "
+                f"(currently {days_ahead:.1f} days away)."
+            )
+
     # Denormalize customer info if provided
     customer_name: str | None = None
     customer_phone: str | None = None
@@ -384,6 +454,13 @@ async def create_assisted_booking(
         customer_rating = customer.rating
 
     booking_ref = _generate_booking_ref()
+    _platform = await get_settings(db)
+    initial_radius_km: float = (
+        (_platform.dispatch_initial_radius_m / 1000.0)
+        if _platform.dispatch_initial_radius_m is not None
+        else 2.0
+    )
+
     booking = RoadBooking(
         id=str(uuid.uuid4()),
         booking_ref=booking_ref,
@@ -406,6 +483,7 @@ async def create_assisted_booking(
         customer_phone=customer_phone,
         customer_ride_count=customer_ride_count,
         customer_rating=customer_rating,
+        current_radius_km=initial_radius_km,
     )
     db.add(booking)
     await db.flush()  # get the id
@@ -446,6 +524,18 @@ async def create_assisted_booking(
                     rule_ref=None,
                     amount_minor=amount,
                 ))
+
+    # Carbon offset — add 5 base-currency units (500 minor) when toggle is on
+    if await get_toggle(db, "carbon_offset"):
+        _settings = await get_settings(db)
+        _currency = _settings.base_currency or "INR"
+        db.add(BookingFareComponent(
+            id=str(uuid.uuid4()),
+            booking_id=booking.id,
+            label=f"Carbon offset · {fmt_minor(500, _currency)}",
+            rule_ref="carbon_offset",
+            amount_minor=500,
+        ))
 
     await db.commit()
 
@@ -518,21 +608,56 @@ async def cancel_booking(
             f"Cannot cancel a booking with status '{booking.status}'"
         )
 
+    platform = await get_settings(db)
+
+    # Enforce max cancellations per day per customer
+    if booking.customer_id:
+        max_per_day: int = platform.max_cancellations_per_day if platform.max_cancellations_per_day is not None else 3
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        cancelled_today: int = (
+            await db.execute(
+                select(func.count(RoadBooking.id)).where(
+                    and_(
+                        RoadBooking.customer_id == booking.customer_id,
+                        RoadBooking.status == "Cancelled",
+                        RoadBooking.updated_at >= today_start,
+                    )
+                )
+            )
+        ).scalar_one()
+        if cancelled_today >= max_per_day:
+            raise ValidationException(
+                f"Customer has already cancelled {cancelled_today} booking(s) today "
+                f"(limit: {max_per_day}). Contact support to override."
+            )
+
     # Use settings-based fee, overridable by admin
     if data.override_fee_minor is not None:
         cancellation_fee = data.override_fee_minor
     else:
-        preview = await get_cancel_preview(db, booking_id)
-        cancellation_fee = preview["cancel_fee_minor"]
+        is_no_show = data.reason and "no-show" in data.reason.lower()
+        if is_no_show:
+            fare = booking.fare_final_minor or booking.fare_estimate_minor or 0
+            no_show_fee_pct: float = platform.no_show_fee_pct if platform.no_show_fee_pct is not None else 25.0
+            cancellation_fee = max(5000, int(fare * no_show_fee_pct / 100))
+        else:
+            preview = await get_cancel_preview(db, booking_id)
+            cancellation_fee = preview["cancel_fee_minor"]
+
+    # Fall back to platform default refund destination if not specified
+    refund_dest = data.refund_destination
+    if not refund_dest or refund_dest == "none":
+        refund_dest = platform.refund_destination_default or "original"
 
     booking.status = "Cancelled"
-    await _add_timeline_event(
-        db,
-        booking_id,
-        "Booking cancelled",
-        f"Reason: {data.reason}" + (f" — {data.note}" if data.note else ""),
-        "warn",
-    )
+    timeline_detail = f"Reason: {data.reason}"
+    if data.note:
+        timeline_detail += f" — {data.note}"
+    timeline_detail += f" — Refund to: {refund_dest}"
+    if data.reason and "no-show" in data.reason.lower():
+        no_show_wait: int = platform.no_show_wait_minutes if platform.no_show_wait_minutes is not None else 5
+        timeline_detail += f" — No-show wait enforced: {no_show_wait}min"
+    await _add_timeline_event(db, booking_id, "Booking cancelled", timeline_detail, "warn")
     await db.commit()
     await db.refresh(booking)
 
@@ -605,11 +730,12 @@ async def adjust_fare(
         amount_minor=new_fare_minor - old_fare,
     ))
 
+    currency = await get_base_currency(db)
     await _add_timeline_event(
         db,
         booking_id,
         "Fare adjusted",
-        f"₹{old_fare/100:.0f} → ₹{new_fare_minor/100:.0f} — Reason: {reason}",
+        f"{fmt_major(old_fare / 100, currency)} → {fmt_major(new_fare_minor / 100, currency)} — Reason: {reason}",
         "info",
     )
     await db.commit()
@@ -633,6 +759,11 @@ async def process_refund(
         raise ValidationException(
             f"Cannot process refund for booking with status '{booking.status}'"
         )
+
+    # Fall back to platform default refund destination if not provided
+    if not destination:
+        platform = await get_settings(db)
+        destination = platform.refund_destination_default or "original"
 
     # Always transition to Refunded once a refund is processed
     booking.status = "Refunded"
@@ -919,6 +1050,37 @@ async def advance_status(
 
     booking.status = new_status
     booking.updated_at = datetime.now(timezone.utc)
+
+    # On trip completion, apply waiting charge if the driver was kept waiting
+    if new_status == "Completed":
+        platform = await get_settings(db)
+        free_wait_min: int = platform.free_waiting_minutes if platform.free_waiting_minutes is not None else 3
+        charge_per_min: float = platform.waiting_charge_per_min if platform.waiting_charge_per_min is not None else 0.0
+        if charge_per_min > 0:
+            # arrived_at is recorded in timeline; use created_at as fallback proxy
+            arrived_events = [
+                e for e in (booking.timeline_events or [])
+                if "arrived" in (e.event or "").lower()
+            ]
+            if arrived_events:
+                arrived_at = arrived_events[-1].created_at
+                if arrived_at.tzinfo is None:
+                    arrived_at = arrived_at.replace(tzinfo=timezone.utc)
+                wait_min = (datetime.now(timezone.utc) - arrived_at).total_seconds() / 60
+                billable_wait = max(0.0, wait_min - free_wait_min)
+                if billable_wait > 0:
+                    wait_charge_minor = int(billable_wait * charge_per_min * 100)
+                    db.add(BookingFareComponent(
+                        id=str(uuid.uuid4()),
+                        booking_id=booking_id,
+                        label=f"Waiting charge · {billable_wait:.1f}min @ ₹{charge_per_min}/min",
+                        rule_ref="platform_waiting_charge",
+                        amount_minor=wait_charge_minor,
+                    ))
+                    if booking.fare_final_minor:
+                        booking.fare_final_minor += wait_charge_minor
+                    elif booking.fare_estimate_minor:
+                        booking.fare_final_minor = booking.fare_estimate_minor + wait_charge_minor
 
     await _add_timeline_event(
         db,

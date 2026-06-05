@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.settings import PlatformSettings
+from app.core.currency import fmt_minor
+from app.services.settings_service import get_toggle, get_settings, is_in_quiet_window
 from app.models.air_booking import (
     AirBooking,
     AirBookingNote,
@@ -57,15 +59,19 @@ VALID_TRANSITIONS: dict[str, str] = {
 
 # ── Cancellation fee tiers ────────────────────────────────────────────────────
 
-def _cancel_fee_pct(hours_to_etd: float) -> tuple[str, int]:
+def _cancel_fee_pct(hours_to_etd: float, base_fee_pct: float = 10.0) -> tuple[str, int]:
+    """
+    Tiered fee scaled from the platform base cancellation fee.
+    Tiers: >48h → 0%, 24-48h → 25% of base, 4-24h → 50% of base, <4h → 100% of base.
+    """
     if hours_to_etd > 48:
         return ">48h", 0
     elif hours_to_etd > 24:
-        return "24-48h", 25
+        return "24-48h", round(base_fee_pct * 0.25)
     elif hours_to_etd > 4:
-        return "4-24h", 50
+        return "4-24h", round(base_fee_pct * 0.5)
     else:
-        return "<4h", 100
+        return "<4h", round(base_fee_pct)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -323,14 +329,29 @@ async def cancel_preview(db: AsyncSession, booking_id: str) -> CancelPreviewResp
     if not booking:
         raise HTTPException(status_code=404, detail="Air booking not found")
 
+    platform = await get_settings(db)
+    base_fee_pct: float = platform.cancellation_fee_pct if platform.cancellation_fee_pct is not None else 10.0
+    free_window_min: int = platform.cancellation_free_window_min if platform.cancellation_free_window_min is not None else 5
+
     now = datetime.now(timezone.utc)
     etd = booking.etd
     if etd.tzinfo is None:
         etd = etd.replace(tzinfo=timezone.utc)
     delta_hours = (etd - now).total_seconds() / 3600
-    tier, fee_pct = _cancel_fee_pct(delta_hours)
+
+    # Free window: if booking was created very recently, no fee
+    created = booking.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    elapsed_min = (now - created).total_seconds() / 60
+    is_free_window = elapsed_min <= free_window_min
+
+    tier, fee_pct = _cancel_fee_pct(delta_hours, base_fee_pct)
+    if is_free_window:
+        tier, fee_pct = "free_window", 0
+
     fare = booking.fare_estimate_minor
-    cancel_fee = int(fare * fee_pct / 100)
+    cancel_fee = 0 if fee_pct == 0 else int(fare * fee_pct / 100)
     net_refund = fare - cancel_fee
 
     return CancelPreviewResponse(
@@ -352,6 +373,35 @@ async def cancel_booking(
     if booking.status in ("Cancelled", "Refunded", "Completed"):
         raise HTTPException(status_code=400, detail=f"Cannot cancel booking in status '{booking.status}'")
 
+    platform = await get_settings(db)
+
+    # Enforce max cancellations per day per customer
+    if booking.customer_id:
+        max_per_day: int = platform.max_cancellations_per_day if platform.max_cancellations_per_day is not None else 3
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        cancelled_today: int = (
+            await db.execute(
+                select(func.count(AirBooking.id)).where(
+                    and_(
+                        AirBooking.customer_id == booking.customer_id,
+                        AirBooking.status == "Cancelled",
+                        AirBooking.updated_at >= today_start,
+                    )
+                )
+            )
+        ).scalar_one()
+        if cancelled_today >= max_per_day:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Customer has already cancelled {cancelled_today} booking(s) today "
+                       f"(limit: {max_per_day}). Contact support to override.",
+            )
+
+    # Fall back to platform default refund destination if not specified
+    refund_dest = req.refund_destination
+    if not refund_dest:
+        refund_dest = platform.refund_destination_default or "original"
+
     booking.status = "Cancelled"
     booking.internal_reason = req.reason
     note_text = f"Cancelled: {req.reason}"
@@ -359,6 +409,14 @@ async def cancel_booking(
         note_text += f" | {req.note}"
     if req.force_majeure:
         note_text += " [Force majeure]"
+    note_text += f" — Refund to: {refund_dest}"
+
+    # Record no-show wait policy in timeline when reason indicates no-show
+    is_no_show = req.reason and "no-show" in req.reason.lower()
+    if is_no_show:
+        no_show_wait: int = platform.no_show_wait_minutes if platform.no_show_wait_minutes is not None else 5
+        note_text += f" — No-show wait enforced: {no_show_wait}min"
+
     _add_timeline(db, booking, "Booking cancelled", note_text, "danger")
     await db.commit()
     return await get_air_booking(db, booking_id)
@@ -387,8 +445,15 @@ async def process_refund(
     db: AsyncSession, booking_id: str, req: RefundRequest
 ) -> AirBookingDetail:
     booking = await _load_booking(db, booking_id)
+
+    # Fall back to platform default refund destination if not provided
+    destination = req.destination
+    if not destination:
+        platform = await get_settings(db)
+        destination = platform.refund_destination_default or "original"
+
     booking.status = "Refunded"
-    msg = f"Refund of {req.amount_minor} minor units to {req.destination}"
+    msg = f"Refund of {req.amount_minor} minor units to {destination}"
     if req.reason:
         msg += f" — {req.reason}"
     _add_timeline(db, booking, "Refund processed", msg, "ok")
@@ -648,7 +713,29 @@ async def create_air_booking(
 
     etd_dt = datetime.fromisoformat(req.etd.replace("Z", "+00:00"))
 
-    # Validate minimum advance booking hours from platform settings
+    # ── Max simultaneous active rides per rider ───────────────────────────────
+    if req.customer_id:
+        _plat = await get_settings(db)
+        max_active: int = _plat.max_active_bookings_per_rider if _plat.max_active_bookings_per_rider is not None else 2
+        active_statuses = ["Requested", "Confirmed", "Manifest locked", "Boarding", "Departed", "Rescheduled"]
+        active_count: int = (
+            await db.execute(
+                select(func.count(AirBooking.id)).where(
+                    and_(
+                        AirBooking.customer_id == req.customer_id,
+                        AirBooking.status.in_(active_statuses),
+                    )
+                )
+            )
+        ).scalar_one()
+        if active_count >= max_active:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Customer already has {active_count} active booking(s) "
+                       f"(limit: {max_active}). Complete or cancel existing rides first.",
+            )
+
+    # Validate advance booking window from platform settings
     settings_result = await db.execute(select(PlatformSettings).limit(1))
     settings = settings_result.scalar_one_or_none()
     min_advance_hours: float = (
@@ -656,13 +743,40 @@ async def create_air_booking(
         if settings and settings.air_min_advance_hours is not None
         else 2.0
     )
+    max_advance_days: int = (
+        settings.max_advance_days
+        if settings and settings.max_advance_days is not None
+        else 7
+    )
     now_utc = datetime.now(timezone.utc)
     hours_ahead = (etd_dt - now_utc).total_seconds() / 3600
+    days_ahead = hours_ahead / 24
     if hours_ahead < min_advance_hours:
         raise HTTPException(
             status_code=400,
             detail=f"ETD must be at least {min_advance_hours:.0f} hour(s) in advance (currently {hours_ahead:.1f}h away).",
         )
+    if days_ahead > max_advance_days:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ETD cannot be more than {max_advance_days} day(s) in advance (currently {days_ahead:.1f} days away).",
+        )
+
+    # ── Quiet hours enforcement ───────────────────────────────────────────────
+    _qh_platform = await get_settings(db)
+    if is_in_quiet_window(_qh_platform) and _qh_platform.quiet_hours_action == "pause_bookings":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"New bookings are paused during quiet hours "
+                f"({_qh_platform.quiet_hours_start}–{_qh_platform.quiet_hours_end}). "
+                "Please try again later."
+            ),
+        )
+
+    # ── Toggle enforcement ────────────────────────────────────────────────────
+    if req.payment_method == "cash" and not await get_toggle(db, "cash_payments"):
+        raise HTTPException(status_code=422, detail="Cash payments are currently disabled on this platform.")
 
     booking = AirBooking(
         id=str(uuid.uuid4()),
@@ -689,6 +803,19 @@ async def create_air_booking(
         manifest_locked=False,
     )
     db.add(booking)
+
+    # Carbon offset — add 500 minor units when toggle is on
+    if await get_toggle(db, "carbon_offset"):
+        _platform = await get_settings(db)
+        _currency = _platform.base_currency or "INR"
+        booking.fare_estimate_minor = (booking.fare_estimate_minor or 0) + 500
+        _add_timeline(
+            db, booking,
+            f"Carbon offset applied · {fmt_minor(500, _currency)}",
+            "Platform toggle carbon_offset is enabled",
+            "info",
+        )
+
     _add_timeline(
         db, booking,
         "Booking created via assisted booking",

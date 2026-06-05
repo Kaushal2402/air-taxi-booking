@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import AirFareRule, PricingRule, TaxRule
 from app.models.catalog import ServiceZone, VehicleClass
+from app.core.currency import currency_symbol
+from app.services.settings_service import get_base_currency, get_settings
 from app.schemas.pricing import (
     SimulateBreakdownItem,
     SimulateRequest,
@@ -428,7 +430,14 @@ async def delete_tax(db: AsyncSession, id: str) -> None:
 
 # ── Fare Simulator ────────────────────────────────────────────────────────────
 
-def _compute_fare(rule: PricingRule, req: SimulateRequest) -> SimulateRuleResult:
+def _compute_fare(
+    rule: PricingRule,
+    req: SimulateRequest,
+    sym: str = "₹",
+    platform_surge_ceiling: float = 2.0,
+    platform_free_waiting_minutes: Optional[int] = None,
+    platform_waiting_charge_per_min: Optional[float] = None,
+) -> SimulateRuleResult:
     """Compute fare for a single PricingRule given simulation inputs."""
     base_fare = float(rule.base_fare)
     per_km = float(rule.per_km)
@@ -437,7 +446,13 @@ def _compute_fare(rule: PricingRule, req: SimulateRequest) -> SimulateRuleResult
     free_km = int(rule.free_km)
     free_min = int(rule.free_min)
     waiting_per_min = float(rule.waiting_per_min)
-    surge_cap = float(rule.surge_cap)
+    # Platform settings override per-rule waiting values when set
+    if platform_free_waiting_minutes is not None:
+        free_min = platform_free_waiting_minutes
+    if platform_waiting_charge_per_min is not None:
+        waiting_per_min = platform_waiting_charge_per_min
+    # Per-rule cap is clamped to the platform-wide ceiling (settings.surge_ceiling)
+    surge_cap = min(float(rule.surge_cap), platform_surge_ceiling)
 
     breakdown: List[SimulateBreakdownItem] = []
 
@@ -454,7 +469,7 @@ def _compute_fare(rule: PricingRule, req: SimulateRequest) -> SimulateRuleResult
     dist_amount = round(billable_km * per_km, 2)
     breakdown.append(SimulateBreakdownItem(
         component=f"Distance · {req.distance_km}km",
-        rule_ref=f"₹{per_km}/km",
+        rule_ref=f"{sym}{per_km}/km",
         inputs=f"{billable_km} × {per_km}",
         amount=dist_amount,
     ))
@@ -464,7 +479,7 @@ def _compute_fare(rule: PricingRule, req: SimulateRequest) -> SimulateRuleResult
     time_amount = round(billable_min * per_min, 2)
     breakdown.append(SimulateBreakdownItem(
         component=f"Time · {req.duration_min}min",
-        rule_ref=f"₹{per_min}/min",
+        rule_ref=f"{sym}{per_min}/min",
         inputs=f"{billable_min} × {per_min}",
         amount=time_amount,
     ))
@@ -474,7 +489,7 @@ def _compute_fare(rule: PricingRule, req: SimulateRequest) -> SimulateRuleResult
     wait_amount = round(billable_wait * waiting_per_min, 2)
     breakdown.append(SimulateBreakdownItem(
         component="Waiting",
-        rule_ref=f"₹{waiting_per_min}/min after {free_min}",
+        rule_ref=f"{sym}{waiting_per_min}/min after {free_min}",
         inputs=f"{billable_wait} × {waiting_per_min}",
         amount=wait_amount,
     ))
@@ -511,7 +526,7 @@ def _compute_fare(rule: PricingRule, req: SimulateRequest) -> SimulateRuleResult
         modifier_total += mod_amount
         breakdown.append(SimulateBreakdownItem(
             component=mod_name,
-            rule_ref=f"+{mod_value}% modifier" if mod_type == "pct" else f"flat ₹{mod_value}",
+            rule_ref=f"+{mod_value}% modifier" if mod_type == "pct" else f"flat {sym}{mod_value}",
             inputs=inputs_str,
             amount=mod_amount,
         ))
@@ -585,5 +600,14 @@ async def simulate_fare(db: AsyncSession, req: SimulateRequest) -> SimulateRespo
             detail="No pricing rules found for the given zone and vehicle class",
         )
 
-    results = [_compute_fare(rule, req) for rule in rules_to_simulate]
+    currency = await get_base_currency(db)
+    sym = currency_symbol(currency)
+    settings = await get_settings(db)
+    ceiling = float(settings.surge_ceiling or 2.0)
+    platform_free_wait = settings.free_waiting_minutes
+    platform_wait_rate = settings.waiting_charge_per_min
+    results = [
+        _compute_fare(rule, req, sym, ceiling, platform_free_wait, platform_wait_rate)
+        for rule in rules_to_simulate
+    ]
     return SimulateResponse(results=results)

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -7,6 +7,8 @@ import { settingsService } from '../../services/settingsService'
 import type { PlatformSettings, PlatformToggle } from '../../services/settingsService'
 import { catalogService } from '../../services/catalogService'
 import type { ServiceZone } from '../../services/catalogService'
+import { WORLD_COUNTRIES, WORLD_CURRENCIES, FISCAL_MONTHS, getWorldTimezones } from '../../data/worldData'
+import { formatDateTime, currencySymbolFor } from '../../lib/utils'
 
 // ── Toggle component ──────────────────────────────────────────────────────────
 
@@ -28,6 +30,128 @@ function Toggle({ on, onClick }: { on: boolean; onClick?: () => void }) {
       }}
     >
       <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', display: 'block' }} />
+    </div>
+  )
+}
+
+// ── Searchable select ─────────────────────────────────────────────────────────
+
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder = 'Search…',
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string; group?: string }[]
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return options
+    const q = query.toLowerCase()
+    return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
+  }, [options, query])
+
+  const selected = options.find(o => o.value === value)
+
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <div
+        className="input"
+        onClick={() => setOpen(p => !p)}
+        style={{
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          userSelect: 'none',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 13,
+          paddingRight: 10,
+        }}
+      >
+        <span style={{ color: selected ? 'var(--ink)' : 'var(--ink-3)' }}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={13} style={{ flexShrink: 0, marginLeft: 6, color: 'var(--ink-3)' }} />
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)',
+          left: 0,
+          right: 0,
+          zIndex: 200,
+          background: 'var(--surface)',
+          border: '1px solid var(--rule)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: 260,
+        }}>
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--rule-soft)', flexShrink: 0 }}>
+            <input
+              className="input"
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={placeholder}
+              style={{ width: '100%', fontSize: 12.5, padding: '5px 8px' }}
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {filtered.length === 0 && (
+              <div style={{ padding: '10px 12px', fontSize: 12.5, color: 'var(--ink-3)' }}>
+                No results for "{query}"
+              </div>
+            )}
+            {filtered.map(opt => (
+              <div
+                key={opt.value}
+                onClick={() => { onChange(opt.value); setOpen(false) }}
+                style={{
+                  padding: '7px 12px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  background: opt.value === value ? 'var(--accent-soft)' : 'transparent',
+                  color: opt.value === value ? 'var(--accent)' : 'var(--ink)',
+                  borderBottom: '1px solid var(--rule-soft)',
+                }}
+                onMouseEnter={e => { if (opt.value !== value) (e.currentTarget as HTMLElement).style.background = 'var(--bg)' }}
+                onMouseLeave={e => { if (opt.value !== value) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+              >
+                {opt.label}
+              </div>
+            ))}
+          </div>
+          {filtered.length > 0 && (
+            <div style={{ padding: '5px 12px', borderTop: '1px solid var(--rule-soft)', fontSize: 11, color: 'var(--ink-3)', flexShrink: 0 }}>
+              {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -100,6 +224,17 @@ function SectionCard({
 export default function PlatformSettingsPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+
+  // World data memos — computed once
+  const countryOptions = useMemo(() =>
+    WORLD_COUNTRIES.map(c => ({ value: c.name, label: c.name })),
+  [])
+  const currencyOptions = useMemo(() =>
+    WORLD_CURRENCIES.map(c => ({ value: c.code, label: `${c.code} — ${c.name} (${c.symbol})` })),
+  [])
+  const timezoneOptions = useMemo(() =>
+    getWorldTimezones().map(tz => ({ value: tz.value, label: tz.label, group: tz.region })),
+  [])
 
   const [activeTab, setActiveTab] = useState<NavTab>('general')
   const [settings, setSettings] = useState<PlatformSettings | null>(null)
@@ -861,7 +996,7 @@ export default function PlatformSettingsPage() {
           <div className="field">
             <label className="field-label">Waiting charge</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="t-meta">₹</span>
+              <span className="t-meta">{currencySymbolFor(baseCurrency)}</span>
               <input
                 className="input"
                 type="number"
@@ -1346,7 +1481,7 @@ export default function PlatformSettingsPage() {
 
   // Build a live preview number for the number formatting card
   const previewNumber = () => {
-    const sym = baseCurrency === 'INR' ? '₹' : baseCurrency === 'AED' ? 'د.إ' : '$'
+    const sym = currencySymbolFor(baseCurrency)
     const dec = decimalSeparator
     const tho = thousandsSeparator
     const formatted = `1${tho}23${tho}456${dec}78`
@@ -1500,8 +1635,8 @@ export default function PlatformSettingsPage() {
               onChange={e => setCurrencySymbolPosition(e.target.value)}
               style={{ fontFamily: 'var(--font-sans)', fontSize: 13 }}
             >
-              <option value="before">Before amount · ₹500</option>
-              <option value="after">After amount · 500 ₹</option>
+              <option value="before">Before amount · {currencySymbolFor(baseCurrency)}500</option>
+              <option value="after">After amount · 500 {currencySymbolFor(baseCurrency)}</option>
             </select>
           </div>
           <div className="field">
@@ -1895,43 +2030,33 @@ export default function PlatformSettingsPage() {
             </div>
             <div className="field">
               <label className="field-label">Primary region</label>
-              <select
-                className="input"
+              <SearchableSelect
                 value={primaryRegion}
-                onChange={e => setPrimaryRegion(e.target.value)}
-                style={{ fontFamily: 'var(--font-sans)', fontSize: 13 }}
-              >
-                <option value="India">India</option>
-                <option value="UAE">UAE</option>
-                <option value="Singapore">Singapore</option>
-              </select>
+                onChange={setPrimaryRegion}
+                options={countryOptions}
+                placeholder="Search country…"
+              />
+              <p className="t-meta" style={{ marginTop: 4 }}>Country where the platform primarily operates.</p>
             </div>
             <div className="field">
               <label className="field-label">Base currency</label>
-              <select
-                className="input"
+              <SearchableSelect
                 value={baseCurrency}
-                onChange={e => setBaseCurrency(e.target.value)}
-                style={{ fontFamily: 'var(--font-sans)', fontSize: 13 }}
-              >
-                <option value="INR">INR ₹</option>
-                <option value="USD">USD $</option>
-                <option value="AED">AED د.إ</option>
-              </select>
+                onChange={setBaseCurrency}
+                options={currencyOptions}
+                placeholder="Search currency…"
+              />
+              <p className="t-meta" style={{ marginTop: 4 }}>ISO 4217 currency for all fares, payouts and invoices.</p>
             </div>
             <div className="field">
               <label className="field-label">Timezone</label>
-              <select
-                className="input"
+              <SearchableSelect
                 value={timezone}
-                onChange={e => setTimezone(e.target.value)}
-                style={{ fontFamily: 'var(--font-sans)', fontSize: 13 }}
-              >
-                <option value="Asia/Kolkata">Asia/Kolkata · IST</option>
-                <option value="Asia/Dubai">Asia/Dubai · GST</option>
-                <option value="Asia/Singapore">Asia/Singapore · SGT</option>
-                <option value="UTC">UTC</option>
-              </select>
+                onChange={setTimezone}
+                options={timezoneOptions}
+                placeholder="Search timezone…"
+              />
+              <p className="t-meta" style={{ marginTop: 4 }}>IANA timezone used for quiet hours, payouts and reports.</p>
             </div>
             <div className="field">
               <label className="field-label">Fiscal year start</label>
@@ -1941,10 +2066,11 @@ export default function PlatformSettingsPage() {
                 onChange={e => setFiscalYearStart(e.target.value)}
                 style={{ fontFamily: 'var(--font-sans)', fontSize: 13 }}
               >
-                <option value="April">April</option>
-                <option value="January">January</option>
-                <option value="July">July</option>
+                {FISCAL_MONTHS.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
+              <p className="t-meta" style={{ marginTop: 4 }}>Month the financial year begins (e.g. April = Apr 1 – Mar 31).</p>
             </div>
           </div>
         </SectionCard>
@@ -2021,7 +2147,7 @@ export default function PlatformSettingsPage() {
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 500 }}>{t.name}</div>
-                  <div className="t-meta" style={{ marginTop: 2 }}>{t.description}</div>
+                  <div className="t-meta" style={{ marginTop: 2 }}>{t.description?.replace('₹', currencySymbolFor(baseCurrency))}</div>
                 </div>
                 <Toggle on={t.enabled} onClick={() => handleToggle(t)} />
               </div>
@@ -2032,7 +2158,7 @@ export default function PlatformSettingsPage() {
         {/* Last edited */}
         {settings?.last_edited_at && (
           <p className="t-meta" style={{ margin: 0 }}>
-            Last edited {new Date(settings.last_edited_at).toLocaleString()} by {settings.last_edited_by}
+            Last edited {formatDateTime(settings.last_edited_at)} by {settings.last_edited_by}
           </p>
         )}
       </div>

@@ -32,8 +32,11 @@ export interface QueueStats {
   online_drivers_count: number
   avg_pickup_eta_seconds: number
   auto_dispatch_rate: number
-  stuck_over_60s: number
+  stuck_over_timeout: number
   no_driver_count: number
+  auto_assign_enabled: boolean
+  ping_ttl_sec: number
+  max_dispatch_retries: number
 }
 
 export interface EligibleDriver {
