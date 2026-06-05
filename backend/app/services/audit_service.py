@@ -44,6 +44,23 @@ def _window_cutoff(time_window: str) -> datetime:
 
 # ── Core write function ───────────────────────────────────────────────────────
 
+def _json_safe(obj: Optional[dict]) -> Optional[dict]:
+    """Recursively convert non-JSON-serializable values (datetime, etc.) to strings."""
+    if obj is None:
+        return None
+    out = {}
+    for k, v in obj.items():
+        if isinstance(v, datetime):
+            out[k] = v.isoformat()
+        elif isinstance(v, dict):
+            out[k] = _json_safe(v)
+        elif isinstance(v, list):
+            out[k] = [i.isoformat() if isinstance(i, datetime) else i for i in v]
+        else:
+            out[k] = v
+    return out
+
+
 async def log_event(
     db: AsyncSession,
     actor_name: str,
@@ -96,8 +113,8 @@ async def log_event(
             source_ip=source_ip,
             session_id=session_id,
             request_id=request_id,
-            before_data=before_data,
-            after_data=after_data,
+            before_data=_json_safe(before_data),
+            after_data=_json_safe(after_data),
             prev_hash=prev_hash,
             this_hash=this_hash,
             timestamp=now_ts,
@@ -106,6 +123,10 @@ async def log_event(
         await db.commit()
     except Exception as exc:  # noqa: BLE001
         print(f"[audit] log_event failed silently: {exc}", file=sys.stderr)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 
 # ── List events ───────────────────────────────────────────────────────────────

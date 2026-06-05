@@ -5,6 +5,9 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorService, uploadFile } from '../../services/operatorService'
 import type { OperatorDetail, Aircraft, Pilot, OperatorDocument, OperatorPerformanceResponse, DocType, CreateAircraftBody, CreatePilotBody, UpdatePilotBody } from '../../services/operatorService'
+import { useFormatMoney } from '../../lib/utils'
+import { kycService } from '../../services/kycService'
+import type { DocTypeItem } from '../../services/kycService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +56,7 @@ function docStatusBadge(status: string) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OperatorDetailPage() {
+  const fmtMinor = useFormatMoney()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -82,8 +86,9 @@ export default function OperatorDetailPage() {
 
   // Add document modal
   const [showAddDoc, setShowAddDoc]   = useState(false)
+  const [docTypeOptions, setDocTypeOptions] = useState<DocTypeItem[]>([])
   const [docForm, setDocForm]         = useState<{ doc_type: DocType; file: File | null; expires_at: string }>({
-    doc_type: 'other', file: null, expires_at: '',
+    doc_type: '', file: null, expires_at: '',
   })
   const [docSaving, setDocSaving]     = useState(false)
   const [docError, setDocError]       = useState('')
@@ -157,6 +162,13 @@ export default function OperatorDetailPage() {
   useEffect(() => { loadOperator() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    kycService.getDocTypes().then(r => {
+      setDocTypeOptions(r.operator)
+      setDocForm(f => ({ ...f, doc_type: r.operator[0]?.key ?? '' }))
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (activeTab === 'fleet')       loadFleet()
     if (activeTab === 'crew')        loadCrew()
     if (activeTab === 'performance') loadPerformance()
@@ -204,7 +216,7 @@ export default function OperatorDetailPage() {
       })
       setDocs(ds => [...ds, newDoc])
       setShowAddDoc(false)
-      setDocForm({ doc_type: 'other', file: null, expires_at: '' })
+      setDocForm({ doc_type: docTypeOptions[0]?.key ?? '', file: null, expires_at: '' })
       setDocUploadProgress('')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -782,7 +794,7 @@ export default function OperatorDetailPage() {
                 { label: 'Load factor %',       value: `${performance.load_factor_pct}%` },
                 { label: 'Bookings MTD',         value: String(performance.booking_count_mtd) },
                 { label: 'Cancellation rate %',  value: `${performance.cancellation_rate_pct}%` },
-                { label: 'Payouts MTD',          value: `₹${(performance.payouts_mtd_amount / 100000).toFixed(1)} L` },
+                { label: 'Payouts MTD',          value: fmtMinor(performance.payouts_mtd_amount) },
               ].map(s => (
                 <div key={s.label} style={{
                   background: 'var(--surface)', border: '1px solid var(--rule)', padding: '20px 22px',
@@ -808,7 +820,7 @@ export default function OperatorDetailPage() {
                 <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
                   Documents · {docs.length}
                 </h3>
-                <button className="btn sm" onClick={() => { setDocForm({ doc_type: 'other', file: null, expires_at: '' }); setDocError(''); setDocUploadProgress(''); setShowAddDoc(true) }}>
+                <button className="btn sm" onClick={() => { setDocForm({ doc_type: docTypeOptions[0]?.key ?? '', file: null, expires_at: '' }); setDocError(''); setDocUploadProgress(''); setShowAddDoc(true) }}>
                   <Icon name="upload" size={12} />Add document
                 </button>
               </div>
@@ -990,10 +1002,7 @@ export default function OperatorDetailPage() {
                     onChange={e => setDocForm(f => ({ ...f, doc_type: e.target.value as DocType }))}
                     style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
                   >
-                    <option value="company_registration">Company Registration</option>
-                    <option value="nsop_cert">NSOP Certificate</option>
-                    <option value="insurance">Insurance</option>
-                    <option value="other">Other</option>
+                    {docTypeOptions.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                   </select>
                 </div>
               </div>

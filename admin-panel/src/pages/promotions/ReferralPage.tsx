@@ -5,10 +5,10 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { promotionsService } from '../../services/promotionsService'
 import type { ReferralProgram, ReferralStats, UpdateReferralProgramBody } from '../../services/promotionsService'
+import { useFormatMoney, useCurrencySymbol, currencySymbol } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 function exportReferralCsv(stats: ReferralStats) {
   const summaryRows = [
@@ -16,14 +16,14 @@ function exportReferralCsv(stats: ReferralStats) {
     ['Referrals sent', stats.referrals_sent],
     ['Converted', stats.converted],
     ['Conversion rate', `${stats.conversion_rate_pct.toFixed(1)}%`],
-    ['Reward paid (₹)', (stats.reward_paid_minor / 100).toFixed(2)],
+    [`Reward paid (${currencySymbol()})`, (stats.reward_paid_minor / 100).toFixed(2)],
     ['New customers', stats.new_customers],
-    ['CPA (₹)', (stats.cpa_minor / 100).toFixed(2)],
+    [`CPA (${currencySymbol()})`, (stats.cpa_minor / 100).toFixed(2)],
     ['Fraud blocked', stats.fraud_blocked],
-    ['Fraud saved (₹)', (stats.fraud_saved_minor / 100).toFixed(2)],
+    [`Fraud saved (${currencySymbol()})`, (stats.fraud_saved_minor / 100).toFixed(2)],
     [],
     ['Top referrers'],
-    ['Name', 'Converted', 'Reward (₹)', 'At cap'],
+    ['Name', 'Converted', `Reward (${currencySymbol()})`, 'At cap'],
     ...stats.top_referrers.map(r => [r.name, r.converted, (r.reward_minor / 100).toFixed(2), r.at_cap ? 'Yes' : 'No']),
   ]
   const csv = summaryRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -62,6 +62,8 @@ function TogglePill({ on, onChange }: { on: boolean; onChange: (v: boolean) => v
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ReferralPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
@@ -286,7 +288,7 @@ export default function ReferralPage() {
                     <input type="number" min={0}
                       value={referrerReward}
                       onChange={e => patchDraft('referrer_reward_minor', Number(e.target.value))}
-                      placeholder="10000 = ₹100" />
+                      placeholder={`10000 = ${sym}100`} />
                   </div>
                   <div className="t-meta" style={{ marginTop: 4 }}>= {fmtMinor(referrerReward)} wallet credit</div>
                 </div>
@@ -296,7 +298,7 @@ export default function ReferralPage() {
                     <input type="number" min={0}
                       value={refereeReward}
                       onChange={e => patchDraft('referee_reward_minor', Number(e.target.value))}
-                      placeholder="7500 = ₹75" />
+                      placeholder={`7500 = ${sym}75`} />
                   </div>
                   <div className="t-meta" style={{ marginTop: 4 }}>= {fmtMinor(refereeReward)} off first ride</div>
                 </div>
@@ -391,7 +393,7 @@ export default function ReferralPage() {
                   />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 500 }}>Manual review threshold</div>
-                    <div className="t-meta" style={{ marginTop: 2 }}>Flag accounts earning ≥ ₹5,000 cumulative</div>
+                    <div className="t-meta" style={{ marginTop: 2 }}>Flag accounts earning ≥ {sym}5,000 cumulative</div>
                   </div>
                   <TogglePill
                     on={manualReviewOn}

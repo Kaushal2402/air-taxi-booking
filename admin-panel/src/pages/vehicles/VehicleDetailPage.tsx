@@ -10,6 +10,9 @@ import { catalogService } from '../../services/catalogService'
 import type { VehicleClass } from '../../services/catalogService'
 import { driverService } from '../../services/driverService'
 import type { Driver } from '../../services/driverService'
+import { formatDate as fmtDateUtil, useCurrencySymbol } from '../../lib/utils'
+import { kycService } from '../../services/kycService'
+import type { DocTypeItem } from '../../services/kycService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -19,7 +22,7 @@ const STATIC_BASE = import.meta.env.VITE_API_BASE_URL
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return fmtDateUtil(iso)
 }
 
 function daysUntil(isoDate: string | null): number | null {
@@ -28,15 +31,6 @@ function daysUntil(isoDate: string | null): number | null {
   return Math.ceil(diff / (24 * 3600 * 1000))
 }
 
-const DOC_TYPE_LABELS: Record<VehicleDocType, string> = {
-  rc:        'Registration · RC',
-  insurance: 'Insurance',
-  permit:    'Commercial permit',
-  fitness:   'Fitness certificate',
-  puc:       'Pollution · PUC',
-}
-
-const DOC_TYPE_ORDER: VehicleDocType[] = ['rc', 'insurance', 'permit', 'fitness', 'puc']
 
 // ── Reason modal ──────────────────────────────────────────────────────────────
 
@@ -571,11 +565,12 @@ function ChangeClassModal({ classes, onConfirm, onCancel }: {
 
 // ── Add Document modal ────────────────────────────────────────────────────────
 
-function AddDocumentModal({ onConfirm, onCancel }: {
+function AddDocumentModal({ onConfirm, onCancel, docTypeOptions }: {
   onConfirm: (body: { doc_type: VehicleDocType; doc_number?: string; issued_date?: string; expiry_date?: string }) => void
   onCancel: () => void
+  docTypeOptions: DocTypeItem[]
 }) {
-  const [form, setForm] = useState({ doc_type: 'rc', doc_number: '', issued_date: '', expiry_date: '' })
+  const [form, setForm] = useState({ doc_type: docTypeOptions[0]?.key ?? '', doc_number: '', issued_date: '', expiry_date: '' })
   return (
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,20,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 16 }}
@@ -598,7 +593,7 @@ function AddDocumentModal({ onConfirm, onCancel }: {
                 onChange={e => setForm(f => ({ ...f, doc_type: e.target.value }))}
                 style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 13 }}
               >
-                {DOC_TYPE_ORDER.map(t => <option key={t} value={t}>{DOC_TYPE_LABELS[t]}</option>)}
+                {docTypeOptions.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
             </div>
           </div>
@@ -671,7 +666,7 @@ function DocReviewModal({ doc, action, onConfirm, onCancel }: {
         onClick={e => e.stopPropagation()}
       >
         <h3 style={{ margin: '0 0 4px', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>{title}</h3>
-        <div className="t-meta" style={{ marginBottom: 16 }}>{DOC_TYPE_LABELS[doc.doc_type as VehicleDocType]}</div>
+        <div className="t-meta" style={{ marginBottom: 16 }}>{docTypeOptions.find(o => o.key === doc.doc_type)?.label ?? doc.doc_type}</div>
 
         {isApprove && (
           <div className="field" style={{ marginBottom: 12 }}>
@@ -772,6 +767,11 @@ function DocumentsTab({ vehicle, onVehicleUpdate }: { vehicle: VehicleDetail; on
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [reviewTarget, setReviewTarget] = useState<{ doc: VehicleDocument; action: 'approve' | 'reject' | 'request_reupload' } | null>(null)
+  const [docTypeOptions, setDocTypeOptions] = useState<DocTypeItem[]>([])
+
+  useEffect(() => {
+    kycService.getDocTypes().then(r => setDocTypeOptions(r.vehicle)).catch(() => {})
+  }, [])
 
   const uploadRefs: Record<string, HTMLInputElement | null> = {}
 
@@ -856,7 +856,7 @@ function DocumentsTab({ vehicle, onVehicleUpdate }: { vehicle: VehicleDetail; on
               </tr>
             </thead>
             <tbody>
-              {DOC_TYPE_ORDER.map(docType => {
+              {docTypeOptions.map(({ key: docType, label: docLabel }) => {
                 const doc = docs.find(d => d.doc_type === docType)
                 const days = doc ? daysUntil(doc.expiry_date) : null
                 const expiryColor = days !== null && days < 0 ? 'var(--danger)' : days !== null && days < 30 ? 'var(--warn)' : 'var(--ink)'
@@ -868,7 +868,7 @@ function DocumentsTab({ vehicle, onVehicleUpdate }: { vehicle: VehicleDetail; on
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Icon name="shield" size={14} style={{ color: 'var(--ink-3)' }} />
-                        <span style={{ fontSize: 13 }}>{DOC_TYPE_LABELS[docType]}</span>
+                        <span style={{ fontSize: 13 }}>{docLabel}</span>
                       </div>
                     </td>
                     <td className="num" style={{ color: 'var(--ink-2)' }}>{doc?.doc_number ?? '—'}</td>
@@ -963,6 +963,7 @@ function DocumentsTab({ vehicle, onVehicleUpdate }: { vehicle: VehicleDetail; on
         <AddDocumentModal
           onConfirm={handleAddDoc}
           onCancel={() => setShowAddDoc(false)}
+          docTypeOptions={docTypeOptions}
         />
       )}
 
@@ -987,6 +988,7 @@ export default function VehicleDetailPage() {
   const navigate  = useNavigate()
   const isMobile  = useIsMobile()
   const isTablet  = useIsTablet()
+  const sym = useCurrencySymbol()
 
   const [vehicle, setVehicle]   = useState<VehicleDetail | null>(null)
   const [loading, setLoading]   = useState(true)
@@ -1370,7 +1372,7 @@ export default function VehicleDetailPage() {
             {[
               { k: 'Odometer',      v: vehicle.odometer_km.toLocaleString('en-IN') + ' km', m: 'Total distance',        c: 'var(--ink)' },
               { k: 'Trips logged',  v: '0',                                                   m: 'Stub — trips module',  c: 'var(--ink-2)' },
-              { k: 'Gross fare',    v: '₹0',                                                  m: 'Stub — trips module',  c: 'var(--accent)' },
+              { k: 'Gross fare',    v: `${sym}0`,                                              m: 'Stub — trips module',  c: 'var(--accent)' },
               { k: 'Last service',  v: lastService ? formatDate(lastService.completed_at) : '—', m: lastService?.service_center ?? 'No record', c: 'var(--ink-2)' },
               { k: 'Next service',  v: pendingMaintenances[0]?.milestone_label ?? '—',        m: pendingMaintenances[0]?.service_center ?? (pendingMaintenances[0]?.scheduled_date ? formatDate(pendingMaintenances[0].scheduled_date) : '—'), c: 'var(--ink-2)' },
             ].map(({ k, v, m, c }, i) => (

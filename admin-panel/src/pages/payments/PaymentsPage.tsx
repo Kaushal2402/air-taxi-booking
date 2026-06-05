@@ -6,18 +6,20 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { paymentsService } from '../../services/paymentsService'
 import type { PaymentListItem, PaymentKPIs, BookingSearchResult } from '../../services/paymentsService'
+import { formatMoney, useFormatMoney, currencySymbol, formatDateTime, formatDate, formatDateTimeCompact } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
-const fmt = (n: number) => '₹' + n.toLocaleString('en-IN')
 
 // ── CSV export helper ──────────────────────────────────────────────────────────
 function downloadCSV(rows: PaymentListItem[], filename: string) {
-  const headers = ['Transaction ID', 'Date', 'Customer', 'Booking Ref', 'Service', 'Method', 'VPA', 'Gross (₹)', 'Gateway Fee (₹)', 'Net (₹)', 'Status', 'Gateway Ref', 'Currency']
+  const sym = currencySymbol()
+  const headers = ['Transaction ID', 'Date', 'Customer', 'Booking Ref', 'Service', 'Method', 'VPA', `Gross (${sym})`, `Gateway Fee (${sym})`, `Net (${sym})`, 'Status', 'Gateway Ref', 'Currency']
   const escape = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const lines = [
     headers.join(','),
     ...rows.map(t => [
       escape(t.id),
-      escape(new Date(t.created_at).toLocaleString('en-IN')),
+      escape(formatDateTime(t.created_at)),
       escape(t.customer_name),
       escape(t.booking_ref),
       escape(t.service),
@@ -249,7 +251,7 @@ function ManualEntryModal({ onClose, onSaved }: ManualEntryModalProps) {
               <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="dot ok" />
                 <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500 }}>
-                  {booking.booking_ref} · {booking.customer_name} · {booking.service} · ₹{booking.gross_amount.toLocaleString('en-IN')}
+                  {booking.booking_ref} · {booking.customer_name} · {booking.service} · {fmt(booking.gross_amount)}
                 </span>
               </div>
             )}
@@ -276,15 +278,15 @@ function ManualEntryModal({ onClose, onSaved }: ManualEntryModalProps) {
                 <input className="input" style={readOnlyStyle} value={booking?.service ?? '—'} readOnly tabIndex={-1} />
               </div>
               <div style={fieldStyle}>
-                <label style={labelStyle}>Gross amount (₹)</label>
-                <input className="input" style={readOnlyStyle} value={booking ? `₹${booking.gross_amount.toLocaleString('en-IN')}` : '—'} readOnly tabIndex={-1} />
+                <label style={labelStyle}>Gross amount ({currencySymbol()})</label>
+                <input className="input" style={readOnlyStyle} value={booking ? fmt(booking.gross_amount) : '—'} readOnly tabIndex={-1} />
               </div>
               <div style={fieldStyle}>
-                <label style={labelStyle}>Net amount (₹) = Gross − Fee</label>
+                <label style={labelStyle}>Net amount ({currencySymbol()}) = Gross − Fee</label>
                 <input
                   className="input"
                   style={{ ...readOnlyStyle, color: 'var(--accent)', fontWeight: 500 }}
-                  value={booking ? `₹${netAmount.toLocaleString('en-IN')}` : '—'}
+                  value={booking ? fmt(netAmount) : '—'}
                   readOnly
                   tabIndex={-1}
                 />
@@ -317,7 +319,7 @@ function ManualEntryModal({ onClose, onSaved }: ManualEntryModalProps) {
                 <input className="input" style={inputStyle} placeholder="upi@bank, card last 4…" value={vpa} onChange={e => setVpa(e.target.value)} />
               </div>
               <div style={fieldStyle}>
-                <label style={labelStyle}>Gateway fee (₹)</label>
+                <label style={labelStyle}>Gateway fee ({currencySymbol()})</label>
                 <input
                   className="input"
                   style={inputStyle}
@@ -365,6 +367,8 @@ function ManualEntryModal({ onClose, onSaved }: ManualEntryModalProps) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function PaymentsPage() {
+  const fmt = useFormatMoney()
+  const settlementCycle = usePlatformStore(s => s.settlement_cycle)
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
@@ -439,7 +443,7 @@ export default function PaymentsPage() {
   const showingEnd = Math.min(page * pageSize, total)
 
   const subtitle = total
-    ? `${total.toLocaleString('en-IN')} transactions · 30d · settlement T+1 · IN`
+    ? `${total.toLocaleString('en-IN')} transactions · 30d · settlement ${settlementCycle} · IN`
     : 'Payment ledger'
 
   const actions = (
@@ -555,7 +559,7 @@ export default function PaymentsPage() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span className="t-meta">{t.booking_ref} · {t.method}</span>
-                    <span className="t-meta">{new Date(t.created_at).toLocaleDateString('en-IN')}</span>
+                    <span className="t-meta">{formatDate(t.created_at)}</span>
                   </div>
                 </div>
               ))}
@@ -588,7 +592,7 @@ export default function PaymentsPage() {
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span className="t-mono" style={{ fontSize: 12.5, color: 'var(--ink)' }}>{t.id}</span>
-                          <span className="t-meta">{new Date(t.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="t-meta">{formatDateTimeCompact(t.created_at)}</span>
                         </div>
                       </td>
                       <td>

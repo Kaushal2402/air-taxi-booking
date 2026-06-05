@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.core.exceptions import NotFoundException
 from app.database import get_db
@@ -25,7 +25,7 @@ from app.schemas.settings import (
     PlatformToggleResponse,
     PlatformToggleUpdate,
 )
-from app.services import settings_service
+from app.services import audit_service, settings_service
 
 settings_router = APIRouter()
 
@@ -43,10 +43,27 @@ async def get_platform_settings(
 @settings_router.patch("", response_model=PlatformSettingsResponse)
 async def update_platform_settings(
     body: PlatformSettingsUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await settings_service.update_settings(db, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await settings_service.update_settings(db, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.platform_updated",
+            target="platform_settings",
+            category="Configuration",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Platform Toggles ──────────────────────────────────────────────────────────
@@ -63,10 +80,26 @@ async def list_platform_toggles(
 async def update_platform_toggle(
     key: str,
     body: PlatformToggleUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await settings_service.update_toggle(db, key, body.enabled)
+    result = await settings_service.update_toggle(db, key, body.enabled)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.toggle_updated",
+            target=f"toggle:{key}",
+            category="Configuration",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"key": key, "enabled": body.enabled},
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Feature Flags ─────────────────────────────────────────────────────────────
@@ -84,20 +117,53 @@ async def list_feature_flags(
 @settings_router.post("/flags", response_model=FeatureFlagResponse, status_code=201)
 async def create_feature_flag(
     body: FeatureFlagCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await settings_service.create_flag(db, body.model_dump())
+    result = await settings_service.create_flag(db, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.feature_flag_created",
+            target=f"flag:{result.id}",
+            category="Configuration",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return result
 
 
 @settings_router.patch("/flags/{id}", response_model=FeatureFlagResponse)
 async def update_feature_flag(
     id: str,
     body: FeatureFlagUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await settings_service.update_flag(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await settings_service.update_flag(db, id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.feature_flag_updated",
+            target=f"flag:{id}",
+            category="Configuration",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @settings_router.get("/flags/{id}/metrics", response_model=FlagMetrics)
@@ -126,10 +192,26 @@ async def list_kill_switches(
 async def update_kill_switch(
     key: str,
     body: KillSwitchUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await settings_service.update_kill_switch(db, key, body.enabled)
+    result = await settings_service.update_kill_switch(db, key, body.enabled)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.kill_switch_toggled",
+            target=f"kill_switch:{key}",
+            category="Configuration",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"key": key, "enabled": body.enabled},
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Maintenance Windows ───────────────────────────────────────────────────────
@@ -146,17 +228,47 @@ async def list_maintenance_windows(
 @settings_router.post("/maintenance-windows", response_model=MaintenanceWindowResponse, status_code=201)
 async def create_maintenance_window(
     body: MaintenanceWindowCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await settings_service.create_maintenance_window(db, body.model_dump())
+    result = await settings_service.create_maintenance_window(db, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.maintenance_window_created",
+            target=f"maintenance_window:{result.id}",
+            category="Configuration",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return result
 
 
 @settings_router.delete("/maintenance-windows/{id}", response_model=MessageResponse)
 async def delete_maintenance_window(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     await settings_service.delete_maintenance_window(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="settings.maintenance_window_deleted",
+            target=f"maintenance_window:{id}",
+            category="Configuration",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Deleted")

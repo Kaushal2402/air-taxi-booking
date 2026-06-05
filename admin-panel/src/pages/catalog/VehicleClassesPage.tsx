@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { catalogService } from '../../services/catalogService'
 import type { VehicleClass } from '../../services/catalogService'
+import { formatDate } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -257,7 +258,7 @@ export default function VehicleClassesPage() {
                 </h2>
                 {!isNew && selected && (
                   <div className="t-meta" style={{ marginTop: 4 }}>
-                    {selected.code} · last edited {new Date(selected.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {selected.code} · last edited {formatDate(selected.updated_at)}
                   </div>
                 )}
               </div>

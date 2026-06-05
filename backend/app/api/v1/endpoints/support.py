@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -21,7 +21,7 @@ from app.schemas.support import (
     TicketResolveRequest,
     TicketStatusUpdateRequest,
 )
-from app.services import support_service
+from app.services import audit_service, support_service
 
 router = APIRouter()
 
@@ -58,26 +58,57 @@ async def get_ticket(
 @router.post("/tickets", response_model=TicketDetailResponse, status_code=201)
 async def create_ticket(
     body: TicketCreate,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await support_service.create_ticket(
+    result = await support_service.create_ticket(
         db,
         body,
         author_id=current_user.id,
         author_name=current_user.name,
         author_role=current_user.role,
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="support.ticket_created",
+            target=f"ticket:{result.id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/tickets/{ticket_id}/assign")
 async def assign_ticket(
     ticket_id: str,
     body: TicketAssignRequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await support_service.assign_ticket(db, ticket_id, body.assignee_id)
+    result = await support_service.assign_ticket(db, ticket_id, body.assignee_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="support.ticket_assigned",
+            target=f"ticket:{ticket_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"assignee_id": body.assignee_id},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/tickets/{ticket_id}/messages", response_model=TicketMessageResponse, status_code=201)
@@ -115,22 +146,39 @@ async def update_ticket_status(
 async def resolve_ticket(
     ticket_id: str,
     body: TicketResolveRequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await support_service.resolve_ticket(
+    result = await support_service.resolve_ticket(
         db, ticket_id, body.resolution_code, body.resolution_note
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="support.ticket_resolved",
+            target=f"ticket:{ticket_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"resolution_code": body.resolution_code},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/tickets/{ticket_id}/escalate")
 async def escalate_ticket(
     ticket_id: str,
     body: TicketEscalateRequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await support_service.escalate_ticket(
+    result = await support_service.escalate_ticket(
         db,
         ticket_id,
         reason=body.reason,
@@ -138,6 +186,21 @@ async def escalate_ticket(
         author_name=current_user.name,
         author_role=current_user.role,
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="support.ticket_escalated",
+            target=f"ticket:{ticket_id}",
+            category="Support",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── SLA Policies ──────────────────────────────────────────────────────────────
@@ -153,17 +216,47 @@ async def list_sla_policies(
 @router.post("/sla-policies", response_model=SlaPolicyResponse, status_code=201)
 async def create_sla_policy(
     body: SlaPolicyCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await support_service.create_sla_policy(db, body)
+    result = await support_service.create_sla_policy(db, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="support.sla_policy_created",
+            target=f"sla_policy:{result.id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.patch("/sla-policies/{policy_id}", response_model=SlaPolicyResponse)
 async def update_sla_policy(
     policy_id: str,
     body: SlaPolicyUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await support_service.update_sla_policy(db, policy_id, body)
+    result = await support_service.update_sla_policy(db, policy_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="support.sla_policy_updated",
+            target=f"sla_policy:{policy_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result

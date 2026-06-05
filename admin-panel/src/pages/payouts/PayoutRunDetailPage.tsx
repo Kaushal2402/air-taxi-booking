@@ -6,9 +6,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { payoutsService } from '../../services/payoutsService'
 import type { PayoutRun, PayoutPayee } from '../../services/payoutsService'
+import { useFormatMoney } from '../../lib/utils'
 
-const fmtINR = (n: number) =>
-  '₹ ' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
 
 function runTypeLabel(t: string) {
   switch (t) {
@@ -21,6 +20,7 @@ function runTypeLabel(t: string) {
 }
 
 export default function PayoutRunDetailPage() {
+  const fmtINR = useFormatMoney()
   const { runId } = useParams<{ runId: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()

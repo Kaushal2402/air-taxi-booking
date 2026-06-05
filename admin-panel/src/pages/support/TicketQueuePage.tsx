@@ -13,6 +13,7 @@ import { bookingsService } from '../../services/bookingsService'
 import type { RoadBookingListItem } from '../../services/bookingsService'
 import { airBookingsService } from '../../services/airBookingsService'
 import type { AirBookingListItem } from '../../services/airBookingsService'
+import { formatDate } from '../../lib/utils'
 
 const CATEGORY_OPTIONS = [
   'refunds_billing', 'booking_road', 'booking_air', 'payouts',
@@ -689,7 +690,7 @@ export default function TicketQueuePage() {
                         </td>
                       )}
                       <td>{formatSlaTime(t.sla_due_at, t.sla_breached)}</td>
-                      <td><span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{new Date(t.created_at).toLocaleDateString()}</span></td>
+                      <td><span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{formatDate(t.created_at)}</span></td>
                     </tr>
                   ))}
                 </tbody>

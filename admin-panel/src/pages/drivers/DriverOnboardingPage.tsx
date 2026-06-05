@@ -9,6 +9,7 @@ import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { driverService } from '../../services/driverService'
 import type { OnboardingDriverItem, DocType } from '../../services/driverService'
 import { catalogService } from '../../services/catalogService'
+import { formatDateTimeCompact } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -255,7 +256,7 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
       <div>
         <div className="t-label" style={{ padding: 0 }}>Submitted</div>
         <div style={{ marginTop: 6, fontSize: 13, color: 'var(--ink-2)', fontFamily: 'var(--font-mono)' }}>
-          {new Date(item.submitted_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          {formatDateTimeCompact(item.submitted_at)}
         </div>
         <div style={{ marginTop: 6 }}>
           <span className={`badge ${slaBadgeClass}`}>

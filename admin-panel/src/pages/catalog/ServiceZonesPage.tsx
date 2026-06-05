@@ -9,6 +9,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { catalogService } from '../../services/catalogService'
 import type { ServiceZone, VehicleClass, GeometryValidation } from '../../services/catalogService'
+import { formatDate } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const ACCENT = '#0F8A5F'
@@ -24,8 +26,8 @@ const TOOLS: { mode: ToolMode; icon: string; label: string }[] = [
   { mode: 'draw_new',      icon: 'pencil', label: 'Draw new'   },
 ]
 
-const ZONE_EMPTY: Partial<ServiceZone> = {
-  code: '', name: '', tax_jurisdiction: '', priority: 10, surge_cap: 1.8,
+const ZONE_EMPTY_BASE: Omit<Partial<ServiceZone>, 'surge_cap'> = {
+  code: '', name: '', tax_jurisdiction: '', priority: 10,
   active_service_codes: [], is_active: true, polygon: [],
 }
 
@@ -120,6 +122,8 @@ export default function ServiceZonesPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
+  const surgeCeiling = usePlatformStore(s => s.surge_ceiling)
+  const zoneEmpty = (): Partial<ServiceZone> => ({ ...ZONE_EMPTY_BASE, surge_cap: surgeCeiling })
   const [mobileTab, setMobileTab] = useState<'list' | 'map' | 'details'>('list')
 
   const [zones, setZones]                     = useState<ServiceZone[]>([])
@@ -127,7 +131,7 @@ export default function ServiceZonesPage() {
   const [showInactive, setShowInactive]       = useState(false)
   const [selected, setSelected]               = useState<ServiceZone | null>(null)
   const [isNew, setIsNew]                     = useState(false)
-  const [draft, setDraft]                     = useState<Partial<ServiceZone>>({ ...ZONE_EMPTY })
+  const [draft, setDraft]                     = useState<Partial<ServiceZone>>(zoneEmpty)
   const [editPolygon, setEditPolygon]         = useState<[number, number][]>([])
   const [polyHistory, setPolyHistory]         = useState<[number, number][][]>([])
   const [toolMode, setToolMode]               = useState<ToolMode>('move')
@@ -184,7 +188,7 @@ export default function ServiceZonesPage() {
 
   const startNew = () => {
     setSelected(null); setIsNew(true)
-    setDraft({ ...ZONE_EMPTY })
+    setDraft(zoneEmpty())
     setEditPolygon([]); setPolyHistory([])
     setToolMode('draw_new'); setApiError('')
     if (isMobile) setMobileTab('map')
@@ -330,9 +334,7 @@ export default function ServiceZonesPage() {
         {!isNew && selected && (
           <div className="t-meta" style={{ marginTop: 3 }}>
             {selected.code} · v{selected.version} ·{' '}
-            {new Date(selected.updated_at).toLocaleDateString('en-GB', {
-              day: 'numeric', month: 'short', year: 'numeric',
-            })}
+            {formatDate(selected.updated_at)}
           </div>
         )}
       </div>
@@ -404,7 +406,7 @@ export default function ServiceZonesPage() {
             <div className="input">
               <input
                 type="number" step="0.1" min="1" max="5"
-                value={draft.surge_cap ?? 1.8}
+                value={draft.surge_cap ?? surgeCeiling}
                 onChange={e => patch('surge_cap', parseFloat(e.target.value) || 1.0)}
               />
             </div>

@@ -5,15 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { customerService } from '../../services/customerService'
 import type { Customer, CustomerSegment, CustomerStatus } from '../../services/customerService'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatMoney(minor: number): string {
-  const value = minor / 100
-  if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(2)} Cr`
-  if (value >= 100_000)    return `₹${(value / 100_000).toFixed(2)} L`
-  return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
+import { formatMoney, currencySymbol, formatDate, formatDateShort, formatMonthYear } from '../../lib/utils'
 
 function getInitials(name: string): string {
   return name.split(' ').map(p => p[0] ?? '').join('').slice(0, 2).toUpperCase()
@@ -438,7 +430,8 @@ export default function CustomersPage() {
   }
 
   const handleExport = () => {
-    const headers = ['Customer Code', 'Name', 'Phone', 'Segment', 'Trips', 'LTV (₹)', 'Rating', 'Wallet (₹)', 'Last Active', 'Joined', 'Status']
+    const sym = currencySymbol()
+    const headers = ['Customer Code', 'Name', 'Phone', 'Segment', 'Trips', `LTV (${sym})`, 'Rating', `Wallet (${sym})`, 'Last Active', 'Joined', 'Status']
     const rows = customers.map(c => [
       c.customer_code ?? '',
       c.name,
@@ -448,8 +441,8 @@ export default function CustomersPage() {
       (c.ltv_minor / 100).toFixed(2),
       c.rating?.toFixed(2) ?? '',
       (c.wallet_balance_minor / 100).toFixed(2),
-      c.last_active_at ? new Date(c.last_active_at).toLocaleDateString('en-GB') : '',
-      new Date(c.joined_at).toLocaleDateString('en-GB'),
+      c.last_active_at ? formatDate(c.last_active_at) : '',
+      formatDate(c.joined_at),
       c.status,
     ])
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -719,10 +712,10 @@ export default function CustomersPage() {
                         {formatMoney(c.wallet_balance_minor)}
                       </td>
                       <td className="num" style={{ color: 'var(--ink-3)' }}>
-                        {c.last_active_at ? new Date(c.last_active_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                        {c.last_active_at ? formatDateShort(c.last_active_at) : '—'}
                       </td>
                       <td className="num" style={{ color: 'var(--ink-3)' }}>
-                        {new Date(c.joined_at).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                        {formatMonthYear(c.joined_at)}
                       </td>
                       <td>
                         {c.status === 'active'    && <span className="badge ok"><span className="dot ok" />Active</span>}

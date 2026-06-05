@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { usePlatformStore } from '../store/platformStore'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
 
@@ -53,13 +54,13 @@ function clearAndRedirect(): void {
 
 // ── Request interceptor — attach Bearer token + timezone ────────────────────
 
-// Detect the user's system timezone once and reuse it for the session.
-const USER_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
-
 api.interceptors.request.use((config) => {
   const token = getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
-  config.headers['X-Timezone'] = USER_TIMEZONE
+  // Read platform timezone on every request so it reflects settings after load.
+  // Falls back to UTC (never browser TZ) to stay consistent with getUserTimezone().
+  const tz = usePlatformStore.getState().timezone || 'UTC'
+  config.headers['X-Timezone'] = tz
   return config
 })
 

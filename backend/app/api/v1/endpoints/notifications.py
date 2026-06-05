@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -16,7 +16,7 @@ from app.schemas.notifications import (
     NotificationTemplateResponse,
     NotificationTemplateUpdate,
 )
-from app.services import notifications_service
+from app.services import audit_service, notifications_service
 
 notifications_router = APIRouter()
 
@@ -46,10 +46,26 @@ async def list_delivery_log(
 @notifications_router.post("/broadcast", response_model=BroadcastResponse, status_code=201)
 async def create_broadcast(
     body: BroadcastCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await notifications_service.create_broadcast(db, body)
+    result = await notifications_service.create_broadcast(db, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="notification.broadcast_created",
+            target=f"broadcast:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"title": getattr(body, "title", None), "channel": getattr(body, "channel", None)},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @notifications_router.get("/templates", response_model=NotificationTemplateListResponse)
@@ -68,10 +84,25 @@ async def list_templates(
 @notifications_router.post("/templates", response_model=NotificationTemplateResponse, status_code=201)
 async def create_template(
     body: NotificationTemplateCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await notifications_service.create_template(db, body)
+    result = await notifications_service.create_template(db, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="notification.template_created",
+            target=f"template:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @notifications_router.get("/templates/{template_id}", response_model=NotificationTemplateResponse)
@@ -88,16 +119,45 @@ async def get_template(
 async def update_template(
     template_id: str,
     body: NotificationTemplateUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await notifications_service.update_template(db, template_id, body)
+    result = await notifications_service.update_template(db, template_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="notification.template_updated",
+            target=f"template:{template_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @notifications_router.delete("/templates/{template_id}", status_code=204)
 async def delete_template(
     template_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     await notifications_service.delete_template(db, template_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="notification.template_deleted",
+            target=f"template:{template_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass

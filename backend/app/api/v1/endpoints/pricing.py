@@ -49,10 +49,16 @@ async def list_road_rules(
 @pricing_router.post("/road-rules", response_model=RoadRuleResponse, status_code=201)
 async def create_road_rule(
     body: RoadRuleCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await pricing_service.create_road_rule(db, body.model_dump())
+    result = await pricing_service.create_road_rule(db, body.model_dump())
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.road.created", target=f"road_rule:{result.id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None)
+    except Exception:
+        pass
+    return result
 
 
 @pricing_router.get("/road-rules/{id}", response_model=RoadRuleResponse)
@@ -68,10 +74,17 @@ async def get_road_rule(
 async def update_road_rule(
     id: str,
     body: RoadRuleUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await pricing_service.update_road_rule(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await pricing_service.update_road_rule(db, id, changes)
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.road.updated", target=f"road_rule:{id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None, after_data=changes)
+    except Exception:
+        pass
+    return result
 
 
 @pricing_router.post("/road-rules/{id}/publish", response_model=RoadRuleResponse)
@@ -147,10 +160,16 @@ async def list_air_rules(
 @pricing_router.post("/air-rules", response_model=AirRuleResponse, status_code=201)
 async def create_air_rule(
     body: AirRuleCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await pricing_service.create_air_rule(db, body.model_dump())
+    result = await pricing_service.create_air_rule(db, body.model_dump())
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.air.created", target=f"air_rule:{result.id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None)
+    except Exception:
+        pass
+    return result
 
 
 @pricing_router.get("/air-rules/{id}", response_model=AirRuleResponse)
@@ -166,10 +185,17 @@ async def get_air_rule(
 async def update_air_rule(
     id: str,
     body: AirRuleUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await pricing_service.update_air_rule(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await pricing_service.update_air_rule(db, id, changes)
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.air.updated", target=f"air_rule:{id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None, after_data=changes)
+    except Exception:
+        pass
+    return result
 
 
 @pricing_router.post("/air-rules/{id}/publish", response_model=AirRuleResponse)
@@ -236,29 +262,47 @@ async def list_taxes(
 @pricing_router.post("/taxes", response_model=TaxRuleResponse, status_code=201)
 async def create_tax(
     body: TaxRuleCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await pricing_service.create_tax(db, body.model_dump())
+    result = await pricing_service.create_tax(db, body.model_dump())
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.tax.created", target=f"tax_rule:{result.id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None)
+    except Exception:
+        pass
+    return result
 
 
 @pricing_router.patch("/taxes/{id}", response_model=TaxRuleResponse)
 async def update_tax(
     id: str,
     body: TaxRuleUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await pricing_service.update_tax(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await pricing_service.update_tax(db, id, changes)
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.tax.updated", target=f"tax_rule:{id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None, after_data=changes)
+    except Exception:
+        pass
+    return result
 
 
 @pricing_router.delete("/taxes/{id}", response_model=MessageResponse)
 async def delete_tax(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     await pricing_service.delete_tax(db, id)
+    try:
+        await audit_service.log_event(db, actor_name=admin.email, actor_role=admin.role if hasattr(admin, "role") else "Admin", action="pricing.tax.deleted", target=f"tax_rule:{id}", category="Pricing", severity="med", source_ip=request.client.host if request.client else None)
+    except Exception:
+        pass
     return MessageResponse(message="Tax rule deleted")
 
 

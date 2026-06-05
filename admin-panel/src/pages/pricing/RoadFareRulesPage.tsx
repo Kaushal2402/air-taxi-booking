@@ -8,6 +8,8 @@ import { pricingService } from '../../services/pricingService'
 import { catalogService } from '../../services/catalogService'
 import type { RoadRule, RoadRuleModifier } from '../../services/pricingService'
 import type { VehicleClass, ServiceZone } from '../../services/catalogService'
+import { useCurrencySymbol, formatDate } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 // ── Empty form state ──────────────────────────────────────────────────────────
 
@@ -19,7 +21,7 @@ const EMPTY_MODIFIER: RoadRuleModifier = {
   value: 0,
 }
 
-const EMPTY_RULE: Partial<RoadRule> = {
+const EMPTY_RULE_BASE: Omit<Partial<RoadRule>, 'surge_cap'> = {
   zone_id: '',
   vehicle_class_id: '',
   base_fare: 0,
@@ -30,7 +32,6 @@ const EMPTY_RULE: Partial<RoadRule> = {
   free_min: 0,
   waiting_per_min: 0,
   cancel_fee: 0,
-  surge_cap: 1.8,
   modifiers: [],
   effective_from: new Date().toISOString().slice(0, 16),
   effective_to: null,
@@ -79,15 +80,18 @@ function SurgeChart() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function RoadFareRulesPage() {
+  const sym = useCurrencySymbol()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
+  const surgeCeiling = usePlatformStore(s => s.surge_ceiling)
+  const emptyRule = (): Partial<RoadRule> => ({ ...EMPTY_RULE_BASE, surge_cap: surgeCeiling })
 
   const [rules, setRules]           = useState<RoadRule[]>([])
   const [loading, setLoading]       = useState(true)
   const [search, setSearch]         = useState('')
   const [selected, setSelected]     = useState<RoadRule | null>(null)
-  const [draft, setDraft]           = useState<Partial<RoadRule>>(EMPTY_RULE)
+  const [draft, setDraft]           = useState<Partial<RoadRule>>(emptyRule)
   const [isNew, setIsNew]           = useState(false)
   const [saving, setSaving]         = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -138,7 +142,7 @@ export default function RoadFareRulesPage() {
   const startNew = () => {
     setSelected(null)
     setIsNew(true)
-    setDraft({ ...EMPTY_RULE })
+    setDraft(emptyRule())
     setApiError('')
     if (isMobile) setShowMobileEditor(true)
   }
@@ -342,8 +346,8 @@ export default function RoadFareRulesPage() {
                       {r.zone_name ?? '—'}
                     </div>
                     <div style={{ marginTop: 8, display: 'flex', gap: 12, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)' }}>
-                      <span>₹{r.base_fare}</span>
-                      <span>· ₹{r.per_km}/km</span>
+                      <span>{sym}{r.base_fare}</span>
+                      <span>· {sym}{r.per_km}/km</span>
                       <span>· {r.surge_cap}× cap</span>
                     </div>
                   </div>
@@ -388,7 +392,7 @@ export default function RoadFareRulesPage() {
                 {!isNew && selected && (
                   <div className="t-meta" style={{ marginTop: 4 }}>
                     {selected.rule_code}
-                    {selected.published_at ? ` · published ${new Date(selected.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                    {selected.published_at ? ` · published ${formatDate(selected.published_at)}` : ''}
                   </div>
                 )}
               </div>
@@ -505,14 +509,14 @@ export default function RoadFareRulesPage() {
               </div>
               <div style={{ padding: '20px 22px', display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16 }}>
                 {([
-                  { l: 'Base fare',         k: 'base_fare',       unit: '₹',     hint: 'Applied once per trip' },
-                  { l: 'Per km',            k: 'per_km',          unit: '₹/km',  hint: 'After free km' },
-                  { l: 'Per minute',        k: 'per_min',         unit: '₹/min', hint: 'After free time' },
-                  { l: 'Minimum fare',      k: 'min_fare',        unit: '₹',     hint: 'Floor regardless of trip' },
-                  { l: 'Free km',           k: 'free_km',         unit: 'km',    hint: 'Included in base' },
-                  { l: 'Free time',         k: 'free_min',        unit: 'min',   hint: 'Boarding allowance' },
-                  { l: 'Waiting · per min', k: 'waiting_per_min', unit: '₹/min', hint: 'After free time' },
-                  { l: 'Cancel fee',        k: 'cancel_fee',      unit: '₹',     hint: 'Post grace period' },
+                  { l: 'Base fare',         k: 'base_fare',       unit: sym,           hint: 'Applied once per trip' },
+                  { l: 'Per km',            k: 'per_km',          unit: `${sym}/km`,   hint: 'After free km' },
+                  { l: 'Per minute',        k: 'per_min',         unit: `${sym}/min`,  hint: 'After free time' },
+                  { l: 'Minimum fare',      k: 'min_fare',        unit: sym,           hint: 'Floor regardless of trip' },
+                  { l: 'Free km',           k: 'free_km',         unit: 'km',          hint: 'Included in base' },
+                  { l: 'Free time',         k: 'free_min',        unit: 'min',         hint: 'Boarding allowance' },
+                  { l: 'Waiting · per min', k: 'waiting_per_min', unit: `${sym}/min`,  hint: 'After free time' },
+                  { l: 'Cancel fee',        k: 'cancel_fee',      unit: sym,           hint: 'Post grace period' },
                 ] as { l: string; k: keyof RoadRule; unit: string; hint: string }[]).map(c => (
                   <div key={c.k}>
                     <div className="t-label" style={{ padding: 0 }}>{c.l}</div>
@@ -546,7 +550,7 @@ export default function RoadFareRulesPage() {
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
                   <div className="t-label">Surge configuration</div>
                   <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
-                    Demand-to-supply multiplier · capped at {draft.surge_cap ?? 1.8}×
+                    Demand-to-supply multiplier · capped at {draft.surge_cap ?? surgeCeiling}×
                   </h3>
                 </div>
                 <div style={{ padding: '20px 22px' }}>
@@ -558,8 +562,8 @@ export default function RoadFareRulesPage() {
                       step="0.1"
                       min="1"
                       max="5"
-                      value={draft.surge_cap ?? 1.8}
-                      onChange={e => patch('surge_cap', parseFloat(e.target.value) || 1.8)}
+                      value={draft.surge_cap ?? surgeCeiling}
+                      onChange={e => patch('surge_cap', parseFloat(e.target.value) || surgeCeiling)}
                       style={{
                         width: 90, padding: '6px 10px',
                         border: '1px solid var(--rule-strong)', borderRadius: 3,
@@ -628,7 +632,7 @@ export default function RoadFareRulesPage() {
                             style={{ width: '100%', padding: '4px 6px', border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--surface)', cursor: 'pointer', fontSize: 12 }}
                           >
                             <option value="pct">%</option>
-                            <option value="flat">flat ₹</option>
+                            <option value="flat">{`flat ${sym}`}</option>
                           </select>
                         </div>
                         <div>
@@ -740,14 +744,14 @@ export default function RoadFareRulesPage() {
                             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>v{r.version}</span>
                           </td>
                           <td><StatusBadge status={r.status} /></td>
-                          <td className="num">₹{r.base_fare}</td>
-                          <td className="num">₹{r.per_km}/km</td>
+                          <td className="num">{sym}{r.base_fare}</td>
+                          <td className="num">{sym}{r.per_km}/km</td>
                           <td className="num">{r.surge_cap}×</td>
                           <td className="t-meta">
-                            {r.effective_from ? new Date(r.effective_from).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                            {r.effective_from ? formatDate(r.effective_from) : '—'}
                           </td>
                           <td className="t-meta">
-                            {r.published_at ? new Date(r.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                            {r.published_at ? formatDate(r.published_at) : '—'}
                           </td>
                         </tr>
                       ))}

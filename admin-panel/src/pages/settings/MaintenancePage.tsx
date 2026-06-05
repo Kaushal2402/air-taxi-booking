@@ -7,6 +7,7 @@ import { settingsService } from '../../services/settingsService'
 import type { KillSwitch, MaintenanceWindow, CreateMaintenanceWindowBody } from '../../services/settingsService'
 import { catalogService } from '../../services/catalogService'
 import type { ServiceZone } from '../../services/catalogService'
+import { formatDateTimeCompact, formatTimeHM, getUserTimezone } from '../../lib/utils'
 
 // ── Toggle component ──────────────────────────────────────────────────────────
 
@@ -168,13 +169,8 @@ function timeRemaining(endsAt: string): string {
 }
 
 function formatWindow(w: MaintenanceWindow): string {
-  const start = new Date(w.starts_at).toLocaleString('en-GB', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  })
-  const end = new Date(w.ends_at).toLocaleString('en-GB', {
-    hour: '2-digit', minute: '2-digit',
-  })
-  return `${start} → ${end}`
+  const tz = getUserTimezone()
+  return `${formatDateTimeCompact(w.starts_at, tz)} → ${formatTimeHM(w.ends_at, tz)}`
 }
 
 // ── Main component ────────────────────────────────────────────────────────────

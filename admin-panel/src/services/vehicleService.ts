@@ -4,7 +4,7 @@ import api from '../lib/axios'
 
 export type VehicleStatus = 'pending' | 'active' | 'suspended' | 'retired'
 export type VehicleDocStatus = 'pending' | 'ok' | 'expiring' | 'rejected' | 'expired'
-export type VehicleDocType = 'rc' | 'insurance' | 'permit' | 'fitness' | 'puc'
+export type VehicleDocType = string   // region-specific; fetch valid values from GET /kyc/doc-types
 export type VehicleOwnerType = 'owner_driver' | 'vendor'
 export type VendorStatus = 'active' | 'review' | 'suspended'
 export type MaintenanceStatus = 'pending' | 'done' | 'skipped'

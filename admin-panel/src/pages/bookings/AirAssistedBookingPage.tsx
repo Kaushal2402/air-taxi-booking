@@ -11,10 +11,10 @@ import { catalogService } from '../../services/catalogService'
 import type { AircraftType, AirRoute } from '../../services/catalogService'
 import { pricingService } from '../../services/pricingService'
 import type { AirRule } from '../../services/pricingService'
+import { useFormatMoney, useCurrencySymbol } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`
 
 function calcFareMinor(rule: AirRule, pax: number): number {
   const perSeat = rule.per_seat_base ?? 0
@@ -82,6 +82,8 @@ function StepPills({ current }: { current: Step }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AirAssistedBookingPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
@@ -500,7 +502,7 @@ export default function AirAssistedBookingPage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <tbody>
                       {[
-                        ['Per seat base', matchedRule.per_seat_base != null ? `₹${matchedRule.per_seat_base}` : '—'],
+                        ['Per seat base', matchedRule.per_seat_base != null ? `${sym}${matchedRule.per_seat_base}` : '—'],
                         ['Min pax', matchedRule.min_pax ?? '—'],
                         ['Fuel surcharge', `${matchedRule.fuel_surcharge_pct}%`],
                         ['GST', `${matchedRule.tax_gst_pct}%`],

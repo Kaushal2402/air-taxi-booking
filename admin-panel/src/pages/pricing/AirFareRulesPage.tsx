@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { pricingService } from '../../services/pricingService'
 import type { AirRule } from '../../services/pricingService'
+import { useFormatMoney, useCurrencySymbol } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,8 +52,8 @@ function LiveExample({ rule }: { rule: Partial<AirRule> }) {
     <div style={{ padding: '14px 16px', background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 3, fontSize: 12.5, color: 'var(--ink-2)' }}>
       Live computed example · {pax} pax, {baggage} kg baggage, no night halt, surcharge applied:
       <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', color: 'var(--ink)' }}>
-        {pax} × ₹{perSeat.toLocaleString('en-IN')} + {baggage} × ₹{bpkg} + {fuel}% fuel + {gst}% GST ={' '}
-        <span style={{ color: 'var(--accent)' }}>₹ {Math.round(total).toLocaleString('en-IN')}</span>
+        {pax} × {sym}{perSeat.toLocaleString()} + {baggage} × {sym}{bpkg} + {fuel}% fuel + {gst}% GST ={' '}
+        <span style={{ color: 'var(--accent)' }}>{sym} {Math.round(total).toLocaleString()}</span>
       </div>
     </div>
   )
@@ -61,6 +62,8 @@ function LiveExample({ rule }: { rule: Partial<AirRule> }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AirFareRulesPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
@@ -270,10 +273,10 @@ export default function AirFareRulesPage() {
                           <td className="t-meta" style={{ color: 'var(--ink-2)' }}>{r.aircraft_type}</td>
                           <td><CategoryBadge cat={r.category} /></td>
                           <td className="num">
-                            {r.per_seat_base != null ? `₹ ${r.per_seat_base.toLocaleString('en-IN')}` : '—'}
+                            {r.per_seat_base != null ? `${sym} ${r.per_seat_base.toLocaleString()}` : '—'}
                           </td>
                           <td className="num">
-                            {r.hourly_rate != null ? `₹ ${r.hourly_rate.toLocaleString('en-IN')}` : '—'}
+                            {r.hourly_rate != null ? `${sym} ${r.hourly_rate.toLocaleString()}` : '—'}
                           </td>
                           <td className="t-meta" style={{ color: 'var(--ink-2)' }}>
                             {r.fuel_surcharge_pct > 0 ? `Fuel · ${r.fuel_surcharge_pct}%` : '—'}
@@ -431,7 +434,7 @@ export default function AirFareRulesPage() {
               {/* Per-seat base + Min pax */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="field">
-                  <label className="field-label">Per-seat base · ₹</label>
+                  <label className="field-label">Per-seat base · {sym}</label>
                   <div className="input">
                     <input
                       type="number"
@@ -459,7 +462,7 @@ export default function AirFareRulesPage() {
               {/* Hourly rate */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="field">
-                  <label className="field-label">Hourly rate · ₹ (optional)</label>
+                  <label className="field-label">Hourly rate · {sym} (optional)</label>
                   <div className="input">
                     <input
                       type="number"
@@ -475,7 +478,7 @@ export default function AirFareRulesPage() {
               {/* Baggage per kg + Excess baggage cap */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="field">
-                  <label className="field-label">Baggage · per kg · ₹/kg</label>
+                  <label className="field-label">Baggage · per kg · {sym}/kg</label>
                   <div className="input">
                     <input
                       type="number"
@@ -501,7 +504,7 @@ export default function AirFareRulesPage() {
               {/* Positioning + Night-halt */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="field">
-                  <label className="field-label">Positioning charge · ₹ (optional)</label>
+                  <label className="field-label">Positioning charge · {sym} (optional)</label>
                   <div className="input">
                     <input
                       type="number"
@@ -513,7 +516,7 @@ export default function AirFareRulesPage() {
                   </div>
                 </div>
                 <div className="field">
-                  <label className="field-label">Night-halt charge · ₹</label>
+                  <label className="field-label">Night-halt charge · {sym}</label>
                   <div className="input">
                     <input
                       type="number"

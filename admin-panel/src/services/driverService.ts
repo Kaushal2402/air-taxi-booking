@@ -6,7 +6,7 @@ export type DriverStatus   = 'pending' | 'in_review' | 'approved' | 'active' | '
 export type OnlineStatus   = 'online' | 'offline'
 export type KycStatus      = 'pending' | 'approved' | 'expiring' | 'rejected'
 export type OnboardStage   = 'signup' | 'docs' | 'review' | 'background' | 'approved'
-export type DocType        = 'pan' | 'license' | 'rc' | 'insurance' | 'permit' | 'photo'
+export type DocType        = string   // region-specific; fetch valid values from GET /kyc/doc-types
 export type DocStatus      = 'pending' | 'ok' | 'rejected' | 'expired'
 export type WalletDirection = 'credit' | 'debit'
 

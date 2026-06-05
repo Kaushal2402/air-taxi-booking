@@ -22,7 +22,7 @@ export const uploadFile = (file: File, folder = 'documents'): Promise<UploadResp
 
 export type OperatorStatus = 'pending' | 'review' | 'approved' | 'active' | 'paused' | 'rejected' | 'deactivated'
 export type DocStatus      = 'pending' | 'approved' | 'rejected' | 'expired'
-export type DocType        = 'company_registration' | 'nsop_cert' | 'insurance' | 'other'
+export type DocType        = string   // region-specific; fetch valid values from GET /kyc/doc-types
 export type AircraftStatus = 'ready' | 'maintenance' | 'grounded' | 'pending_review'
 export type AirworthinessStatus = 'ok' | 'expiring' | 'expired'
 export type PilotStatus    = 'active' | 'grounded' | 'pending_review' | 'inactive'

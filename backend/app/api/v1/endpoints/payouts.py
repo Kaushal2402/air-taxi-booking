@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -22,7 +22,7 @@ from app.schemas.payouts import (
     PayoutRunUpdate,
     RejectRunRequest,
 )
-from app.services import payouts_service
+from app.services import payouts_service, audit_service
 
 router = APIRouter()
 
@@ -45,10 +45,26 @@ async def list_runs(
 @router.post("/runs", response_model=PayoutRunResponse, status_code=201)
 async def create_run(
     body: PayoutRunCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.create_run(db, body.model_dump())
+    run = await payouts_service.create_run(db, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.run_created",
+            target=f"payout_run:{run.id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return run
 
 
 @router.get("/runs/{run_id}", response_model=PayoutRunResponse)
@@ -64,39 +80,102 @@ async def get_run(
 async def update_run(
     run_id: str,
     body: PayoutRunUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.update_run(db, run_id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    run = await payouts_service.update_run(db, run_id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.run_updated",
+            target=f"payout_run:{run_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return run
 
 
 @router.post("/runs/{run_id}/approve", response_model=PayoutRunResponse)
 async def approve_run(
     run_id: str,
     body: ApproveRunRequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.approve_run(db, run_id, current_user.id, body.notes)
+    run = await payouts_service.approve_run(db, run_id, current_user.id, body.notes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.run_approved",
+            target=f"payout_run:{run_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"notes": body.notes},
+        )
+    except Exception:
+        pass
+    return run
 
 
 @router.post("/runs/{run_id}/reject", response_model=PayoutRunResponse)
 async def reject_run(
     run_id: str,
     body: RejectRunRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.reject_run(db, run_id, body.reason)
+    run = await payouts_service.reject_run(db, run_id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.run_rejected",
+            target=f"payout_run:{run_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return run
 
 
 @router.delete("/runs/{run_id}", response_model=MessageResponse)
 async def delete_run(
     run_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     await payouts_service.delete_run(db, run_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.run_deleted",
+            target=f"payout_run:{run_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Payout run deleted")
 
 
@@ -119,10 +198,26 @@ async def list_payees(
 async def add_payee(
     run_id: str,
     body: PayoutPayeeCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.add_payee(db, run_id, body.model_dump())
+    payee = await payouts_service.add_payee(db, run_id, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.payee_added",
+            target=f"payout_run:{run_id} payee:{payee.id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return payee
 
 
 @router.get("/payees/{payee_id}", response_model=PayoutPayeeResponse)
@@ -138,17 +233,50 @@ async def get_payee(
 async def update_payee(
     payee_id: str,
     body: PayoutPayeeUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.update_payee(db, payee_id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    payee = await payouts_service.update_payee(db, payee_id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.payee_updated",
+            target=f"payout_payee:{payee_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return payee
 
 
 @router.post("/payees/{payee_id}/adjustments", response_model=AdjustmentResponse, status_code=201)
 async def add_adjustment(
     payee_id: str,
     body: AdjustmentCreate,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payouts_service.add_adjustment(db, payee_id, body.model_dump(), current_user.id)
+    adj = await payouts_service.add_adjustment(db, payee_id, body.model_dump(), current_user.id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payout.adjustment_added",
+            target=f"payout_payee:{payee_id} adjustment:{adj.id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return adj

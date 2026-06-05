@@ -6,6 +6,7 @@ import { useIsTablet } from '../../hooks/useIsMobile'
 import { pricingService } from '../../services/pricingService'
 import { catalogService } from '../../services/catalogService'
 import type { SimulateRuleResult } from '../../services/pricingService'
+import { useFormatMoney, useCurrencySymbol, formatDate } from '../../lib/utils'
 import type { VehicleClass, ServiceZone } from '../../services/catalogService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -22,6 +23,8 @@ interface RuleOption {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FareSimulatorPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
 
@@ -63,7 +66,7 @@ export default function FareSimulatorPage() {
           version: r.version,
           status: r.status,
           label: `${r.status === 'live' ? 'Current' : r.status === 'draft' ? 'Draft' : 'Prior'} · v${r.version} (${r.status})`,
-          meta: `${r.rule_code} · since ${r.effective_from ? new Date(r.effective_from).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}`,
+          meta: `${r.rule_code} · since ${r.effective_from ? formatDate(r.effective_from) : '—'}`,
         }))
         setRuleOptions(opts)
         // Auto-select live rule
@@ -256,7 +259,7 @@ export default function FareSimulatorPage() {
                   </div>
                 </div>
                 <div className="field">
-                  <label className="field-label">Toll · ₹</label>
+                  <label className="field-label">Toll · {sym}</label>
                   <div className="input">
                     <input type="number" min="0" value={toll} onChange={e => setToll(parseFloat(e.target.value) || 0)} />
                   </div>
@@ -310,7 +313,7 @@ export default function FareSimulatorPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="field">
-                  <label className="field-label">Promo discount · ₹</label>
+                  <label className="field-label">Promo discount · {sym}</label>
                   <div className="input">
                     <input type="number" min="0" value={promoDiscount} onChange={e => setPromoDiscount(parseFloat(e.target.value) || 0)} />
                   </div>
@@ -397,13 +400,13 @@ export default function FareSimulatorPage() {
                       fontFamily: 'var(--font-serif)', fontSize: 64,
                       color: 'var(--ink)', letterSpacing: '-0.020em', lineHeight: 1,
                     }}>
-                      ₹ {results[0].fare_total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      {sym} {results[0].fare_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </span>
                     {results.length > 1 && (
                       <div>
                         {results.slice(1).map(r => (
                           <div key={r.rule_id} className="t-meta" style={{ marginTop: 3 }}>
-                            v{r.version} ({r.status}) would charge ₹{r.fare_total.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · {r.fare_total > results[0].fare_total ? '+' : ''}₹{(r.fare_total - results[0].fare_total).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            v{r.version} ({r.status}) would charge {sym}{r.fare_total.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {r.fare_total > results[0].fare_total ? '+' : ''}{sym}{(r.fare_total - results[0].fare_total).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </div>
                         ))}
                       </div>
@@ -444,7 +447,7 @@ export default function FareSimulatorPage() {
                             const val = r.breakdown[idx]?.amount ?? 0
                             return (
                               <td key={r.rule_id} className="num" style={{ textAlign: 'right', color: ri > 0 ? 'var(--ink-3)' : undefined }}>
-                                {val < 0 ? '−' : ''}₹ {Math.abs(val).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                {val < 0 ? '−' : ''}{sym} {Math.abs(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                               </td>
                             )
                           })}
@@ -454,7 +457,7 @@ export default function FareSimulatorPage() {
                         <td colSpan={3} style={{ fontWeight: 500 }}>Total</td>
                         {results.map((r, ri) => (
                           <td key={r.rule_id} className="num" style={{ textAlign: 'right', fontFamily: 'var(--font-serif)', fontSize: 22, color: ri > 0 ? 'var(--ink-3)' : undefined }}>
-                            ₹ {r.fare_total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            {sym} {r.fare_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </td>
                         ))}
                       </tr>

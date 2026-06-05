@@ -1,0 +1,84 @@
+/* ─────────────────────────────────────────────────────────────
+   Acme Mobility — Customer App · Moreen Theme
+   Mobile-first design tokens · Flutter / iOS / Android
+   Consumer-facing premium air mobility booking
+   ───────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,300;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* ── Moreen Forest Palette ───────────────────────────────── */
+  --forest:     #0C2A1C;   /* hero dark — deepest */
+  --forest-2:   #13381F;   /* gradient mid */
+  --forest-3:   #1B4D2C;   /* gradient light stop */
+  --canopy:     #2B6641;   /* mid forest accent */
+  --emerald:    #18B574;   /* primary CTA */
+  --emerald-dk: #12916A;   /* CTA pressed */
+  --jade:       #35CC8A;   /* lighter highlight */
+  --mint:       #E2F5EC;   /* tinted soft bg */
+  --mint-2:     #F2FBF6;   /* barely-tinted */
+
+  /* ── Surfaces ────────────────────────────────────────────── */
+  --bg:           #F8F8F6;
+  --surface:      #FFFFFF;
+  --surface-2:    #F4F4F2;
+  --surface-sunk: #ECECEA;
+
+  /* ── Ink — slightly warmer than admin ────────────────────── */
+  --ink:    #131311;
+  --ink-2:  #373735;
+  --ink-3:  #727270;
+  --ink-4:  #AEAEAC;
+  --ink-5:  #DCDCDA;
+
+  /* ── Rules ───────────────────────────────────────────────── */
+  --rule:        #E6E6E4;
+  --rule-strong: #D2D2D0;
+  --rule-soft:   #EFEFED;
+
+  /* ── Status ──────────────────────────────────────────────── */
+  --ok:          #18B574;
+  --ok-soft:     #E2F5EC;
+  --warn:        #C97B0C;
+  --warn-soft:   #FDF1DC;
+  --danger:      #CC2B22;
+  --danger-soft: #FCECEA;
+  --info:        #1762BA;
+  --info-soft:   #E7EFFE;
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-sm:   0 1px 4px rgba(0,0,0,0.05);
+  --shadow-md:   0 4px 18px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,0.13), 0 2px 6px rgba(0,0,0,0.05);
+  --shadow-hero: 0 -28px 56px rgba(12,42,28,0.45);
+  --focus-ring:  0 0 0 3px rgba(24,181,116,0.24);
+
+  /* ── Radius — consumer-grade rounded ────────────────────── */
+  --r-xs:   8px;
+  --r-sm:   12px;
+  --r-md:   16px;
+  --r-lg:   20px;
+  --r-xl:   24px;
+  --r-pill: 100px;
+
+  /* ── Type ────────────────────────────────────────────────── */
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-sans:  'IBM Plex Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono:  'IBM Plex Mono', monospace;
+}
+
+/* ── Reset ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }

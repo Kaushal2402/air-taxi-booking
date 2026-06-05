@@ -4,6 +4,8 @@ import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import api from '../../lib/axios'
+import { useFormatMoney, formatMoneyWith, formatDateLong } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -54,10 +56,10 @@ type WindowParam = 'today' | '7d' | '30d' | '90d'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Exported for LiveMapPage — reads platform currency from store at call time
 export const fmtMinor = (v: number) => {
-  const lakh = v / 100 / 100000
-  if (lakh >= 1) return `₹${lakh.toFixed(1)} L`
-  return `₹${(v / 100).toLocaleString('en-IN')}`
+  const cur = usePlatformStore.getState().base_currency
+  return formatMoneyWith(v, cur)
 }
 
 export const fmtEta = (sec: number) => {
@@ -316,6 +318,7 @@ export function CityMap({ showLegend = true, height = 340, onlineCount, onTripCo
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const fmtMinorLocal = useFormatMoney()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [window, setWindow] = useState<WindowParam>('today')
@@ -335,7 +338,7 @@ export default function DashboardPage() {
   const alerts = data?.alerts ?? []
 
   const now = new Date()
-  const dateLabel = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const dateLabel = formatDateLong(now.toISOString())
 
   const cancelTone = (kpi?.cancel_rate_pct ?? 0) > 6 ? 'danger' : (kpi?.cancel_rate_pct ?? 0) > 4 ? 'warn' : 'ok'
   const completionRate = kpi && kpi.today_bookings > 0
@@ -407,7 +410,7 @@ export default function DashboardPage() {
           />
           <KpiCard
             kicker="Today's GBV"
-            value={loading ? '—' : fmtMinor(kpi?.today_gbv_minor ?? 0)}
+            value={loading ? '—' : fmtMinorLocal(kpi?.today_gbv_minor ?? 0)}
             sparkline={kpi?.revenue_14d_minor}
             sparkColor="var(--accent)"
             footer="Gross booking value"
@@ -587,7 +590,7 @@ export default function DashboardPage() {
                              b.status === 'Accepted' || b.status === 'Boarding' ? 'var(--warn)' : 'var(--ink-3)',
                     }}>{b.status}</div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-2)', marginTop: 3 }}>
-                      {fmtMinor(b.fare_minor)}
+                      {fmtMinorLocal(b.fare_minor)}
                     </div>
                   </div>
                 </div>

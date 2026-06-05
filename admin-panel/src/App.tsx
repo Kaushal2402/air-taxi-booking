@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/queryClient'
 import { useAuthStore } from './store/authStore'
+import { usePlatformStore } from './store/platformStore'
 import { authService } from './services/authService'
 
 import DashboardPage from './pages/dashboard/DashboardPage'
@@ -112,6 +113,7 @@ function App() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const refreshToken = useAuthStore(s => s.refreshToken)
   const setAuth = useAuthStore(s => s.setAuth)
+  const loadPlatform = usePlatformStore(s => s.load)
 
   useEffect(() => {
     if (!isAuthenticated || !refreshToken) {
@@ -126,6 +128,8 @@ function App() {
       .then(res => {
         // Update store with fresh tokens (also embeds new session ID in access token).
         setAuth(res.user, res.access_token, res.refresh_token)
+        // Load platform settings (base_currency, timezone) once after auth is confirmed.
+        void loadPlatform()
         setSessionChecked(true)
       })
       .catch(() => {
@@ -240,7 +244,7 @@ function App() {
 
           {/* Audit */}
           <Route path="/audit" element={<PrivateRoute><AuditStreamPage /></PrivateRoute>} />
-          <Route path="/audit/:id" element={<PrivateRoute><AuditEventPage /></PrivateRoute>} />
+          <Route path="/audit/events/:id" element={<PrivateRoute><AuditEventPage /></PrivateRoute>} />
           <Route path="/audit/security" element={<PrivateRoute><SecurityCompliancePage /></PrivateRoute>} />
 
           {/* Admin users (extra pages) */}

@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { kycService } from '../../services/kycService'
 import type { KycQueueItem } from '../../services/kycService'
+import { formatDate as fmtDateUtil } from '../../lib/utils'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -39,11 +40,7 @@ function statusBadge(s: string) {
 
 function formatDate(d: string | null): string {
   if (!d) return '—'
-  try {
-    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-  } catch {
-    return d
-  }
+  try { return fmtDateUtil(d) } catch { return d }
 }
 
 // ── Striped placeholder ───────────────────────────────────────────────────────

@@ -9,6 +9,9 @@ import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { driverService } from '../../services/driverService'
 import type { Driver, DriverDocument, DriverWalletTransaction, DocType } from '../../services/driverService'
 import { catalogService } from '../../services/catalogService'
+import { kycService } from '../../services/kycService'
+import type { DocTypeItem } from '../../services/kycService'
+import { formatMoney, currencySymbol, formatDate } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -16,16 +19,6 @@ function getInitials(name: string): string {
   return name.split(' ').map(p => p[0] ?? '').join('').slice(0, 2).toUpperCase()
 }
 
-function formatMoney(minor: number): string {
-  const value = minor / 100
-  if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(2)} Cr`
-  if (value >= 100_000)    return `₹${(value / 100_000).toFixed(2)} L`
-  return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 function tenure(joinedAt: string): string {
   const diff = Date.now() - new Date(joinedAt).getTime()
@@ -33,11 +26,6 @@ function tenure(joinedAt: string): string {
   if (years >= 1) return `${years}y`
   const months = Math.floor(diff / (30.44 * 24 * 3600 * 1000))
   return `${months}mo`
-}
-
-const DOC_TYPE_LABELS: Record<string, string> = {
-  pan: 'PAN card', license: 'Driving licence', rc: 'Vehicle RC',
-  insurance: 'Insurance', permit: 'Permit', photo: 'Photo / Selfie',
 }
 
 // ── Reason modal ──────────────────────────────────────────────────────────────
@@ -133,31 +121,30 @@ interface DocActionState {
   action: 'approve' | 'reject' | 'reupload'
 }
 
-const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'pan',       label: 'PAN card' },
-  { value: 'license',   label: 'Driving licence' },
-  { value: 'rc',        label: 'Vehicle RC' },
-  { value: 'insurance', label: 'Insurance' },
-  { value: 'permit',    label: 'Permit' },
-  { value: 'photo',     label: 'Photo / Selfie' },
-]
-
 function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: ReturnType<typeof useNavigate> }) {
   const [docs, setDocs]           = useState<DriverDocument[]>([])
   const [loading, setLoading]     = useState(true)
   const [pending, setPending]     = useState<DocActionState | null>(null)
   const [apiError, setApiError]   = useState('')
+  const [docTypeOptions, setDocTypeOptions] = useState<DocTypeItem[]>([])
 
   // Add document form
   const [showAddForm, setShowAddForm]   = useState(false)
-  const [addForm, setAddForm]           = useState({ doc_type: 'pan', doc_number: '', expiry_date: '' })
+  const [addForm, setAddForm]           = useState({ doc_type: '', doc_number: '', expiry_date: '' })
   const [addError, setAddError]         = useState('')
   const [addSaving, setAddSaving]       = useState(false)
 
   useEffect(() => {
     setLoading(true)
-    driverService.getDocuments(driverId)
-      .then(data => setDocs(data.items))
+    Promise.all([
+      driverService.getDocuments(driverId),
+      kycService.getDocTypes(),
+    ])
+      .then(([docsData, types]) => {
+        setDocs(docsData.items)
+        setDocTypeOptions(types.driver)
+        setAddForm(f => ({ ...f, doc_type: types.driver[0]?.key ?? '' }))
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [driverId])
@@ -174,7 +161,7 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
       // Optimistic update — show the new doc immediately without waiting for reload
       setDocs(prev => [...prev, created])
       setShowAddForm(false)
-      setAddForm({ doc_type: 'pan', doc_number: '', expiry_date: '' })
+      setAddForm({ doc_type: docTypeOptions[0]?.key ?? '', doc_number: '', expiry_date: '' })
       // Background reload to sync server state (fire-and-forget; optimistic update stays on failure)
       driverService.getDocuments(driverId)
         .then(data => setDocs(data.items))
@@ -249,7 +236,7 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
                   padding: '0 10px', fontSize: 13, color: 'var(--ink)', cursor: 'pointer', outline: 'none',
                 }}
               >
-                {DOC_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {docTypeOptions.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
             </div>
             <div className="field">
@@ -290,7 +277,7 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
             }}>
               <span className={`dot ${statusDot(doc.status)}`} style={{ flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, color: 'var(--ink)' }}>{DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}</div>
+                <div style={{ fontSize: 13.5, color: 'var(--ink)' }}>{(docTypeOptions.find(o => o.key === doc.doc_type)?.label ?? doc.doc_type)}</div>
                 <div className="t-meta" style={{ marginTop: 3 }}>
                   {doc.doc_number ?? '—'}
                   {doc.expiry_date ? ` · Expires ${formatDate(doc.expiry_date)}` : ''}
@@ -324,10 +311,10 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
           title={pending.action === 'approve' ? 'Approve document' : pending.action === 'reject' ? 'Reject document' : 'Request re-upload'}
           description={
             pending.action === 'approve'
-              ? `Approve the ${DOC_TYPE_LABELS[pending.doc.doc_type] ?? pending.doc.doc_type} document.`
+              ? `Approve the ${(docTypeOptions.find(o => o.key === pending.doc.doc_type)?.label ?? pending.doc.doc_type)} document.`
               : pending.action === 'reject'
-              ? `Reject the ${DOC_TYPE_LABELS[pending.doc.doc_type] ?? pending.doc.doc_type} document. The driver will be notified.`
-              : `Ask the driver to re-upload the ${DOC_TYPE_LABELS[pending.doc.doc_type] ?? pending.doc.doc_type}.`
+              ? `Reject the ${(docTypeOptions.find(o => o.key === pending.doc.doc_type)?.label ?? pending.doc.doc_type)} document. The driver will be notified.`
+              : `Ask the driver to re-upload the ${(docTypeOptions.find(o => o.key === pending.doc.doc_type)?.label ?? pending.doc.doc_type)}.`
           }
           confirmLabel={pending.action === 'approve' ? 'Approve' : pending.action === 'reject' ? 'Reject' : 'Send request'}
           variant={pending.action === 'reject' ? 'danger' : 'default'}
@@ -423,7 +410,7 @@ function WalletAdjustModal({ driverId, driverBalance, onClose, onSuccess }: Wall
             </div>
           </div>
           <div className="field">
-            <label className="field-label">Amount (₹)<span style={{ color: 'var(--danger)' }}> *</span></label>
+            <label className="field-label">Amount ({currencySymbol()})<span style={{ color: 'var(--danger)' }}> *</span></label>
             <div className="input">
               <input
                 type="number"
@@ -558,10 +545,17 @@ function OverviewTab({ driver, isMobile, onAdjustWallet }: { driver: Driver; isM
   const navigate = useNavigate()
   const isTablet  = useIsTablet()
   const [docs, setDocs] = useState<DriverDocument[]>([])
+  const [docTypeOptions, setDocTypeOptions] = useState<DocTypeItem[]>([])
 
   useEffect(() => {
-    driverService.getDocuments(driver.id)
-      .then(data => setDocs(data.items))
+    Promise.all([
+      driverService.getDocuments(driver.id),
+      kycService.getDocTypes(),
+    ])
+      .then(([docsData, types]) => {
+        setDocs(docsData.items)
+        setDocTypeOptions(types.driver)
+      })
       .catch(() => {})
   }, [driver.id])
 
@@ -669,7 +663,7 @@ function OverviewTab({ driver, isMobile, onAdjustWallet }: { driver: Driver; isM
                 <Icon name="shield" size={13} style={{ color: 'var(--accent)' }} />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13 }}>{DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}</div>
+                <div style={{ fontSize: 13 }}>{(docTypeOptions.find(o => o.key === doc.doc_type)?.label ?? doc.doc_type)}</div>
                 <div className="t-meta" style={{ marginTop: 2 }}>
                   {doc.doc_number ?? '—'}
                   {doc.expiry_date ? ` · until ${formatDate(doc.expiry_date)}` : ''}

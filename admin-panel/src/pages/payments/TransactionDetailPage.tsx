@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { paymentsService } from '../../services/paymentsService'
 import type { PaymentDetail } from '../../services/paymentsService'
+import { formatMoney, useFormatMoney, formatDateTime, currencySymbol } from '../../lib/utils'
 
 function statusBadge(s: string) {
   switch (s) {
@@ -22,8 +23,8 @@ function statusBadge(s: string) {
 
 function fmtAmt(v: number): string {
   if (v === 0) return '—'
-  if (v < 0) return '−₹' + Math.abs(v).toLocaleString('en-IN')
-  return '₹' + v.toLocaleString('en-IN')
+  if (v < 0) return '−' + formatMoney(Math.abs(v) * 100)
+  return formatMoney(v * 100)
 }
 
 export default function TransactionDetailPage() {
@@ -95,7 +96,7 @@ export default function TransactionDetailPage() {
     )
   }
 
-  const subtitle = `${txn.status} · ${txn.method} · ₹${txn.gross_amount.toLocaleString('en-IN')} · ${new Date(txn.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} IST`
+  const subtitle = `${txn.status} · ${txn.method} · ${formatMoney(txn.gross_amount * 100)} · ${formatDateTime(txn.created_at)}`
 
   const actions = (
     <>
@@ -275,7 +276,7 @@ export default function TransactionDetailPage() {
               </div>
               {refundType === 'partial' && (
                 <div className="field">
-                  <label className="field-label">Amount (₹)</label>
+                  <label className="field-label">Amount ({currencySymbol()})</label>
                   <input
                     className="input"
                     type="number"
@@ -316,9 +317,9 @@ export default function TransactionDetailPage() {
               }}>
                 <Icon name="alert" size={16} style={{ color: 'var(--warn)', flexShrink: 0, marginTop: 1 }} />
                 <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-                  ₹{refundAmtValue.toLocaleString('en-IN')} of ₹{txn.gross_amount.toLocaleString('en-IN')} will be refunded to{' '}
+                  {formatMoney(refundAmtValue * 100)} of {formatMoney(txn.gross_amount * 100)} will be refunded to{' '}
                   <span className="t-mono">{txn.vpa ?? txn.instrument.display}</span>.
-                  {txn.gateway_fee > 0 && ` Gateway fee (₹${txn.gateway_fee.toLocaleString('en-IN')}) is not returned.`}
+                  {txn.gateway_fee > 0 && ` Gateway fee (${formatMoney(txn.gateway_fee * 100)}) is not returned.`}
                 </div>
               </div>
             )}
@@ -330,7 +331,7 @@ export default function TransactionDetailPage() {
                 disabled={!refundReason || (refundType === 'partial' && !refundAmount)}
                 onClick={() => setShowConfirm(true)}
               >
-                Confirm refund{refundAmtValue > 0 ? ` · ₹${refundAmtValue.toLocaleString('en-IN')}` : ''}
+                Confirm refund{refundAmtValue > 0 ? ` · ${formatMoney(refundAmtValue * 100)}` : ''}
               </button>
             </div>
           </div>
@@ -340,7 +341,7 @@ export default function TransactionDetailPage() {
       <ConfirmDialog
         open={showConfirm}
         title="Confirm refund"
-        description={`₹${refundAmtValue.toLocaleString('en-IN')} will be refunded to ${txn.vpa ?? txn.instrument.display}. This action cannot be undone.`}
+        description={`${formatMoney(refundAmtValue * 100)} will be refunded to ${txn.vpa ?? txn.instrument.display}. This action cannot be undone.`}
         confirmLabel="Confirm refund"
         variant="default"
         loading={refunding}

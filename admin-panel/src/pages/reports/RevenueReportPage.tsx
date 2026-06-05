@@ -5,26 +5,27 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { reportsService } from '../../services/reportsService'
 import type { ReportTemplate } from '../../services/reportsService'
+import { formatDate, useCurrencySymbol } from '../../lib/utils'
 
 // Static sample data matching the spec (real data comes from warehouse ETL in production)
 const MONTHS = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
 const GROSS = [3.6, 3.9, 4.1, 4.4, 4.6, 4.82]
 const NET = [0.88, 0.95, 1.01, 1.08, 1.13, 1.18]
 
-const BY_SERVICE = [
-  { label: 'Sedan & XL', pct: 41, amt: '₹ 1.98 Cr' },
-  { label: 'Air · charter', pct: 28, amt: '₹ 1.35 Cr' },
-  { label: 'Bike & auto', pct: 16, amt: '₹ 0.77 Cr' },
-  { label: 'Air · shuttle', pct: 9, amt: '₹ 0.43 Cr' },
-  { label: 'Outstation', pct: 6, amt: '₹ 0.29 Cr' },
+const BY_SERVICE_RAW = [
+  { label: 'Sedan & XL',    pct: 41, amt: '1.98 Cr' },
+  { label: 'Air · charter', pct: 28, amt: '1.35 Cr' },
+  { label: 'Bike & auto',   pct: 16, amt: '0.77 Cr' },
+  { label: 'Air · shuttle', pct: 9,  amt: '0.43 Cr' },
+  { label: 'Outstation',    pct: 6,  amt: '0.29 Cr' },
 ]
 
-const BY_CITY = [
-  { city: 'Bengaluru', gross: '₹ 1.62 Cr', net: '₹ 41.2 L', trips: '486 K', avg: '₹ 333', rate: '25.4%', mom: '+5.1%', up: true },
-  { city: 'Mumbai', gross: '₹ 1.18 Cr', net: '₹ 28.9 L', trips: '342 K', avg: '₹ 345', rate: '24.5%', mom: '+4.2%', up: true },
-  { city: 'Delhi NCR', gross: '₹ 0.94 Cr', net: '₹ 22.1 L', trips: '281 K', avg: '₹ 334', rate: '23.5%', mom: '+3.8%', up: true },
-  { city: 'Hyderabad', gross: '₹ 0.61 Cr', net: '₹ 14.8 L', trips: '188 K', avg: '₹ 324', rate: '24.3%', mom: '+6.4%', up: true },
-  { city: 'Chennai', gross: '₹ 0.47 Cr', net: '₹ 11.0 L', trips: '146 K', avg: '₹ 322', rate: '23.4%', mom: '−1.2%', up: false },
+const BY_CITY_RAW = [
+  { city: 'Bengaluru', gross: '1.62 Cr', net: '41.2 L', trips: '486 K', avg: '333', rate: '25.4%', mom: '+5.1%', up: true },
+  { city: 'Mumbai',    gross: '1.18 Cr', net: '28.9 L', trips: '342 K', avg: '345', rate: '24.5%', mom: '+4.2%', up: true },
+  { city: 'Delhi NCR', gross: '0.94 Cr', net: '22.1 L', trips: '281 K', avg: '334', rate: '23.5%', mom: '+3.8%', up: true },
+  { city: 'Hyderabad', gross: '0.61 Cr', net: '14.8 L', trips: '188 K', avg: '324', rate: '24.3%', mom: '+6.4%', up: true },
+  { city: 'Chennai',   gross: '0.47 Cr', net: '11.0 L', trips: '146 K', avg: '322', rate: '23.4%', mom: '−1.2%', up: false },
 ]
 
 export default function RevenueReportPage() {
@@ -32,6 +33,9 @@ export default function RevenueReportPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
+  const sym = useCurrencySymbol()
+  const BY_SERVICE = BY_SERVICE_RAW.map(r => ({ ...r, amt: `${sym} ${r.amt}` }))
+  const BY_CITY = BY_CITY_RAW.map(r => ({ ...r, gross: `${sym} ${r.gross}`, net: `${sym} ${r.net}`, avg: `${sym} ${r.avg}` }))
 
   const [template, setTemplate] = useState<ReportTemplate | null>(null)
   const [loading, setLoading] = useState(true)
@@ -80,7 +84,7 @@ export default function RevenueReportPage() {
       activeId="reports"
       breadcrumb={`Finance · Reports · ${title}`}
       title={title}
-      subtitle={`Generated ${new Date().toLocaleDateString('en-IN')} · last 6 months · all services`}
+      subtitle={`Generated ${formatDate(new Date().toISOString())} · last 6 months · all services`}
       actions={
         <>
           <button className="btn sm" onClick={() => navigate('/reports')}>← Library</button>
@@ -104,11 +108,11 @@ export default function RevenueReportPage() {
         {!isMobile && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: isTablet ? 'repeat(3, 1fr)' : 'repeat(5, 1fr)' }}>
             {[
-              ['Gross volume', '₹ 4.82 Cr', '+4.8% MoM', 'var(--accent)'],
-              ['Net revenue', '₹ 1.18 Cr', 'Take-rate 24.5%', 'var(--ink-2)'],
+              ['Gross volume', `${sym} 4.82 Cr`, '+4.8% MoM', 'var(--accent)'],
+              ['Net revenue', `${sym} 1.18 Cr`, 'Take-rate 24.5%', 'var(--ink-2)'],
               ['Completed trips', '1.42 M', '+6.1% MoM', 'var(--accent)'],
-              ['Avg fare', '₹ 339', '+1.2% MoM', 'var(--ink-2)'],
-              ['Contribution', '₹ 46 L', 'After incentives', 'var(--accent)'],
+              ['Avg fare', `${sym} 339`, '+1.2% MoM', 'var(--ink-2)'],
+              ['Contribution', `${sym} 46 L`, 'After incentives', 'var(--accent)'],
             ].map(([k, v, m, c], i) => (
               <div key={k as string} style={{ padding: '18px 22px', borderRight: i < 4 ? '1px solid var(--rule)' : 'none' }}>
                 <div className="t-label" style={{ padding: 0 }}>{k}</div>
@@ -126,7 +130,7 @@ export default function RevenueReportPage() {
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div className="t-label">Gross vs net revenue</div>
-                <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>6-month trend · ₹ crore</h3>
+                <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>6-month trend · {sym} crore</h3>
               </div>
               <div style={{ display: 'flex', gap: 16 }}>
                 <span className="t-meta">

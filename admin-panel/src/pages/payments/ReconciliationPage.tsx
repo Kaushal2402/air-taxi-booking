@@ -5,11 +5,11 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { paymentsService } from '../../services/paymentsService'
 import type { GatewaySummary, BatchItem, UnmatchedItem, ReconciliationSummaryResponse } from '../../services/paymentsService'
+import { formatMoney, useFormatMoney, formatDateTime, formatDateTimeCompact } from '../../lib/utils'
 
-const fmt = (n: number) => '₹' + n.toLocaleString('en-IN')
 
 // ── CSV export helper ──────────────────────────────────────────────────────────
-function downloadCSV(rows: BatchItem[], summary: ReconciliationSummaryResponse, filename: string) {
+function downloadCSV(rows: BatchItem[], summary: ReconciliationSummaryResponse, filename: string, fmt: (n: number) => string) {
   const lines: string[] = []
   // Summary header
   lines.push(`"Settlement Reconciliation Statement"`)
@@ -34,7 +34,7 @@ function downloadCSV(rows: BatchItem[], summary: ReconciliationSummaryResponse, 
   rows.forEach(b => {
     lines.push([
       `"${b.id}"`, `"${b.gateway}"`,
-      `"${new Date(b.settlement_date).toLocaleString('en-IN')}"`,
+      `"${formatDateTime(b.settlement_date)}"`,
       b.transaction_count, b.amount, b.matched_count, `"${b.status}"`,
     ].join(','))
   })
@@ -86,6 +86,7 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function ReconciliationPage() {
+  const fmt = useFormatMoney()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
 
@@ -152,7 +153,7 @@ export default function ReconciliationPage() {
   const handleStatement = () => {
     if (!summary) return
     const date = new Date().toISOString().split('T')[0]
-    downloadCSV(batches, summary, `settlement-statement-${date}.csv`)
+    downloadCSV(batches, summary, `settlement-statement-${date}.csv`, fmt)
   }
 
   const subtitle = summary
@@ -219,7 +220,7 @@ export default function ReconciliationPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid var(--rule-soft)' }}>
                   <span className="t-meta">Variance</span>
                   <span className="t-mono" style={{ fontSize: 12.5, color: g.variance < 0 ? 'var(--danger)' : 'var(--accent)' }}>
-                    {g.variance === 0 ? '₹0' : '−' + fmt(Math.abs(g.variance))}
+                    {g.variance === 0 ? fmt(0) : '−' + fmt(Math.abs(g.variance))}
                   </span>
                 </div>
               </div>
@@ -269,7 +270,7 @@ export default function ReconciliationPage() {
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span className="t-mono" style={{ fontSize: 12 }}>{b.id}</span>
-                          <span className="t-meta">{new Date(b.settlement_date).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="t-meta">{formatDateTimeCompact(b.settlement_date)}</span>
                         </div>
                       </td>
                       <td style={{ fontSize: 12.5 }}>{b.gateway}</td>

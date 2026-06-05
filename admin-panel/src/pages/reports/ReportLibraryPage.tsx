@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { reportsService } from '../../services/reportsService'
 import type { ReportTemplate, ReportSchedule, ReportExport } from '../../services/reportsService'
+import { formatTimeHM } from '../../lib/utils'
 
 export default function ReportLibraryPage() {
   const navigate = useNavigate()
@@ -176,7 +177,7 @@ export default function ReportLibraryPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13 }}>{exp.name}</div>
                     <div className="t-meta" style={{ marginTop: 2 }}>
-                      {exp.format.toUpperCase()}{exp.file_size_kb ? ` · ${exp.file_size_kb} KB` : ''} · {new Date(exp.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      {exp.format.toUpperCase()}{exp.file_size_kb ? ` · ${exp.file_size_kb} KB` : ''} · {formatTimeHM(exp.created_at)}
                     </div>
                   </div>
                   {exp.status === 'done'

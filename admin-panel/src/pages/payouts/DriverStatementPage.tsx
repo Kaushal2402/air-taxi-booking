@@ -6,10 +6,12 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { payoutsService } from '../../services/payoutsService'
 import type { PayoutPayee } from '../../services/payoutsService'
+import { useFormatMoney, useCurrencySymbol, formatDateTime } from '../../lib/utils'
 
-const fmtINR = (n: number) => '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
 
 export default function DriverStatementPage() {
+  const fmtINR = useFormatMoney()
+  const sym = useCurrencySymbol()
   const { payeeId } = useParams<{ payeeId: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -238,7 +240,7 @@ export default function DriverStatementPage() {
               {payee.paid_at && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
                   <span style={{ fontSize: 13 }}>Settled at</span>
-                  <span className="t-meta">{new Date(payee.paid_at).toLocaleString('en-IN')}</span>
+                  <span className="t-meta">{formatDateTime(payee.paid_at)}</span>
                 </div>
               )}
             </div>
@@ -282,7 +284,7 @@ export default function DriverStatementPage() {
               <input className="input" style={{ width: '100%', height: 36, padding: '0 10px' }} placeholder="e.g. Fuel advance recovery" value={adjDesc} onChange={e => setAdjDesc(e.target.value)} />
             </div>
             <div className="field" style={{ marginBottom: 16 }}>
-              <div className="field-label">Amount (₹)</div>
+              <div className="field-label">Amount ({sym})</div>
               <input className="input" type="number" min="0" style={{ width: '100%', height: 36, padding: '0 10px' }} placeholder="0" value={adjAmount} onChange={e => setAdjAmount(e.target.value)} />
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

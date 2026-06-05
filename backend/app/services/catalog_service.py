@@ -77,7 +77,8 @@ async def update_vehicle_class(db: AsyncSession, id: str, updates: dict):
     updates.pop("code", None)
     if updates:
         await repo.update_vehicle_class(id, updates)
-    await db.refresh(obj)
+        await db.commit()
+        await db.refresh(obj)
     return obj
 
 
@@ -113,7 +114,8 @@ async def update_aircraft_type(db: AsyncSession, id: str, updates: dict):
     updates.pop("code", None)
     if updates:
         await repo.update_aircraft_type(id, updates)
-    await db.refresh(obj)
+        await db.commit()
+        await db.refresh(obj)
     return obj
 
 
@@ -156,7 +158,8 @@ async def update_service_zone(db: AsyncSession, id: str, updates: dict):
             raise ValidationException(result["message"])
     if updates:
         await repo.update_service_zone(id, updates)
-    await db.refresh(obj)
+        await db.commit()
+        await db.refresh(obj)
     return obj
 
 
@@ -166,6 +169,7 @@ async def publish_service_zone(db: AsyncSession, id: str):
     if not obj:
         raise NotFoundException("ServiceZone")
     await repo.publish_service_zone(id)
+    await db.commit()
     await db.refresh(obj)
     return obj
 
@@ -198,7 +202,8 @@ async def update_air_route(db: AsyncSession, id: str, updates: dict):
     updates.pop("code", None)
     if updates:
         await repo.update_air_route(id, updates)
-    await db.refresh(obj)
+        await db.commit()
+        await db.refresh(obj)
     return obj
 
 

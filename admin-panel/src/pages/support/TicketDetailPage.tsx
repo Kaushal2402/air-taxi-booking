@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import { supportService } from '../../services/supportService'
 import type { TicketDetail, TicketMessage } from '../../services/supportService'
+import { formatDateTime } from '../../lib/utils'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 
 const RESOLUTION_CODES = [
@@ -142,7 +143,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
           marginBottom: 4,
           textAlign: isAdmin ? 'right' : 'left',
         }}>
-          {msg.author_name} · {msg.author_role} · {new Date(msg.created_at).toLocaleString()}
+          {msg.author_name} · {msg.author_role} · {formatDateTime(msg.created_at)}
         </div>
         <div style={{
           background: isAdmin ? 'var(--accent, #0F8A5F)' : 'var(--surface)',
@@ -470,11 +471,11 @@ export default function TicketDetailPage() {
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 12 }}>TICKET DETAILS</div>
             {[
               { label: 'Ticket ref', value: ticket.ticket_ref },
-              { label: 'Opened', value: new Date(ticket.created_at).toLocaleString() },
+              { label: 'Opened', value: formatDateTime(ticket.created_at) },
               { label: 'Category', value: ticket.category.replace(/_/g, ' ') },
               { label: 'Priority', value: priorityBadge(ticket.priority) },
               { label: 'Status', value: statusBadge(ticket.status) },
-              { label: 'SLA due', value: ticket.sla_due_at ? new Date(ticket.sla_due_at).toLocaleString() : '—' },
+              { label: 'SLA due', value: ticket.sla_due_at ? formatDateTime(ticket.sla_due_at) : '—' },
             ].map(item => (
               <div key={item.label} style={{
                 display: 'flex',

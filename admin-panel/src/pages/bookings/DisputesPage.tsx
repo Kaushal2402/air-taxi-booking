@@ -3,14 +3,11 @@ import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { bookingsService } from '../../services/bookingsService'
-import type {
-  DisputeListItem,
-  ResolveDisputeBody,
-} from '../../services/bookingsService'
+import type { DisputeListItem, ResolveDisputeBody } from '../../services/bookingsService'
+import { useFormatMoney } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 function formatAge(iso: string): string {
   try {
@@ -199,6 +196,7 @@ function ResolutionPanel({ dispute, onResolve }: ResolutionPanelProps) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DisputesPage() {
+  const fmtMinor = useFormatMoney()
   const isMobile = useIsMobile()
 
   const [disputes, setDisputes] = useState<DisputeListItem[]>([])

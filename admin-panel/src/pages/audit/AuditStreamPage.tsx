@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { auditService } from '../../services/auditService'
 import type { AuditEventSummary, AuditStats } from '../../services/auditService'
+import { formatTime } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -123,41 +124,6 @@ export default function AuditStreamPage() {
       subtitle={`Immutable · ${stats?.events_total?.toLocaleString() ?? '…'} events · 90-day hot retention`}
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* Time window dropdown */}
-          <div ref={timeDropdownRef} style={{ position: 'relative' }}>
-            <button
-              className="btn sm"
-              onClick={() => setShowTimeDropdown(v => !v)}
-            >
-              <Icon name="filter" size={13} />
-              Last {timeWindow}
-              <Icon name="chevDown" size={11} />
-            </button>
-            {showTimeDropdown && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                background: 'var(--surface)', border: '1px solid var(--rule)',
-                borderRadius: 4, boxShadow: 'var(--shadow-pop)', zIndex: 50,
-                minWidth: 100, padding: '4px 0',
-              }}>
-                {TIME_WINDOWS.map(w => (
-                  <button
-                    key={w}
-                    onClick={() => { setTimeWindow(w); setPage(1); setShowTimeDropdown(false) }}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '7px 14px', fontSize: 13, border: 'none',
-                      background: timeWindow === w ? 'var(--accent-soft)' : 'transparent',
-                      color: timeWindow === w ? 'var(--accent)' : 'var(--ink)',
-                      cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                    }}
-                  >
-                    Last {w}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <button className="btn sm" onClick={() => navigate('/audit/security')}>
             <Icon name="shield" size={13} />
             Security
@@ -255,6 +221,41 @@ export default function AuditStreamPage() {
               onChange={e => { setSearch(e.target.value); setPage(1) }}
             />
           </div>
+          {/* Time window — rendered in page flow so dropdown is never clipped */}
+          <div ref={timeDropdownRef} style={{ position: 'relative' }}>
+            <button
+              className="btn sm"
+              onClick={() => setShowTimeDropdown(v => !v)}
+            >
+              <Icon name="filter" size={13} />
+              Last {timeWindow}
+              <Icon name="chevDown" size={11} />
+            </button>
+            {showTimeDropdown && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', left: 0,
+                background: 'var(--surface)', border: '1px solid var(--rule)',
+                borderRadius: 4, boxShadow: 'var(--shadow-pop)', zIndex: 200,
+                minWidth: 110, padding: '4px 0',
+              }}>
+                {TIME_WINDOWS.map(w => (
+                  <button
+                    key={w}
+                    onClick={() => { setTimeWindow(w); setPage(1); setShowTimeDropdown(false) }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '7px 14px', fontSize: 13, border: 'none',
+                      background: timeWindow === w ? 'var(--accent-soft)' : 'transparent',
+                      color: timeWindow === w ? 'var(--accent)' : 'var(--ink)',
+                      cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    Last {w}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {/* Category chip */}
           <div className="input" style={{ height: 32, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
             <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Category:</span>
@@ -316,7 +317,7 @@ export default function AuditStreamPage() {
                     >
                       <td>
                         <span className="t-mono" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                          {new Date(e.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          {formatTime(e.timestamp)}
                         </span>
                       </td>
                       <td>

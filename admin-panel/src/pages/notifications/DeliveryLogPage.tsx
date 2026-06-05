@@ -4,6 +4,7 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { notificationsService } from '../../services/notificationsService'
 import type { NotificationLog, NotificationStats } from '../../services/notificationsService'
+import { formatTime } from '../../lib/utils'
 
 const CHAN_LABELS: Record<string, string> = {
   push: 'Push', sms: 'SMS', email: 'Email', wa: 'WhatsApp',
@@ -145,7 +146,7 @@ export default function DeliveryLogPage() {
                       {logs.map(l => (
                         <tr key={l.id}>
                           <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
-                            {new Date(l.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            {formatTime(l.created_at)}
                           </td>
                           <td style={{ fontSize: 12.5 }}>{l.template_name}</td>
                           <td>

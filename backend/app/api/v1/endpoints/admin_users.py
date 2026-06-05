@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.config import get_settings
 from app.database import get_db
@@ -15,6 +15,7 @@ from app.schemas.auth import AdminUserResponse, AdminSessionResponse
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.core.security import hash_password
+from app.services import audit_service
 from pydantic import BaseModel, EmailStr
 import secrets
 
@@ -60,6 +61,7 @@ async def list_admins(
 @router.post("/invite", response_model=AdminUserResponse, status_code=201)
 async def invite_admin(
     body: InviteAdminRequest,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -106,6 +108,20 @@ async def invite_admin(
     except Exception as exc:
         logger.exception("Failed to send invite email to %s: %s", body.email, exc)
 
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.invited",
+            target=f"admin:{user.id} ({body.email}, role={body.role})",
+            category="Admin",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"email": body.email, "role": body.role, "name": body.name},
+        )
+    except Exception:
+        pass
     return user
 
 
@@ -165,6 +181,7 @@ async def get_admin(
 async def update_admin(
     user_id: str,
     body: UpdateAdminRequest,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -176,17 +193,34 @@ async def update_admin(
     from sqlalchemy import update as sa_update
     from app.models.admin_user import AdminUser as M
 
+    before_data = {"name": user.name, "role": user.role, "status": user.status}
     values = {k: v for k, v in body.model_dump().items() if v is not None}
     if values:
         await db.execute(sa_update(M).where(M.id == user_id).values(**values))
         for k, v in values.items():
             setattr(user, k, v)
+        try:
+            await audit_service.log_event(
+                db,
+                actor_name=current_user.email,
+                actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+                action="admin_user.updated",
+                target=f"admin:{user_id}",
+                category="Admin",
+                severity="high",
+                source_ip=request.client.host if request.client else None,
+                before_data=before_data,
+                after_data=values,
+            )
+        except Exception:
+            pass
     return user
 
 
 @router.post("/{user_id}/suspend", response_model=AdminUserResponse)
 async def suspend_admin(
     user_id: str,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -202,15 +236,28 @@ async def suspend_admin(
     from sqlalchemy import update as sa_update
     from app.models.admin_user import AdminUser as M
     await db.execute(sa_update(M).where(M.id == user_id).values(status="suspended"))
-    # Immediately revoke all active sessions
     await repo.revoke_all_sessions(user_id)
     await db.refresh(user)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.suspended",
+            target=f"admin:{user_id}",
+            category="Admin",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return user
 
 
 @router.post("/{user_id}/reactivate", response_model=AdminUserResponse)
 async def reactivate_admin(
     user_id: str,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -227,12 +274,26 @@ async def reactivate_admin(
     from app.models.admin_user import AdminUser as M
     await db.execute(sa_update(M).where(M.id == user_id).values(status="active"))
     await db.refresh(user)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.reactivated",
+            target=f"admin:{user_id}",
+            category="Admin",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return user
 
 
 @router.post("/{user_id}/force-logout", response_model=MessageResponse)
 async def force_logout_admin(
     user_id: str,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -243,12 +304,26 @@ async def force_logout_admin(
     if not user:
         raise NotFoundException("AdminUser")
     await repo.revoke_all_sessions(user_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.force_logout",
+            target=f"admin:{user_id}",
+            category="Security",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="All sessions revoked — user will be signed out on next request")
 
 
 @router.post("/{user_id}/reset-2fa", response_model=MessageResponse)
 async def reset_2fa(
     user_id: str,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -266,12 +341,26 @@ async def reset_2fa(
     from sqlalchemy import delete as sa_delete
     from app.models.admin_backup_code import AdminBackupCode
     await db.execute(sa_delete(AdminBackupCode).where(AdminBackupCode.admin_user_id == user_id))
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.2fa_reset",
+            target=f"admin:{user_id}",
+            category="Security",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="2FA has been reset — the user must re-enroll on next login")
 
 
 @router.delete("/{user_id}", response_model=MessageResponse)
 async def delete_admin(
     user_id: str,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
@@ -287,7 +376,23 @@ async def delete_admin(
     from datetime import datetime, timezone
     from sqlalchemy import update as sa_update
     from app.models.admin_user import AdminUser as M
+    deleted_name = user.name
+    deleted_email = user.email
     await db.execute(sa_update(M).where(M.id == user_id).values(deleted_at=datetime.now(timezone.utc)))
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.deleted",
+            target=f"admin:{user_id} ({deleted_email})",
+            category="Admin",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            before_data={"name": deleted_name, "email": deleted_email},
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Admin user deleted")
 
 
@@ -316,11 +421,25 @@ async def get_admin_sessions(
 @router.delete("/{user_id}/sessions", response_model=MessageResponse)
 async def revoke_all_admin_sessions(
     user_id: str,
+    request: Request,
     current_user: AdminUser = Depends(require_role("super_admin")),
     db=Depends(get_db),
 ):
     repo = AdminUserRepository(db)
     await repo.revoke_all_sessions(user_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="admin_user.sessions_revoked",
+            target=f"admin:{user_id}",
+            category="Security",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="All sessions revoked")
 
 

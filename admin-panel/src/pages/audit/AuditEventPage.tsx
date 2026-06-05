@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { auditService } from '../../services/auditService'
 import type { AuditEventDetail } from '../../services/auditService'
+import { formatDateTimeS, formatDateTime, formatTime } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ export default function AuditEventPage() {
 
   const metaRows = event ? [
     ['Event ID',   event.event_code,  true],
-    ['Timestamp',  new Date(event.timestamp).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }), false],
+    ['Timestamp',  formatDateTimeS(event.timestamp), false],
     ['Actor',      `${event.actor_name} · ${event.actor_role}`, false],
     ['Action',     event.action,      true],
     ['Target',     event.target,      false],
@@ -166,7 +167,7 @@ export default function AuditEventPage() {
       activeId="audit"
       breadcrumb="System · Audit log · Event"
       title={event.action}
-      subtitle={`${event.event_code} · ${event.severity} severity · ${new Date(event.timestamp).toLocaleString('en-GB')} · ${event.actor_name}`}
+      subtitle={`${event.event_code} · ${event.severity} severity · ${formatDateTime(event.timestamp)} · ${event.actor_name}`}
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button className="btn sm" onClick={() => navigate('/audit')}>
@@ -330,7 +331,7 @@ export default function AuditEventPage() {
                           {se.action}
                         </span>
                         <span className="t-meta" style={{ flexShrink: 0 }}>
-                          {new Date(se.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          {formatTime(se.timestamp)}
                         </span>
                       </div>
                       <div className="t-meta" style={{ marginTop: 2 }}>{se.description}</div>

@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { notificationsService } from '../../services/notificationsService'
 import type { NotificationTemplate } from '../../services/notificationsService'
+import { useCurrencySymbol } from '../../lib/utils'
 
 const CHAN_LABELS: Record<string, string> = {
   push: 'Push', sms: 'SMS', email: 'Email', wa: 'WhatsApp',
@@ -17,6 +18,7 @@ export default function TemplateEditorPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
+  const sym = useCurrencySymbol()
 
   const [template, setTemplate] = useState<NotificationTemplate | null>(null)
   const [draft, setDraft] = useState<Partial<NotificationTemplate>>({})
@@ -70,7 +72,7 @@ export default function TemplateEditorPage() {
     .replace('{{eta}}', '2 min')
     .replace('{{plate}}', 'KA 01 AB 4521')
     .replace('{{otp}}', '4821')
-    .replace('{{fare}}', '₹ 142')
+    .replace('{{fare}}', `${sym} 142`)
 
   const previewTitle = (draft.push_title ?? '')
     .replace('{{customer_name}}', 'Priya')
@@ -79,7 +81,7 @@ export default function TemplateEditorPage() {
     .replace('{{eta}}', '2 min')
     .replace('{{plate}}', 'KA 01 AB 4521')
     .replace('{{otp}}', '4821')
-    .replace('{{fare}}', '₹ 142')
+    .replace('{{fare}}', `${sym} 142`)
 
   if (loading) {
     return (
@@ -333,7 +335,7 @@ export default function TemplateEditorPage() {
                     .replace('{{eta}}', '2 min')
                     .replace('{{plate}}', 'KA01AB4521')
                     .replace('{{otp}}', '4821')
-                    .replace('{{fare}}', '₹ 142') || '(No SMS body)'}
+                    .replace('{{fare}}', `${sym} 142`) || '(No SMS body)'}
                 </div>
               )}
 

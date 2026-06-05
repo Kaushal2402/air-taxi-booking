@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -19,7 +19,7 @@ from app.schemas.payments import (
     ResolveAllResponse,
     UnmatchedResponse,
 )
-from app.services import payments_service
+from app.services import payments_service, audit_service
 
 router = APIRouter()
 
@@ -57,10 +57,26 @@ async def list_transactions(
 @router.post("", response_model=ManualEntryResponse, status_code=201)
 async def create_manual_entry(
     body: ManualEntryRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payments_service.create_manual_entry(db, body)
+    result = await payments_service.create_manual_entry(db, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payment.manual_entry_created",
+            target=f"payment:{result.id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Booking search (for manual entry auto-fill) — BEFORE /{txn_id} ───────────
@@ -108,18 +124,48 @@ async def list_unmatched_items(
 
 @router.post("/reconciliation/rerun", response_model=RerunMatchResponse)
 async def rerun_match(
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payments_service.rerun_match(db)
+    result = await payments_service.rerun_match(db)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payment.reconciliation_rerun",
+            target="reconciliation:all",
+            category="Finance",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/reconciliation/resolve-all", response_model=ResolveAllResponse)
 async def resolve_all_unmatched(
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await payments_service.resolve_all_unmatched(db)
+    result = await payments_service.resolve_all_unmatched(db)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payment.resolve_all_unmatched",
+            target="reconciliation:unmatched",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Single transaction (must be AFTER /reconciliation/* routes) ───────────────
@@ -140,10 +186,25 @@ async def get_transaction(
 async def issue_refund(
     txn_id: str,
     body: RefundRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     result = await payments_service.issue_refund(db, txn_id, body)
     if not result:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="payment.refund_issued",
+            target=f"payment:{txn_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
     return result

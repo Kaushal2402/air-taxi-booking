@@ -7,6 +7,7 @@ import { vehicleService } from '../../services/vehicleService'
 import type { Vehicle, VehicleStatus, VehicleDocStatus } from '../../services/vehicleService'
 import { catalogService } from '../../services/catalogService'
 import type { VehicleClass } from '../../services/catalogService'
+import { getUserTimezone } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -904,7 +905,7 @@ export default function VehicleDirectoryPage() {
                   <span style={{ color: 'var(--ink-2)' }}>{total.toLocaleString()}</span>
                 </div>
                 <div className="t-meta" style={{ color: 'var(--ink-4)' }}>
-                  Expiry job runs daily at 02:00 IST · auto-grounds on expiry
+                  Expiry job runs daily at 02:00 {getUserTimezone()} · auto-grounds on expiry
                 </div>
               </div>
               {total > 25 && (

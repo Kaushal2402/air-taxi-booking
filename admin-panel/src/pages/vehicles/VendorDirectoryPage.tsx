@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { vehicleService } from '../../services/vehicleService'
 import type { Vendor, VendorStatus } from '../../services/vehicleService'
+import { formatMonthYear, useCurrencySymbol } from '../../lib/utils'
 
 // ── Vendor Detail / Edit modal ────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ function VendorDetailModal({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+  return formatMonthYear(iso)
 }
 
 function getInitials(name: string): string {
@@ -385,6 +386,7 @@ export default function VendorDirectoryPage() {
   const navigate = useNavigate()
   const isMobile  = useIsMobile()
   const isTablet  = useIsTablet()
+  const sym = useCurrencySymbol()
 
   const [vendors, setVendors]     = useState<Vendor[]>([])
   const [totalFleet, setTotalFleet] = useState(0)
@@ -541,7 +543,7 @@ export default function VendorDirectoryPage() {
             { l: 'Active vendors',       v: String(activeVendors.length),             m: `${vendors.length} total`,                                          tone: 'var(--ink)' },
             { l: 'Fleet share',          v: fleetSharePct,                             m: `${totalVehicles} vehicles · ${vendors.reduce((s,v)=>s+v.driver_count,0)} drv`, tone: 'var(--accent)' },
             { l: 'Top vendor share',     v: topVendorSharePct,                         m: topVendor ? `${topVendor.name} · ${topVendor.vehicle_count} veh` : '—',         tone: 'var(--ink-2)' },
-            { l: 'Vendor payouts · MTD', v: '₹—',                                      m: 'Payouts module coming soon',                                                   tone: 'var(--ink)' },
+            { l: 'Vendor payouts · MTD', v: `${sym}—`,                                   m: 'Payouts module coming soon',                                                   tone: 'var(--ink)' },
           ].map((s, i) => (
             <div key={s.l} style={{ padding: '20px 22px', borderRight: isMobile ? (i % 2 === 0 ? '1px solid var(--rule)' : 'none') : (i < 3 ? '1px solid var(--rule)' : 'none'), borderTop: isMobile && i >= 2 ? '1px solid var(--rule)' : 'none' }}>
               <div className="t-label" style={{ padding: 0 }}>{s.l}</div>

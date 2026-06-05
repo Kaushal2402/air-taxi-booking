@@ -6,16 +6,9 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { promotionsService } from '../../services/promotionsService'
 import type { Promotion, PromotionAnalytics, CreatePromotionBody, UpdatePromotionBody } from '../../services/promotionsService'
+import { useFormatMoney, useCurrencySymbol, formatDate } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-  } catch { return iso }
-}
 
 function budgetPct(p: Promotion): number {
   if (!p.total_budget_minor) return 0
@@ -80,6 +73,7 @@ interface NewPromoModalProps {
 }
 
 function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
+  const sym = useCurrencySymbol()
   const [form, setForm] = useState<CreatePromotionBody>({
     code: '',
     type: 'percent',
@@ -154,7 +148,7 @@ function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
               </div>
             </div>
             <div className="field">
-              <label className="field-label">Value {form.type === 'percent' ? '(%)' : '(₹ in paise)'}</label>
+              <label className="field-label">Value {form.type === 'percent' ? '(%)' : `(${sym} in paise)`}</label>
               <div className="input">
                 <input type="number" min={0} value={form.value} onChange={e => patch('value', Number(e.target.value))} />
               </div>
@@ -177,7 +171,7 @@ function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
           <div className="field">
             <label className="field-label">Total budget (paise) <span style={{ color: 'var(--danger)' }}>*</span></label>
             <div className="input">
-              <input type="number" min={0} value={form.total_budget_minor} onChange={e => patch('total_budget_minor', Number(e.target.value))} placeholder="e.g. 50000000 = ₹5 Lakh" />
+              <input type="number" min={0} value={form.total_budget_minor} onChange={e => patch('total_budget_minor', Number(e.target.value))} placeholder={`e.g. 50000000 = ${sym}5 Lakh`} />
             </div>
           </div>
         </div>
@@ -193,12 +187,13 @@ function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
 // ── Eligibility Preview ───────────────────────────────────────────────────────
 
 function EligibilityPreview({ draft }: { draft: UpdatePromotionBody & { code?: string } }) {
+  const fmtMinor = useFormatMoney()
   const { type, value, cap_minor, new_customers_only, segment } = draft
   const who = new_customers_only ? 'A new customer' : 'A customer'
   const discount = type === 'percent'
     ? `${value}% off`
-    : value != null ? `₹${(value / 100).toLocaleString('en-IN')} off` : 'a discount'
-  const cap = cap_minor ? `, up to ₹${(cap_minor / 100).toLocaleString('en-IN')}` : ', no cap'
+    : value != null ? `${fmtMinor(value)} off` : 'a discount'
+  const cap = cap_minor ? `, up to ${fmtMinor(cap_minor)}` : ', no cap'
   const segLabel = SEGMENT_OPTIONS.find(s => s.value === (segment ?? ''))?.label ?? 'all customers'
 
   return (
@@ -235,6 +230,8 @@ function EditorPanel({
   selected, draft, saving, statusPending, apiError, isMobile,
   patchDraft, onSave, onActivate, onPause, onRequestDelete, onBack,
 }: EditorPanelProps) {
+  const sym = useCurrencySymbol()
+  const fmtMinor = useFormatMoney()
   if (!selected) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', color: 'var(--ink-3)', fontSize: 13 }}>
@@ -315,7 +312,7 @@ function EditorPanel({
               </div>
             </div>
             <div className="field">
-              <label className="field-label">Value {draft.type === 'percent' ? '(%)' : '(₹ paise)'}</label>
+              <label className="field-label">Value {draft.type === 'percent' ? '(%)' : `(${sym} paise)`}</label>
               <div className="input">
                 <input type="number" min={0} value={draft.value ?? selected.value} onChange={e => patchDraft('value', Number(e.target.value))} />
               </div>
@@ -328,7 +325,7 @@ function EditorPanel({
                 <input type="number" min={0}
                   value={draft.cap_minor != null ? draft.cap_minor : (selected.cap_minor ?? '')}
                   onChange={e => patchDraft('cap_minor', e.target.value ? Number(e.target.value) : null)}
-                  placeholder="e.g. 15000 = ₹150" />
+                  placeholder={`e.g. 15000 = ${sym}150`} />
               </div>
             </div>
           )}
@@ -338,7 +335,7 @@ function EditorPanel({
               <input type="number" min={0}
                 value={draft.min_trip_value_minor != null ? draft.min_trip_value_minor : (selected.min_trip_value_minor ?? '')}
                 onChange={e => patchDraft('min_trip_value_minor', e.target.value ? Number(e.target.value) : null)}
-                placeholder="e.g. 10000 = ₹100" />
+                placeholder={`e.g. 10000 = ${sym}100`} />
             </div>
           </div>
         </div>
@@ -474,12 +471,12 @@ function EditorPanel({
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
-function exportPromotionsCsv(promos: Promotion[]) {
-  const headers = ['Code', 'Type', 'Value', 'Cap (₹)', 'Status', 'Segment', 'Services', 'New Customers Only', 'Valid From', 'Valid To', 'Per-Customer Limit', 'Total Redemption Cap', 'Budget (₹)', 'Spent (₹)', 'Redemptions']
+function exportPromotionsCsv(promos: Promotion[], sym: string) {
+  const headers = ['Code', 'Type', 'Value', `Cap (${sym})`, 'Status', 'Segment', 'Services', 'New Customers Only', 'Valid From', 'Valid To', 'Per-Customer Limit', 'Total Redemption Cap', `Budget (${sym})`, `Spent (${sym})`, 'Redemptions']
   const rows = promos.map(p => [
     p.code,
     p.type,
-    p.type === 'percent' ? `${p.value}%` : `₹${(p.value / 100).toFixed(2)}`,
+    p.type === 'percent' ? `${p.value}%` : `${sym}${(p.value / 100).toFixed(2)}`,
     p.cap_minor != null ? (p.cap_minor / 100).toFixed(2) : '',
     p.status,
     p.segment ?? '',
@@ -506,6 +503,8 @@ function exportPromotionsCsv(promos: Promotion[]) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function PromotionsPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
@@ -639,7 +638,7 @@ export default function PromotionsPage() {
       subtitle={`${total} promos · ${activeCount} active · ${pausedCount} paused`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm" onClick={() => exportPromotionsCsv(promos)}>
+          <button className="btn sm" onClick={() => exportPromotionsCsv(promos, sym)}>
             <Icon name="download" size={13} />Export
           </button>
           <button className="btn sm" onClick={() => navigate('/promotions/referrals')}>

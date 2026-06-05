@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -23,7 +23,7 @@ from app.schemas.dispatch import (
     SurgeOverrideResponse,
     SupplyResponse,
 )
-from app.services import dispatch_service
+from app.services import audit_service, dispatch_service
 
 router = APIRouter()
 
@@ -66,10 +66,26 @@ async def get_eligible_drivers(
 async def assign_driver(
     booking_id: str,
     body: AssignDriverRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await dispatch_service.assign_driver(db, booking_id, body.driver_id, body.reason)
+    result = await dispatch_service.assign_driver(db, booking_id, body.driver_id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="dispatch.driver_assigned",
+            target=f"booking:{booking_id} driver:{body.driver_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"driver_id": body.driver_id, "reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Expand Radius ─────────────────────────────────────────────────────────────
@@ -101,12 +117,28 @@ async def get_exceptions(
 async def resolve_exception(
     exception_id: str,
     body: ResolveExceptionRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await dispatch_service.resolve_exception(
+    result = await dispatch_service.resolve_exception(
         db, exception_id, body.action_taken, body.resolved_by_driver_id
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="dispatch.exception_resolved",
+            target=f"dispatch_exception:{exception_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"action_taken": body.action_taken},
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Supply ────────────────────────────────────────────────────────────────────
@@ -124,10 +156,11 @@ async def get_supply(
 @router.post("/surge/override", response_model=SurgeOverrideResponse, status_code=201)
 async def create_surge_override(
     body: SurgeOverrideRequest,
+    request: Request,
     admin_user: AdminUser = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await dispatch_service.create_surge_override(
+    result = await dispatch_service.create_surge_override(
         db,
         zone_id=body.zone_id,
         zone_name=body.zone_name,
@@ -137,6 +170,21 @@ async def create_surge_override(
         applies_to=body.applies_to,
         admin_user_id=admin_user.id,
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin_user.email,
+            actor_role=admin_user.role if hasattr(admin_user, "role") else "Admin",
+            action="dispatch.surge_override_created",
+            target=f"zone:{body.zone_id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"multiplier": body.multiplier, "zone_name": body.zone_name, "reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.get("/surge/overrides", response_model=List[SurgeOverrideListItem])

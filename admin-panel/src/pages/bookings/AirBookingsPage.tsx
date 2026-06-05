@@ -5,25 +5,24 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { airBookingsService } from '../../services/airBookingsService'
 import type { AirBookingListItem, AirBookingStats, AirBookingStatus } from '../../services/airBookingsService'
+import { useFormatMoney, formatTimeHM, formatDateShort, isSameDayInTz, getUserTimezone } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
-function fmtFare(finalMinor: number | null, estimateMinor: number): string {
-  return fmtMinor(finalMinor ?? estimateMinor)
+function fmtFare(finalMinor: number | null, estimateMinor: number, fmt: (v: number) => string): string {
+  return fmt(finalMinor ?? estimateMinor)
 }
 
 function fmtEtd(etd: string): string {
   try {
-    const d = new Date(etd)
-    const now = new Date()
-    const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    const isToday = d.toDateString() === now.toDateString()
-    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1)
-    if (isToday) return `Today ${time}`
-    if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow ${time}`
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' · ' + time
+    const tz = getUserTimezone()
+    const now = new Date().toISOString()
+    const time = formatTimeHM(etd, tz)
+    if (isSameDayInTz(etd, now, tz)) return `Today ${time}`
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+    if (isSameDayInTz(etd, tomorrow.toISOString(), tz)) return `Tomorrow ${time}`
+    return formatDateShort(etd, tz) + ' · ' + time
   } catch { return etd }
 }
 
@@ -116,6 +115,7 @@ const TABS: TabConfig[] = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AirBookingsPage() {
+  const fmtMinor = useFormatMoney()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   useIsTablet()
@@ -510,7 +510,7 @@ export default function AirBookingsPage() {
                       </td>
                       <td>{statusBadge(b.status)}</td>
                       <td className="num" style={{ textAlign: 'right', color: 'var(--ink)', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>
-                        {fmtFare(b.fare_final_minor, b.fare_estimate_minor)}
+                        {fmtFare(b.fare_final_minor, b.fare_estimate_minor, fmtMinor)}
                       </td>
                       {!isMobile && <td className="t-meta" style={{ color: 'var(--ink-2)' }}>{b.payment_method ?? '—'}</td>}
                       <td onClick={e => e.stopPropagation()}>

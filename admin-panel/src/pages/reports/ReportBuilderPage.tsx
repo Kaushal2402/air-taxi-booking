@@ -5,6 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { reportsService } from '../../services/reportsService'
 import type { ReportFrequency, ReportFormat } from '../../services/reportsService'
+import { useFiscalYearRanges, useCurrencySymbol } from '../../lib/utils'
 
 const ALL_DIMENSIONS = ['Service', 'City', 'Date', 'Payment method', 'Driver', 'Operator', 'Promo code', 'Vehicle class']
 const ALL_METRICS: Array<[string, boolean]> = [
@@ -13,19 +14,36 @@ const ALL_METRICS: Array<[string, boolean]> = [
   ['Refunds', false], ['Incentive spend', false],
 ]
 
-const SAMPLE_ROWS = [
-  ['Sedan & XL', 'Bengaluru', '₹ 68.4 L', '₹ 17.3 L', '198 K', '₹ 345'],
-  ['Sedan & XL', 'Mumbai', '₹ 52.1 L', '₹ 12.9 L', '146 K', '₹ 357'],
-  ['Bike & auto', 'Bengaluru', '₹ 22.8 L', '₹ 4.1 L', '212 K', '₹ 108'],
-  ['Air · charter', 'Mumbai', '₹ 41.2 L', '₹ 9.8 L', '184', '₹ 2.24 L'],
-  ['Air · shuttle', 'Bengaluru', '₹ 18.6 L', '₹ 4.3 L', '264', '₹ 7,045'],
-  ['Outstation', 'Delhi NCR', '₹ 14.2 L', '₹ 3.1 L', '8.4 K', '₹ 1,690'],
-  ['Sedan & XL', 'Hyderabad', '₹ 31.0 L', '₹ 7.5 L', '92 K', '₹ 337'],
+const SAMPLE_AMOUNTS = [
+  ['68.4 L', '17.3 L', '198 K', '345'],
+  ['52.1 L', '12.9 L', '146 K', '357'],
+  ['22.8 L', '4.1 L',  '212 K', '108'],
+  ['41.2 L', '9.8 L',  '184',   '2.24 L'],
+  ['18.6 L', '4.3 L',  '264',   '7,045'],
+  ['14.2 L', '3.1 L',  '8.4 K', '1,690'],
+  ['31.0 L', '7.5 L',  '92 K',  '337'],
+]
+const SAMPLE_LABELS = [
+  ['Sedan & XL', 'Bengaluru'],
+  ['Sedan & XL', 'Mumbai'],
+  ['Bike & auto', 'Bengaluru'],
+  ['Air · charter', 'Mumbai'],
+  ['Air · shuttle', 'Bengaluru'],
+  ['Outstation', 'Delhi NCR'],
+  ['Sedan & XL', 'Hyderabad'],
 ]
 
 export default function ReportBuilderPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const { thisFY, lastFY } = useFiscalYearRanges()
+  const sym = useCurrencySymbol()
+  const sampleRows = SAMPLE_LABELS.map((labels, i) => [
+    ...labels,
+    `${sym} ${SAMPLE_AMOUNTS[i][0]}`, `${sym} ${SAMPLE_AMOUNTS[i][1]}`,
+    SAMPLE_AMOUNTS[i][2],
+    `${sym} ${SAMPLE_AMOUNTS[i][3]}`,
+  ])
 
   const [selectedDims, setSelectedDims] = useState<string[]>(['Service', 'City', 'Date'])
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['Gross volume', 'Net revenue', 'Completed trips', 'Avg fare'])
@@ -175,7 +193,7 @@ export default function ReportBuilderPage() {
             <div className="t-label" style={{ marginBottom: 14 }}>Filters & range</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
-                ['Date range', dateRange, setDateRange, ['Last 7 days', 'Last 30 days', 'Last 90 days', 'This month', 'Last month', 'Last 6 months']],
+                ['Date range', dateRange, setDateRange, ['Last 7 days', 'Last 30 days', 'Last 90 days', 'This month', 'Last month', 'Last 6 months', `This FY (${thisFY.label})`, `Last FY (${lastFY.label})`]],
                 ['Compare to', compareTo, setCompareTo, ['Prior period', 'Prior year', 'None']],
                 ['Service', service, setService, ['All services', 'Sedan & XL', 'Bike & auto', 'Air · charter', 'Air · shuttle', 'Outstation']],
                 ['City', city, setCity, ['All cities', 'Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Chennai']],
@@ -252,7 +270,7 @@ export default function ReportBuilderPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {SAMPLE_ROWS.map((row, i) => (
+                  {sampleRows.map((row, i) => (
                     <tr key={i}>
                       {selectedDims.slice(0, 2).map((_, di) => (
                         <td key={di} style={{ fontSize: 12.5 }}>{row[di]}</td>
@@ -267,7 +285,7 @@ export default function ReportBuilderPage() {
             </div>
           </div>
           <div style={{ padding: '12px 18px', borderTop: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span className="t-meta">{selectedDims.length} dimensions · {selectedMetrics.length} metrics · {SAMPLE_ROWS.length} of ~1,240 rows</span>
+            <span className="t-meta">{selectedDims.length} dimensions · {selectedMetrics.length} metrics · {sampleRows.length} of ~1,240 rows</span>
             <span className="t-meta t-mono">~ 1,240 rows · est. 2.1 MB</span>
           </div>
         </div>

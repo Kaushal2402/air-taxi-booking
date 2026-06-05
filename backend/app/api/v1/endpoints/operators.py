@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -31,7 +31,7 @@ from app.schemas.operators import (
     PilotUpdate,
     RejectBody,
 )
-from app.services import operator_service
+from app.services import audit_service, operator_service
 
 operators_router = APIRouter()
 aircraft_router = APIRouter()
@@ -55,10 +55,26 @@ async def list_operators(
 @operators_router.post("", response_model=OperatorResponse, status_code=201)
 async def create_operator(
     body: OperatorCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.create_operator(db, body.model_dump())
+    result = await operator_service.create_operator(db, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.created",
+            target=f"operator:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"name": getattr(result, "name", None)},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.get("/{id}", response_model=OperatorDetail)
@@ -74,58 +90,153 @@ async def get_operator(
 async def update_operator(
     id: str,
     body: OperatorUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.update_operator(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await operator_service.update_operator(db, id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.updated",
+            target=f"operator:{id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.post("/{id}/approve", response_model=OperatorResponse)
 async def approve_operator(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.approve_operator(db, id)
+    result = await operator_service.approve_operator(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.approved",
+            target=f"operator:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.post("/{id}/reject", response_model=OperatorResponse)
 async def reject_operator(
     id: str,
     body: RejectBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.reject_operator(db, id, body.reason)
+    result = await operator_service.reject_operator(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.rejected",
+            target=f"operator:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.post("/{id}/pause", response_model=OperatorResponse)
 async def pause_operator(
     id: str,
     body: PauseBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.pause_operator(db, id, body.reason)
+    result = await operator_service.pause_operator(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.paused",
+            target=f"operator:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.post("/{id}/reactivate", response_model=OperatorResponse)
 async def reactivate_operator(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.reactivate_operator(db, id)
+    result = await operator_service.reactivate_operator(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.reactivated",
+            target=f"operator:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.post("/{id}/commission", response_model=OperatorResponse)
 async def configure_commission(
     id: str,
     body: CommissionBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.configure_commission(db, id, body.commission_pct)
+    result = await operator_service.configure_commission(db, id, body.commission_pct)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.commission_configured",
+            target=f"operator:{id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"commission_pct": body.commission_pct},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.get("/{id}/performance", response_model=OperatorPerformanceResponse)
@@ -151,10 +262,25 @@ async def list_operator_documents(
 async def add_operator_document(
     id: str,
     body: OperatorDocumentCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.add_operator_doc(db, id, body.model_dump())
+    result = await operator_service.add_operator_doc(db, id, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.document_added",
+            target=f"operator:{id} doc:{result.id}",
+            category="Compliance",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.patch("/{id}/documents/{doc_id}", response_model=OperatorDocumentResponse)
@@ -162,12 +288,27 @@ async def update_operator_document(
     id: str,
     doc_id: str,
     body: OperatorDocumentUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.update_operator_doc(
-        db, id, doc_id, body.model_dump(exclude_unset=True)
-    )
+    changes = body.model_dump(exclude_unset=True)
+    result = await operator_service.update_operator_doc(db, id, doc_id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator.document_updated",
+            target=f"operator:{id} doc:{doc_id}",
+            category="Compliance",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Aircraft ──────────────────────────────────────────────────────────────────
@@ -188,10 +329,25 @@ async def list_aircraft(
 @aircraft_router.post("", response_model=AircraftResponse, status_code=201)
 async def create_aircraft(
     body: AircraftCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.create_aircraft(db, body.model_dump())
+    result = await operator_service.create_aircraft(db, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="aircraft.created",
+            target=f"aircraft:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @aircraft_router.get("/{id}", response_model=AircraftResponse)
@@ -207,50 +363,129 @@ async def get_aircraft(
 async def update_aircraft(
     id: str,
     body: AircraftUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.update_aircraft(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await operator_service.update_aircraft(db, id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="aircraft.updated",
+            target=f"aircraft:{id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @aircraft_router.post("/{id}/approve", response_model=AircraftResponse)
 async def approve_aircraft(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.approve_aircraft(db, id)
+    result = await operator_service.approve_aircraft(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="aircraft.approved",
+            target=f"aircraft:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @aircraft_router.post("/{id}/ground", response_model=AircraftResponse)
 async def ground_aircraft(
     id: str,
     body: GroundBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.ground_aircraft(db, id, body.reason)
+    result = await operator_service.ground_aircraft(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="aircraft.grounded",
+            target=f"aircraft:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @aircraft_router.post("/{id}/unground", response_model=AircraftResponse)
 async def unground_aircraft(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.unground_aircraft(db, id)
+    result = await operator_service.unground_aircraft(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="aircraft.ungrounded",
+            target=f"aircraft:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @aircraft_router.post("/{id}/maintenance", response_model=AircraftResponse)
 async def set_maintenance(
     id: str,
     body: MaintenanceBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.set_maintenance(
+    result = await operator_service.set_maintenance(
         db, id, body.starts_at, body.ends_at, body.notes
     )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="aircraft.maintenance_set",
+            target=f"aircraft:{id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"starts_at": str(body.starts_at), "ends_at": str(body.ends_at), "notes": body.notes},
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Pilots ────────────────────────────────────────────────────────────────────
@@ -271,10 +506,25 @@ async def list_pilots(
 @pilots_router.post("", response_model=PilotResponse, status_code=201)
 async def create_pilot(
     body: PilotCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.create_pilot(db, body.model_dump())
+    result = await operator_service.create_pilot(db, body.model_dump())
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="pilot.created",
+            target=f"pilot:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @pilots_router.get("/{id}", response_model=PilotResponse)
@@ -290,26 +540,74 @@ async def get_pilot(
 async def update_pilot(
     id: str,
     body: PilotUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.update_pilot(db, id, body.model_dump(exclude_unset=True))
+    changes = body.model_dump(exclude_unset=True)
+    result = await operator_service.update_pilot(db, id, changes)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="pilot.updated",
+            target=f"pilot:{id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=changes,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @pilots_router.post("/{id}/approve", response_model=PilotResponse)
 async def approve_pilot(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.approve_pilot(db, id)
+    result = await operator_service.approve_pilot(db, id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="pilot.approved",
+            target=f"pilot:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 @pilots_router.post("/{id}/ground", response_model=PilotResponse)
 async def ground_pilot(
     id: str,
     body: GroundBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await operator_service.ground_pilot(db, id, body.reason)
+    result = await operator_service.ground_pilot(db, id, body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="pilot.grounded",
+            target=f"pilot:{id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result

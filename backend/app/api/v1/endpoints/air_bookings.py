@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
@@ -24,7 +24,7 @@ from app.schemas.air_bookings import (
     RefundRequest,
     RescheduleRequest,
 )
-from app.services import air_bookings_service
+from app.services import audit_service, air_bookings_service
 
 router = APIRouter()
 
@@ -34,10 +34,25 @@ router = APIRouter()
 @router.post("", response_model=AirBookingDetail, status_code=201)
 async def create_air_booking(
     body: CreateAirBookingRequest,
+    request: Request,
     db=Depends(get_db),
-    _: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(get_current_admin_user),
 ) -> AirBookingDetail:
-    return await air_bookings_service.create_air_booking(db, body)
+    result = await air_bookings_service.create_air_booking(db, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.created",
+            target=f"air_booking:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── List ──────────────────────────────────────────────────────────────────────
@@ -87,10 +102,26 @@ async def get_air_booking(
 async def assign_operator(
     booking_id: str,
     body: AssignOperatorRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await air_bookings_service.assign_operator(db, booking_id, body)
+    result = await air_bookings_service.assign_operator(db, booking_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.operator_assigned",
+            target=f"air_booking:{booking_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(),
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Cancel preview ────────────────────────────────────────────────────────────
@@ -110,10 +141,26 @@ async def cancel_preview(
 async def cancel_booking(
     booking_id: str,
     body: CancelRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await air_bookings_service.cancel_booking(db, booking_id, body)
+    result = await air_bookings_service.cancel_booking(db, booking_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.cancelled",
+            target=f"air_booking:{booking_id}",
+            category="Operations",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(exclude_unset=True),
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Reschedule ────────────────────────────────────────────────────────────────
@@ -122,10 +169,26 @@ async def cancel_booking(
 async def reschedule_booking(
     booking_id: str,
     body: RescheduleRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await air_bookings_service.reschedule_booking(db, booking_id, body)
+    result = await air_bookings_service.reschedule_booking(db, booking_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.rescheduled",
+            target=f"air_booking:{booking_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(exclude_unset=True),
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Refund ────────────────────────────────────────────────────────────────────
@@ -134,10 +197,26 @@ async def reschedule_booking(
 async def process_refund(
     booking_id: str,
     body: RefundRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await air_bookings_service.process_refund(db, booking_id, body)
+    result = await air_bookings_service.process_refund(db, booking_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.refunded",
+            target=f"air_booking:{booking_id}",
+            category="Finance",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(exclude_unset=True),
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Manifest ──────────────────────────────────────────────────────────────────
@@ -241,7 +320,24 @@ async def advance_status(
 async def flag_booking(
     booking_id: str,
     body: FlagRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
-    return await air_bookings_service.flag_booking(db, booking_id, body)
+    result = await air_bookings_service.flag_booking(db, booking_id, body)
+    try:
+        flagged = getattr(body, "flagged", True)
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.flagged" if flagged else "air_booking.unflagged",
+            target=f"air_booking:{booking_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(exclude_unset=True),
+        )
+    except Exception:
+        pass
+    return result

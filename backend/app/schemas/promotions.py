@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 # ── Promotion schemas ─────────────────────────────────────────────────────────
@@ -59,8 +59,8 @@ class PromotionResponse(BaseModel):
     budget_spent_minor: int
     redemption_count: int
     segment: str | None
-    service_types: List[str] = []
-    zones: List[str] = []
+    service_types: Optional[List[str]] = None
+    zones: Optional[List[str]] = None
     new_customers_only: bool
     notes: str | None
     status: str
@@ -69,15 +69,10 @@ class PromotionResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("service_types", "zones", mode="before")
     @classmethod
-    def model_validate(cls, obj: Any, **kwargs: Any) -> "PromotionResponse":  # type: ignore[override]
-        # Coerce null JSON columns to empty lists before validation
-        if hasattr(obj, "__dict__") or hasattr(obj, "_sa_instance_state"):
-            if getattr(obj, "service_types", None) is None:
-                obj.service_types = []
-            if getattr(obj, "zones", None) is None:
-                obj.zones = []
-        return super().model_validate(obj, **kwargs)
+    def coerce_null_to_empty_list(cls, v: Any) -> List[str]:
+        return v if isinstance(v, list) else []
 
 
 class PaginatedPromotions(BaseModel):

@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { catalogService } from '../../services/catalogService'
 import type { AircraftType } from '../../services/catalogService'
+import { formatDate } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -343,9 +344,7 @@ export default function AircraftTypesPage() {
                   </h3>
                   {!isNew && selected && (
                     <div className="t-meta" style={{ marginTop: 3 }}>
-                      {selected.code} · {new Date(selected.updated_at).toLocaleDateString('en-GB', {
-                        day: 'numeric', month: 'short', year: 'numeric',
-                      })}
+                      {selected.code} · {formatDate(selected.updated_at)}
                     </div>
                   )}
                 </div>

@@ -41,9 +41,25 @@ export interface KycQueueResponse {
   pages: number
 }
 
+export interface DocTypeItem {
+  key: string
+  label: string
+  requires_expiry: boolean
+}
+
+export interface DocTypesResponse {
+  region: string
+  driver: DocTypeItem[]
+  vehicle: DocTypeItem[]
+  operator: DocTypeItem[]
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const kycService = {
+  getDocTypes: () =>
+    api.get<DocTypesResponse>('/kyc/doc-types').then(r => r.data),
+
   getQueue: (params?: { page?: number; page_size?: number; entity_type?: string; status?: string }) =>
     api.get<KycQueueResponse>('/kyc/queue', { params }).then(r => r.data),
 

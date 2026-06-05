@@ -6,7 +6,7 @@ from app.api.v1.endpoints.customers import router as customers_router
 from app.api.v1.endpoints.drivers import router as drivers_router
 from app.api.v1.endpoints.bookings import road_bookings_router
 from app.api.v1.endpoints.kyc import router as kyc_router
-from app.api.v1.endpoints.operators import operators_router, aircraft_router
+from app.api.v1.endpoints.operators import operators_router, aircraft_router, pilots_router
 from app.api.v1.endpoints.vehicles import vehicles_router, vendors_router
 from app.api.v1.endpoints.pricing import pricing_router
 from app.api.v1.endpoints.promotions import promotions_router, referrals_router
@@ -35,6 +35,7 @@ api_router.include_router(air_bookings_router,   prefix="/bookings/air",   tags=
 api_router.include_router(kyc_router,            prefix="/kyc",            tags=["KYC"])
 api_router.include_router(operators_router,      prefix="/operators",      tags=["Operators"])
 api_router.include_router(aircraft_router,       prefix="/aircraft",       tags=["Aircraft"])
+api_router.include_router(pilots_router,         prefix="/pilots",         tags=["Pilots"])
 api_router.include_router(vehicles_router,       prefix="/vehicles",       tags=["Vehicles"])
 api_router.include_router(vendors_router,        prefix="/vendors",        tags=["Vendors"])
 api_router.include_router(pricing_router,        prefix="/pricing",        tags=["Pricing"])

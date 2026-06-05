@@ -42,7 +42,7 @@ from app.schemas.auth import (
     BackupCodeStatusResponse,
     BackupVerifyRequest,
 )
-from app.services import auth_service
+from app.services import auth_service, audit_service
 from app.schemas.common import MessageResponse
 
 router = APIRouter()
@@ -66,13 +66,26 @@ async def refresh(body: RefreshRequest, db=Depends(get_db)):
 
 
 @router.post("/logout", response_model=MessageResponse)
-async def logout(body: RefreshRequest, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
+async def logout(body: RefreshRequest, request: Request, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
     await auth_service.logout(db, current_user.id, body.refresh_token)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="auth.logout",
+            target=f"admin:{current_user.id}",
+            category="Authentication",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Signed out")
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(body: ForgotPasswordRequest, db=Depends(get_db)):
+async def forgot_password(body: ForgotPasswordRequest, request: Request, db=Depends(get_db)):
     raw_token = await auth_service.send_password_reset(db, body.email)
     if raw_token:
         try:
@@ -90,17 +103,43 @@ async def forgot_password(body: ForgotPasswordRequest, db=Depends(get_db)):
             # Never leak errors to the caller — the response is always the same.
             # Log here so developers can diagnose email delivery failures.
             logger.exception("Failed to send password-reset email to %s: %s", body.email, exc)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=body.email,
+            actor_role="Unknown",
+            action="auth.password_reset_requested",
+            target=f"email:{body.email}",
+            category="Authentication",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="If that email is registered, a reset link has been sent")
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-async def reset_password(body: ResetPasswordRequest, db=Depends(get_db)):
+async def reset_password(body: ResetPasswordRequest, request: Request, db=Depends(get_db)):
     await auth_service.reset_password(db, body.token, body.password)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name="System",
+            actor_role="System",
+            action="auth.password_reset",
+            target="admin:via_reset_token",
+            category="Authentication",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Password changed — please sign in with your new password")
 
 
 @router.post("/invite/accept", response_model=MessageResponse)
-async def accept_invite(body: InviteAcceptRequest, db=Depends(get_db)):
+async def accept_invite(body: InviteAcceptRequest, request: Request, db=Depends(get_db)):
     """Invitee sets their password and activates their account."""
     from app.core.security import hash_password
     from app.core.exceptions import ValidationException
@@ -112,6 +151,19 @@ async def accept_invite(body: InviteAcceptRequest, db=Depends(get_db)):
 
     pw_hash = hash_password(body.password)
     await repo.activate_user(record.admin_user_id, pw_hash)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name="System",
+            actor_role="System",
+            action="auth.invite_accepted",
+            target=f"admin:{record.admin_user_id}",
+            category="Authentication",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Account activated — you can now sign in")
 
 
@@ -125,19 +177,32 @@ async def get_me(current_user: AdminUser = Depends(get_current_admin_user)):
 @router.patch("/me", response_model=AdminUserResponse)
 async def update_me(
     body: UpdateProfileRequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     from sqlalchemy import update as sa_update
     from app.models.admin_user import AdminUser as M
 
-    # Build update dict from explicitly-provided fields only
-    # exclude_unset=True means fields not sent by the client are skipped
     values = body.model_dump(exclude_unset=True)
     if values:
         await db.execute(sa_update(M).where(M.id == current_user.id).values(**values))
         for k, v in values.items():
             setattr(current_user, k, v)
+        try:
+            await audit_service.log_event(
+                db,
+                actor_name=current_user.email,
+                actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+                action="auth.profile_updated",
+                target=f"admin:{current_user.id}",
+                category="Authentication",
+                severity="med",
+                source_ip=request.client.host if request.client else None,
+                after_data=values,
+            )
+        except Exception:
+            pass
     return current_user
 
 
@@ -210,7 +275,7 @@ async def remove_avatar(
 
 
 @router.post("/change-password", response_model=MessageResponse)
-async def change_password(body: ChangePasswordRequest, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
+async def change_password(body: ChangePasswordRequest, request: Request, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
     from app.core.security import verify_password, hash_password
     from app.core.exceptions import ValidationException
     if not verify_password(body.current_password, current_user.password_hash):
@@ -219,6 +284,19 @@ async def change_password(body: ChangePasswordRequest, current_user: AdminUser =
     await repo.update_password(current_user.id, hash_password(body.new_password))
     await repo.revoke_all_sessions(current_user.id)
     await repo.log_sign_in(current_user.id, "password_changed", None, None, "ok")
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="auth.password_changed",
+            target=f"admin:{current_user.id}",
+            category="Authentication",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Password changed — all sessions signed out")
 
 
@@ -278,17 +356,43 @@ async def setup_totp(current_user: AdminUser = Depends(get_current_admin_user), 
 
 
 @router.post("/2fa/enroll", response_model=MessageResponse)
-async def enroll_totp(body: TOTPEnrollRequest, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
+async def enroll_totp(body: TOTPEnrollRequest, request: Request, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
     repo = AdminUserRepository(db)
     user = await repo.get_by_id(current_user.id)
     await auth_service.enroll_totp(db, current_user.id, user.two_factor_secret or "", body.code)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="auth.2fa_enabled",
+            target=f"admin:{current_user.id}",
+            category="Security",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Two-factor authentication enabled")
 
 
 @router.post("/2fa/backup-codes", response_model=BackupCodesResponse)
-async def generate_backup_codes(current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
+async def generate_backup_codes(request: Request, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
     """Generate 10 new backup codes. Replaces any existing codes. Codes shown only once."""
     codes = await auth_service.generate_backup_codes(db, current_user.id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="auth.backup_codes_generated",
+            target=f"admin:{current_user.id}",
+            category="Security",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return BackupCodesResponse(codes=codes, total=len(codes), remaining=len(codes))
 
 
@@ -307,11 +411,25 @@ async def backup_code_status(current_user: AdminUser = Depends(get_current_admin
 @router.post("/2fa/disable", response_model=MessageResponse)
 async def disable_2fa(
     body: Disable2FARequest,
+    request: Request,
     current_user: AdminUser = Depends(get_current_admin_user),
     db=Depends(get_db),
 ):
     """Disable TOTP 2FA for the currently logged-in user after verifying their current code."""
     await auth_service.disable_totp(db, current_user.id, body.code)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="auth.2fa_disabled",
+            target=f"admin:{current_user.id}",
+            category="Security",
+            severity="high",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
     return MessageResponse(message="Two-factor authentication has been disabled")
 
 

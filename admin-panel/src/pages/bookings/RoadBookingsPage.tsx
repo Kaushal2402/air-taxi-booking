@@ -8,6 +8,8 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { bookingsService } from '../../services/bookingsService'
 import type { RoadBookingListItem, BookingStats } from '../../services/bookingsService'
+import { useFormatMoney, formatTimeHM, formatDateShort, formatDateTime, isSameDayInTz, getUserTimezone } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 // Fix leaflet default icon paths
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
@@ -19,11 +21,9 @@ L.Icon.Default.mergeOptions({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
-function fmtFare(minor: number | null, estimate: number): string {
-  const val = minor ?? estimate
-  return fmtMinor(val)
+function fmtFare(minor: number | null, estimate: number, fmt: (v: number) => string): string {
+  return fmt(minor ?? estimate)
 }
 
 function bStatusBadge(s: string) {
@@ -50,20 +50,17 @@ function bStatusBadge(s: string) {
 
 function formatWhen(iso: string, scheduledAt: string | null): string {
   if (scheduledAt) {
-    try {
-      return new Date(scheduledAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
-    } catch { return scheduledAt }
+    try { return formatDateTime(scheduledAt) } catch { return scheduledAt }
   }
   try {
-    const d = new Date(iso)
-    const now = new Date()
-    const isToday = d.toDateString() === now.toDateString()
-    const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    return isToday ? `${time} today` : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' · ' + time
+    const tz = getUserTimezone()
+    const now = new Date().toISOString()
+    const time = formatTimeHM(iso, tz)
+    return isSameDayInTz(iso, now, tz) ? `${time} today` : formatDateShort(iso, tz) + ' · ' + time
   } catch { return iso }
 }
 
-function exportCsv(items: RoadBookingListItem[]) {
+function exportCsv(items: RoadBookingListItem[], fmtMinor: (v: number) => string) {
   const headers = ['Ref', 'Customer', 'Service', 'Pickup', 'Drop', 'Driver', 'Status', 'Fare', 'Payment', 'Created']
   const rows = items.map(b => [
     b.booking_ref,
@@ -73,7 +70,7 @@ function exportCsv(items: RoadBookingListItem[]) {
     b.drop_address,
     b.driver_name ?? '—',
     b.status,
-    fmtFare(b.fare_final_minor, b.fare_estimate_minor),
+    fmtFare(b.fare_final_minor, b.fare_estimate_minor, fmtMinor),
     b.payment_method,
     b.created_at,
   ])
@@ -231,6 +228,8 @@ function RowMenu({ booking, onClose, onView, onFlag }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function RoadBookingsPage() {
+  const fmtMinor = useFormatMoney()
+  const toggles = usePlatformStore(s => s.toggles)
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   useIsTablet() // ensure responsive hooks are registered
@@ -454,7 +453,7 @@ export default function RoadBookingsPage() {
                 <option value="">Payment · All</option>
                 <option value="card">Card</option>
                 <option value="upi">UPI</option>
-                <option value="cash">Cash</option>
+                {toggles.cash_payments && <option value="cash">Cash</option>}
                 <option value="wallet">Wallet</option>
                 <option value="corporate">Corporate</option>
               </select>
@@ -496,7 +495,7 @@ export default function RoadBookingsPage() {
                 <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{selectedIds.length} selected</span> · across this page
               </span>
               <span style={{ width: 1, height: 16, background: 'var(--rule-strong)' }} />
-              <button className="btn sm ghost" onClick={() => exportCsv(items.filter(b => selectedIds.includes(b.id)))}>
+              <button className="btn sm ghost" onClick={() => exportCsv(items.filter(b => selectedIds.includes(b.id)), fmtMinor)}>
                 <Icon name="download" size={12} />Export selection
               </button>
               <button className="btn sm ghost">
@@ -602,7 +601,7 @@ export default function RoadBookingsPage() {
                         </td>
                         <td>{bStatusBadge(b.status)}</td>
                         <td className="num" style={{ textAlign: 'right', color: 'var(--ink)', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>
-                          {fmtFare(b.fare_final_minor, b.fare_estimate_minor)}
+                          {fmtFare(b.fare_final_minor, b.fare_estimate_minor, fmtMinor)}
                         </td>
                         {!isMobile && (
                           <td className="t-meta" style={{ color: 'var(--ink-2)', fontSize: 12 }}>

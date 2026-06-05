@@ -6,15 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { customerService } from '../../services/customerService'
 import type { Customer, CustomerSegment, WalletTransaction } from '../../services/customerService'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatMoney(minor: number): string {
-  const value = minor / 100
-  if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(2)} Cr`
-  if (value >= 100_000)    return `₹${(value / 100_000).toFixed(2)} L`
-  return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
+import { formatMoney, currencySymbol, formatDate, useFormatMoney } from '../../lib/utils'
 
 function getInitials(name: string): string {
   return name.split(' ').map(p => p[0] ?? '').join('').slice(0, 2).toUpperCase()
@@ -31,9 +23,6 @@ function segmentLabel(seg: CustomerSegment): string {
   return MAP[seg] ?? seg
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 // ── Tab stub ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +90,7 @@ interface WalletModalProps {
 
 function WalletAdjustModal({ customer, initialDirection = 'credit', onClose, onSuccess }: WalletModalProps) {
   const isMobile = useIsMobile()
+  const fmtMoney = useFormatMoney()
 
   const [direction, setDirection]       = useState<'credit' | 'debit'>(initialDirection)
   const [amountStr, setAmountStr]       = useState('500')
@@ -218,7 +208,7 @@ function WalletAdjustModal({ customer, initialDirection = 'credit', onClose, onS
 
           <div className="t-label" style={{ marginBottom: 10 }}>Amount</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: `1px solid ${direction === 'credit' ? 'var(--accent)' : 'var(--danger)'}`, borderRadius: 3, padding: '14px 16px', background: direction === 'credit' ? 'var(--accent-soft-2)' : 'var(--danger-soft)' }}>
-            <span style={{ fontFamily: 'var(--font-serif)', fontSize: 30, color: direction === 'credit' ? 'var(--accent)' : 'var(--danger)', marginRight: 12 }}>₹</span>
+            <span style={{ fontFamily: 'var(--font-serif)', fontSize: 30, color: direction === 'credit' ? 'var(--accent)' : 'var(--danger)', marginRight: 12 }}>{currencySymbol()}</span>
             <input
               value={amountStr}
               onChange={e => setAmountStr(e.target.value.replace(/[^0-9]/g, ''))}
@@ -238,7 +228,7 @@ function WalletAdjustModal({ customer, initialDirection = 'credit', onClose, onS
                 }}
                 onClick={() => setAmountStr(String(p))}
               >
-                ₹{p}
+                {currencySymbol()}{p}
               </button>
             ))}
             <button
@@ -293,7 +283,7 @@ function WalletAdjustModal({ customer, initialDirection = 'credit', onClose, onS
                 </tr>
                 <tr>
                   <td style={{ padding: '8px 0', border: 0, fontSize: 13, color: 'var(--ink-2)' }}>Tax adjustment</td>
-                  <td className="num" style={{ padding: '8px 0', border: 0, textAlign: 'right', color: 'var(--ink-3)' }}>₹0</td>
+                  <td className="num" style={{ padding: '8px 0', border: 0, textAlign: 'right', color: 'var(--ink-3)' }}>{currencySymbol()}0</td>
                 </tr>
                 <tr style={{ borderTop: '1px solid var(--rule-strong)' }}>
                   <td style={{ padding: '14px 0 0', border: 0, fontSize: 14, fontWeight: 500 }}>New balance</td>
@@ -312,7 +302,7 @@ function WalletAdjustModal({ customer, initialDirection = 'credit', onClose, onS
                 <span className="t-label" style={{ padding: 0, color: 'var(--info)' }}>Within your goodwill cap</span>
               </div>
               <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--ink-2)' }}>
-                {formatMoney(amountMinor)} is within your per-customer credit cap (₹2,000). You may issue this directly.
+                {formatMoney(amountMinor)} is within your per-customer credit cap ({fmtMoney(200000)}). You may issue this directly.
               </div>
             </div>
           )}

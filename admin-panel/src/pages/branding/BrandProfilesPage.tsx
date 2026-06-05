@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { brandingService } from '../../services/brandingService'
 import type { BrandProfile } from '../../services/brandingService'
+import { formatDate } from '../../lib/utils'
 
 export default function BrandProfilesPage() {
   const navigate = useNavigate()
@@ -143,7 +144,7 @@ export default function BrandProfilesPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderTop: '1px solid var(--rule-soft)', background: 'var(--surface-2)' }} onClick={e => e.stopPropagation()}>
               <span className="t-meta">
                 <span className="t-mono">{b.brand_ref}</span>
-                {b.published_at ? ` · updated ${new Date(b.updated_at).toLocaleDateString('en-IN')}` : ''}
+                {b.published_at ? ` · updated ${formatDate(b.updated_at)}` : ''}
                 {b.is_white_label && ' · White-label'}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>

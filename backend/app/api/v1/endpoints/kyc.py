@@ -9,12 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
+from app.core.doc_types import get_doc_types
 from app.database import get_db
 from app.dependencies import get_current_admin_user
 from app.models.admin_user import AdminUser
+from app.services import audit_service
 from app.models.driver import Driver, DriverDocument
 from app.models.operator import Aircraft, Operator, OperatorDocument, Pilot
 from app.models.vehicle import Vehicle, VehicleDocument
+from app.services.settings_service import get_settings
 
 router = APIRouter()
 
@@ -67,6 +70,19 @@ class KycReviewRequest(BaseModel):
     reason: Optional[str] = None      # required when action=="reject"
 
 
+class DocTypeItem(BaseModel):
+    key: str
+    label: str
+    requires_expiry: bool
+
+
+class DocTypesResponse(BaseModel):
+    region: str
+    driver: List[DocTypeItem]
+    vehicle: List[DocTypeItem]
+    operator: List[DocTypeItem]
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -83,6 +99,29 @@ def _days_until(expiry: date) -> int:
     """Return days until expiry — negative if already past."""
     today = datetime.now(timezone.utc).date()
     return (expiry - today).days
+
+
+# ── GET /kyc/doc-types ───────────────────────────────────────────────────────
+
+
+@router.get("/doc-types", response_model=DocTypesResponse)
+async def get_kyc_doc_types(
+    _: AdminUser = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocTypesResponse:
+    """
+    Return the KYC document types applicable for the platform's primary_region.
+    Clients should use this list to populate dropdowns and validate doc_type values.
+    """
+    settings = await get_settings(db)
+    region = settings.primary_region or "default"
+    bucket = get_doc_types(region)
+    return DocTypesResponse(
+        region=region,
+        driver=[DocTypeItem(**d) for d in bucket.get("driver", [])],
+        vehicle=[DocTypeItem(**d) for d in bucket.get("vehicle", [])],
+        operator=[DocTypeItem(**d) for d in bucket.get("operator", [])],
+    )
 
 
 # ── GET /kyc/queue ─────────────────────────────────────────────────────────────
@@ -410,6 +449,20 @@ async def review_driver_document(
     await db.commit()
     await db.refresh(dd)
 
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action=f"kyc.driver_doc.{body.action}",
+            target=f"driver_doc:{doc_id} driver:{dd.driver_id}",
+            category="Compliance",
+            severity="high",
+            after_data={"action": body.action, "reason": body.reason},
+        )
+    except Exception:
+        pass
+
     return KycQueueItem(
         id=dd.id,
         entity_type="driver",
@@ -480,6 +533,20 @@ async def review_operator_document(
 
     await db.commit()
     await db.refresh(od)
+
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action=f"kyc.operator_doc.{body.action}",
+            target=f"operator_doc:{doc_id} operator:{od.operator_id}",
+            category="Compliance",
+            severity="high",
+            after_data={"action": body.action, "reason": body.reason},
+        )
+    except Exception:
+        pass
 
     return KycQueueItem(
         id=od.id,
@@ -553,6 +620,20 @@ async def review_vehicle_document(
 
     await db.commit()
     await db.refresh(vd)
+
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action=f"kyc.vehicle_doc.{body.action}",
+            target=f"vehicle_doc:{doc_id} vehicle:{vd.vehicle_id}",
+            category="Compliance",
+            severity="high",
+            after_data={"action": body.action, "reason": body.reason},
+        )
+    except Exception:
+        pass
 
     return KycQueueItem(
         id=vd.id,

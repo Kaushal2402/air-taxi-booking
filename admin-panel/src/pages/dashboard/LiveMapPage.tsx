@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { CityMap } from './DashboardPage'
-import { fmtMinor } from './DashboardPage'
 import api from '../../lib/axios'
+import { useFormatMoney } from '../../lib/utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,6 +112,7 @@ function DemandBar({ zone, ratio }: { zone: string; ratio: number }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LiveMapPage() {
+  const fmtMinor = useFormatMoney()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [data, setData] = useState<DashboardData | null>(null)

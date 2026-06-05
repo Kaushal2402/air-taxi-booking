@@ -4,10 +4,10 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { promotionsService } from '../../services/promotionsService'
 import type { PromotionAnalytics } from '../../services/promotionsService'
+import { useFormatMoney, useCurrencySymbol, currencySymbol } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
 
@@ -93,10 +93,10 @@ function BarChart({ series, height = 220 }: BarChartProps) {
 
 function exportAnalyticsCsv(analytics: PromotionAnalytics, days: number) {
   const rows: string[][] = [
-    ['Date', 'Redemptions', 'Amount Spent (₹)'],
+    ['Date', 'Redemptions', `Amount Spent (${currencySymbol()})`],
     ...analytics.daily_series.map(d => [d.date, String(d.count), (d.spent_minor / 100).toFixed(2)]),
     [],
-    ['Code', 'Redemptions', 'Spent (₹)', 'Share (%)'],
+    ['Code', 'Redemptions', `Spent (${currencySymbol()})`, 'Share (%)'],
     ...analytics.by_promo.map(r => [r.code, String(r.redemptions), (r.spent_minor / 100).toFixed(2), String(r.pct)]),
   ]
   const csv = rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -110,6 +110,8 @@ function exportAnalyticsCsv(analytics: PromotionAnalytics, days: number) {
 }
 
 export default function RedemptionAnalyticsPage() {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const isMobile = useIsMobile()
   const [days, setDays] = useState(14)
   const [analytics, setAnalytics] = useState<PromotionAnalytics | null>(null)
@@ -131,7 +133,7 @@ export default function RedemptionAnalyticsPage() {
     { label: 'Budget consumed', value: fmtMinor(analytics.total_budget_spent_minor), meta: 'Spent so far', color: 'var(--warn)' },
     { label: 'Avg discount', value: fmtMinor(analytics.avg_discount_minor), meta: 'Per redemption', color: 'var(--ink-2)' },
     { label: 'New customers', value: analytics.new_customers.toLocaleString('en-IN'), meta: 'From promo codes', color: 'var(--accent)' },
-    { label: 'Blended CPA', value: fmtMinor(analytics.blended_cpa_minor), meta: 'Target ≤ ₹100', color: 'var(--accent)' },
+    { label: 'Blended CPA', value: fmtMinor(analytics.blended_cpa_minor), meta: `Target ≤ ${sym}100`, color: 'var(--accent)' },
   ] : []
 
   return (
