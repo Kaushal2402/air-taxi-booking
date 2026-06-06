@@ -23,6 +23,7 @@ from app.api.v1.endpoints.branding import router as branding_router
 from app.api.v1.endpoints.rbac import rbac_router
 from app.api.v1.endpoints.notifications import notifications_router
 from app.api.v1.endpoints.sos import router as sos_router
+from app.api.v1.endpoints.data_purge import router as data_purge_router
 
 api_router = APIRouter()
 
@@ -55,3 +56,4 @@ api_router.include_router(branding_router,       prefix="/branding",       tags=
 api_router.include_router(rbac_router,           prefix="/rbac",           tags=["RBAC"])
 api_router.include_router(notifications_router,  prefix="/notifications",  tags=["Notifications"])
 api_router.include_router(sos_router,            prefix="/sos",            tags=["Safety SOS"])
+api_router.include_router(data_purge_router,     prefix="/data/purge",     tags=["Data Retention"])

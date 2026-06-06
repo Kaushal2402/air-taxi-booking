@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.models.audit import AuditAnomaly, AuditLog
+from app.services.settings_service import get_settings
 from app.schemas.audit import (
     AuditAnomalyCreate,
     AuditAnomalyResponse,
@@ -317,7 +318,7 @@ async def get_stats(db: AsyncSession, time_window: str = "24h") -> AuditStatsRes
     )
 
 
-async def get_security_stats(db: AsyncSession) -> SecurityStatsResponse:
+async def get_security_stats(db: AsyncSession) -> SecurityStatsResponse:  # noqa: C901
     now = datetime.now(timezone.utc)
     seven_days_ago = now - timedelta(days=7)
 
@@ -339,12 +340,16 @@ async def get_security_stats(db: AsyncSession) -> SecurityStatsResponse:
     )
     pii_exports_7d = pii_exports_result.scalar() or 0
 
+    platform = await get_settings(db)
+    audit_years = platform.data_retention_audit_years or 7
+    retention_label = f"{audit_years} yr{'s' if audit_years != 1 else ''}"
+
     return SecurityStatsResponse(
         anomalies_open=anomalies_open,
         anomalies_7d=anomalies_7d,
         pii_exports_7d=pii_exports_7d,
         mfa_coverage_pct=94.0,
-        retention_policy="7 yrs",
+        retention_policy=retention_label,
         integrity_ok=True,
     )
 

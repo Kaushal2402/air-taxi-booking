@@ -1,6 +1,10 @@
+from __future__ import annotations
+
+import asyncio
 import logging
 import os
 import socketio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
@@ -10,11 +14,50 @@ from app.api.v1.router import api_router
 from app.config import get_settings
 from app.core.exceptions import AppException, app_exception_handler
 from app.core.logging import setup_logging
+from app.database import AsyncSessionLocal
+from app.services.purge_service import run_all_purges
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 setup_logging(debug=settings.APP_DEBUG)
+
+# ── Daily retention purge (background task) ───────────────────────────────────
+
+_purge_task: asyncio.Task | None = None
+
+async def _daily_purge_loop() -> None:
+    """Run data-retention purges once per day. Starts after a short delay so
+    the app is fully initialised before the first run."""
+    await asyncio.sleep(60)          # wait 60 s for DB pool to warm up
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                report = await run_all_purges(db)
+                logger.info(
+                    "daily_purge: total_affected=%d errors=%s",
+                    report.total_affected,
+                    report.errors or "none",
+                )
+        except Exception:
+            logger.exception("daily_purge: unexpected error")
+        await asyncio.sleep(86_400)  # sleep 24 h
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _purge_task
+    _purge_task = asyncio.create_task(_daily_purge_loop())
+    logger.info("daily_purge task started")
+    yield
+    if _purge_task and not _purge_task.done():
+        _purge_task.cancel()
+        try:
+            await _purge_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("daily_purge task stopped")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -23,6 +66,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.APP_DEBUG else None,
     default_response_class=ORJSONResponse,
     openapi_url="/openapi.json" if settings.APP_DEBUG else None,
+    lifespan=lifespan,
 )
 
 # CORS
