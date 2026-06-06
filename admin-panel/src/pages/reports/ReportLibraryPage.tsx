@@ -6,6 +6,7 @@ import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { reportsService } from '../../services/reportsService'
 import type { ReportTemplate, ReportSchedule, ReportExport } from '../../services/reportsService'
 import { formatTimeHM } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 export default function ReportLibraryPage() {
   const navigate = useNavigate()
@@ -55,6 +56,9 @@ export default function ReportLibraryPage() {
     }
   }
 
+  const dataShareAllowed = usePlatformStore(s => s.data_share_authorities)
+  const analyticsAllowed = usePlatformStore(s => s.consent_analytics_tracking)
+
   const standardTemplates = templates.filter(t => t.is_standard)
   const customTemplates = templates.filter(t => !t.is_standard)
   const allTemplates = [...standardTemplates, ...customTemplates]
@@ -76,9 +80,49 @@ export default function ReportLibraryPage() {
         </>
       }
     >
+      {/* Gap 15: consent-driven banners */}
+      {!analyticsAllowed && (
+        <div style={{
+          margin: '12px 32px 0', padding: '10px 16px', background: '#fef3c7',
+          border: '1px solid #fbbf24', borderRadius: 4, fontSize: 13, color: '#92400e',
+        }}>
+          ⚠ <strong>Analytics tracking is off.</strong> Exports that contain analytics data will be blocked.
+          Enable <em>In-app analytics tracking</em> in <strong>Settings → Data &amp; Privacy → Consent</strong>.
+        </div>
+      )}
       <div style={{ padding: isMobile ? '16px' : '24px 32px 28px', display: 'grid', gridTemplateColumns: isMobile || isTablet ? '1fr' : '1.5fr 1fr', gap: 24 }}>
         {/* Standard reports */}
         <div>
+          {/* Gap 15: Authority export card — visible only when data_share_authorities is on */}
+          {dataShareAllowed && (
+            <div style={{
+              marginBottom: 14, background: 'var(--surface)',
+              border: '1px solid var(--accent)', padding: '16px 20px',
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, borderRadius: 2,
+            }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <div style={{ width: 40, height: 40, border: '1px solid var(--accent)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', flexShrink: 0 }}>
+                  <Icon name="globe" size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Authority Export</div>
+                  <div className="t-meta" style={{ marginTop: 4, lineHeight: 1.45 }}>
+                    Anonymised aggregate trip data for transport regulators — zone counts, time slots, service split. No PII.
+                  </div>
+                </div>
+              </div>
+              <a
+                href="/api/v1/reports/authority-export?days=30"
+                target="_blank"
+                rel="noreferrer"
+                className="btn sm accent"
+                style={{ whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Icon name="download" size={13} />Export JSON
+              </a>
+            </div>
+          )}
+        </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 16 }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.014em' }}>Standard reports</h3>
             <div style={{ flex: 1, height: 1, background: 'var(--rule)' }} />

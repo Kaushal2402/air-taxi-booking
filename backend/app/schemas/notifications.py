@@ -115,6 +115,7 @@ class BroadcastCreate(BaseModel):
     audience_description: str
     channel: str
     message: str
+    category: str = "Transactional"   # "Marketing" | "Transactional" | "Operational"
     scheduled_at: str | None = None
 
 

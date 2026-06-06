@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { notificationsService } from '../../services/notificationsService'
 import type { NotificationTemplate, NotificationStats } from '../../services/notificationsService'
+import { usePlatformStore } from '../../store/platformStore'
 
 const CHAN_LABELS: Record<string, string> = {
   push: 'Push', sms: 'SMS', email: 'Email', wa: 'WhatsApp',
@@ -48,6 +49,7 @@ const EMPTY_TEMPLATE: {
 export default function NotificationTemplatesPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const marketingAllowed = usePlatformStore(s => s.consent_marketing_opt_in)
   useIsTablet()
 
   const [templates, setTemplates] = useState<NotificationTemplate[]>([])
@@ -137,6 +139,27 @@ export default function NotificationTemplatesPage() {
         </div>
       }
     >
+      {!marketingAllowed && (
+        <div style={{
+          margin: '12px 32px 0',
+          padding: '10px 16px',
+          background: '#fef3c7',
+          border: '1px solid #fbbf24',
+          borderRadius: 4,
+          fontSize: 13,
+          color: '#92400e',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <span>⚠</span>
+          <span>
+            <strong>Marketing communications are disabled.</strong> Broadcasting to the Marketing
+            category will be blocked. Enable <em>Marketing communications opt-in</em> in{' '}
+            <strong>Settings → Data &amp; Privacy → Consent</strong> to send marketing notifications.
+          </span>
+        </div>
+      )}
       <div style={{ padding: isMobile ? '12px 16px 24px' : '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: isMobile ? 12 : 18 }}>
 
         {/* KPIs */}

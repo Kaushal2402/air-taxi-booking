@@ -42,6 +42,9 @@ class Customer(Base, UUIDPrimaryKeyMixin):
     rating: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     cancellation_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
+    # Consent preferences (per-customer, inherits platform default at creation)
+    marketing_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
     # Activity
     last_active_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     flag_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

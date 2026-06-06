@@ -23,6 +23,7 @@ import AirRoutesPage from './pages/catalog/AirRoutesPage'
 import CustomersPage from './pages/customers/CustomersPage'
 import CustomerDetailPage from './pages/customers/CustomerDetailPage'
 import PrivacyRequestsPage from './pages/privacy/PrivacyRequestsPage'
+import CookieBanner from './components/ui/CookieBanner'
 import DriverOnboardingPage from './pages/drivers/DriverOnboardingPage'
 import DriverDirectoryPage from './pages/drivers/DriverDirectoryPage'
 import DriverDetailPage from './pages/drivers/DriverDetailPage'
@@ -304,6 +305,7 @@ function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        <CookieBanner />
       </BrowserRouter>
     </QueryClientProvider>
   )

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_admin_user
 from app.models.admin_user import AdminUser
+from app.models.booking import RoadBooking
 from app.schemas.common import MessageResponse
 from app.schemas.reports import (
     ReportBuilderPreview,
@@ -22,6 +26,7 @@ from app.schemas.reports import (
     ReportTemplateUpdate,
 )
 from app.services import reports_service
+from app.services.settings_service import get_settings
 
 router = APIRouter()
 
@@ -174,4 +179,70 @@ async def builder_preview(
         "estimated_rows": 0,
         "estimated_size_mb": 0,
         "message": "Preview available once warehouse ETL is connected.",
+    }
+
+
+# ── Gap 14: Authority export ───────────────────────────────────────────────────
+
+@router.get(
+    "/authority-export",
+    summary="Export anonymised aggregate trip data for transport authorities",
+    description=(
+        "Returns aggregated, fully anonymised trip statistics — zone-level counts, "
+        "time-slot distribution, service-type split. No PII is included. "
+        "Only available when 'Share anonymised trip data with transport authorities' "
+        "is enabled in Settings → Data & Privacy → Consent."
+    ),
+)
+async def authority_export(
+    days: int = Query(30, ge=1, le=365, description="Number of days to include"),
+    _: AdminUser = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    platform = await get_settings(db)
+    if not platform.data_share_authorities:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Sharing anonymised trip data with transport authorities is disabled. "
+                "Enable the setting in Settings → Data & Privacy → Consent."
+            ),
+        )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    completed_statuses = ["Completed"]
+
+    # Aggregate by zone — no PII, counts only
+    zone_q = (
+        select(
+            RoadBooking.zone_name,
+            RoadBooking.service_type,
+            func.count(RoadBooking.id).label("trip_count"),
+            func.avg(RoadBooking.distance_km).label("avg_distance_km"),
+            func.avg(RoadBooking.duration_min).label("avg_duration_min"),
+        )
+        .where(
+            RoadBooking.status.in_(completed_statuses),
+            RoadBooking.created_at >= cutoff,
+        )
+        .group_by(RoadBooking.zone_name, RoadBooking.service_type)
+        .order_by(func.count(RoadBooking.id).desc())
+    )
+    zone_result = await db.execute(zone_q)
+    zone_rows = zone_result.fetchall()
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "period_days": days,
+        "note": "All data is fully anonymised — no personal information is included.",
+        "zone_summary": [
+            {
+                "zone": r.zone_name or "Unknown",
+                "service_type": r.service_type,
+                "trip_count": r.trip_count,
+                "avg_distance_km": round(r.avg_distance_km or 0, 2),
+                "avg_duration_min": round(r.avg_duration_min or 0, 1),
+            }
+            for r in zone_rows
+        ],
     }

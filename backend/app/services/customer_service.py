@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.customer import Customer, WalletTransaction
+from app.services.settings_service import get_settings
 from app.schemas.customer import (
     CustomerCreate,
     CustomerListResponse,
@@ -194,6 +195,10 @@ async def create_customer(
             detail="A customer with this email address already exists",
         )
 
+    # Inherit platform marketing consent default when not explicitly provided
+    platform = await get_settings(db)
+    marketing_opt_in = data.marketing_opt_in if data.marketing_opt_in is not None else platform.consent_marketing_opt_in
+
     now = datetime.now(timezone.utc)
     customer = Customer(
         id=str(uuid.uuid4()),
@@ -202,6 +207,7 @@ async def create_customer(
         email=data.email,
         city=data.city,
         segment_override=data.segment_override,
+        marketing_opt_in=marketing_opt_in if marketing_opt_in is not None else True,
         status="active",
         wallet_balance_minor=0,
         trips_count=0,

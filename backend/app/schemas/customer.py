@@ -17,7 +17,7 @@ class CustomerBase(BaseModel):
 
 class CustomerCreate(CustomerBase):
     """phone + email required; inherited from CustomerBase (both non-optional)."""
-    pass
+    marketing_opt_in: bool | None = None  # None → inherit from platform consent_marketing_opt_in
 
 
 class CustomerUpdate(BaseModel):
@@ -27,6 +27,7 @@ class CustomerUpdate(BaseModel):
     email: str | None = Field(default=None)
     city: str | None = Field(default=None)
     segment_override: str | None = Field(default=None)
+    marketing_opt_in: bool | None = Field(default=None)
 
 
 class CustomerResponse(BaseModel):
@@ -52,6 +53,7 @@ class CustomerResponse(BaseModel):
 
     rating: float | None
     cancellation_rate: float
+    marketing_opt_in: bool
     last_active_at: Any
     flag_reason: str | None
     joined_at: Any

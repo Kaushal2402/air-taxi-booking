@@ -76,8 +76,16 @@ async def log_event(
     before_data: Optional[dict] = None,
     after_data: Optional[dict] = None,
 ) -> None:
-    """Write an immutable audit event. Never raises — failures are logged to stderr."""
+    """Write an immutable audit event. Never raises — failures are logged to stderr.
+    Events in the 'Analytics' category are silently dropped when
+    consent_analytics_tracking is disabled in platform settings.
+    """
     try:
+        # Gap 6: skip analytics events when consent_analytics_tracking is off
+        if category.lower() == "analytics":
+            platform = await get_settings(db)
+            if not platform.consent_analytics_tracking:
+                return
         # Generate unique event code
         event_code = "EVT-" + uuid.uuid4().hex[:8].upper()
 

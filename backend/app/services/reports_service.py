@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.report import ReportExport, ReportFrequency, ReportSchedule, ReportStatus, ReportTemplate
+from app.services.settings_service import get_settings
 
 
 # ── Templates ──────────────────────────────────────────────────────────────────
@@ -118,12 +119,43 @@ async def list_exports(
     return {"items": result.scalars().all(), "total": total, "page": page, "page_size": page_size}
 
 
+_ANALYTICS_REPORT_KEYWORDS = {"analytics", "tracking", "behaviour", "behavior", "engagement", "funnel"}
+_AUTHORITY_REPORT_KEYWORDS = {"authority", "transport", "government", "regulator", "anonymised"}
+
+
 async def request_export(
     db: AsyncSession,
     template_id: str | None,
     data: Dict[str, Any],
     admin_id: str,
 ) -> ReportExport:
+    platform = await get_settings(db)
+
+    # Gap 8: Block analytics report exports when consent_analytics_tracking is off
+    report_name = (data.get("name") or "").lower()
+    if not platform.consent_analytics_tracking:
+        if any(kw in report_name for kw in _ANALYTICS_REPORT_KEYWORDS):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "In-app analytics tracking is disabled. "
+                    "Enable 'In-app analytics tracking' in Settings → Data & Privacy → Consent "
+                    "to export analytics reports."
+                ),
+            )
+
+    # Gap 13: Block authority export when data_share_authorities is off
+    if any(kw in report_name for kw in _AUTHORITY_REPORT_KEYWORDS):
+        if not platform.data_share_authorities:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Sharing anonymised trip data with transport authorities is disabled. "
+                    "Enable 'Share anonymised trip data with transport authorities' in "
+                    "Settings → Data & Privacy → Consent to run authority exports."
+                ),
+            )
+
     exp = ReportExport(
         template_id=template_id,
         requested_by=admin_id,

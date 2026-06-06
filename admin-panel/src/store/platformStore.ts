@@ -31,6 +31,11 @@ interface PlatformState {
   currency_symbol_position: string
   decimal_separator: string
   thousands_separator: string
+  // Consent & data sharing
+  consent_marketing_opt_in: boolean
+  consent_analytics_tracking: boolean
+  consent_cookie_banner: boolean
+  data_share_authorities: boolean
   toggles: PlatformToggles
   loaded: boolean
   load: () => Promise<void>
@@ -51,6 +56,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   currency_symbol_position: 'before',
   decimal_separator: '.',
   thousands_separator: ',',
+  consent_marketing_opt_in: true,
+  consent_analytics_tracking: true,
+  consent_cookie_banner: true,
+  data_share_authorities: false,
   toggles: { ...DEFAULT_TOGGLES },
   loaded: false,
 
@@ -84,6 +93,10 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         currency_symbol_position: s.currency_symbol_position || 'before',
         decimal_separator: s.decimal_separator || '.',
         thousands_separator: s.thousands_separator || ',',
+        consent_marketing_opt_in: s.consent_marketing_opt_in ?? true,
+        consent_analytics_tracking: s.consent_analytics_tracking ?? true,
+        consent_cookie_banner: s.consent_cookie_banner ?? true,
+        data_share_authorities: s.data_share_authorities ?? false,
         toggles,
         loaded: true,
       })

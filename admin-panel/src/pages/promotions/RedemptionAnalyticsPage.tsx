@@ -5,6 +5,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { promotionsService } from '../../services/promotionsService'
 import type { PromotionAnalytics } from '../../services/promotionsService'
 import { useFormatMoney, useCurrencySymbol, currencySymbol } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,7 @@ export default function RedemptionAnalyticsPage() {
   const fmtMinor = useFormatMoney()
   const sym = useCurrencySymbol()
   const isMobile = useIsMobile()
+  const analyticsAllowed = usePlatformStore(s => s.consent_analytics_tracking)
   const [days, setDays] = useState(14)
   const [analytics, setAnalytics] = useState<PromotionAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -160,6 +162,16 @@ export default function RedemptionAnalyticsPage() {
         </div>
       }
     >
+      {!analyticsAllowed && (
+        <div style={{
+          margin: '12px 32px 0', padding: '10px 16px', background: '#fef3c7',
+          border: '1px solid #fbbf24', borderRadius: 4, fontSize: 13, color: '#92400e',
+        }}>
+          ⚠ <strong>In-app analytics tracking is disabled.</strong> This data may be incomplete.
+          Enable <em>In-app analytics tracking</em> in{' '}
+          <strong>Settings → Data &amp; Privacy → Consent</strong>.
+        </div>
+      )}
       {loading ? (
         <div style={{ padding: 40, color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
       ) : (

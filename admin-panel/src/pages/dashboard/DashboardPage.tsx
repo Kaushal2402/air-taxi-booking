@@ -321,6 +321,7 @@ export default function DashboardPage() {
   const fmtMinorLocal = useFormatMoney()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const analyticsAllowed = usePlatformStore(s => s.consent_analytics_tracking)
   const [window, setWindow] = useState<WindowParam>('today')
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -381,6 +382,18 @@ export default function DashboardPage() {
       }
     >
       <div style={{ padding: isMobile ? '12px 16px 28px' : '20px 28px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Gap 9: analytics consent warning */}
+        {!analyticsAllowed && (
+          <div style={{
+            padding: '10px 16px', background: '#fef3c7', border: '1px solid #fbbf24',
+            borderRadius: 4, fontSize: 13, color: '#92400e',
+          }}>
+            ⚠ <strong>In-app analytics tracking is disabled.</strong> Dashboard metrics and KPIs
+            are read-only for this session. Enable <em>In-app analytics tracking</em> in{' '}
+            <strong>Settings → Data &amp; Privacy → Consent</strong> to restore full analytics.
+          </div>
+        )}
 
         {/* KPI strip — 8 cards */}
         <div style={{
