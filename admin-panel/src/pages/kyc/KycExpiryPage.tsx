@@ -149,7 +149,23 @@ export default function KycExpiryPage() {
                 <button className="btn sm" style={{ height: 28 }} onClick={() => handleRemind(item.entity_name)} style={{ display: canManageExpiry ? undefined : 'none' }}>
                   <Icon name="envelope" size={12} />Remind
                 </button>
-                <button className="btn sm" style={{ height: 28 }} onClick={() => navigate(`/kyc/${item.entity_type}-documents/${item.id}`)}>
+                <button className="btn sm" style={{ height: 28 }} onClick={() => navigate(`/kyc/${item.entity_type}/${item.id}`, {
+                        state: {
+                          item: {
+                            id: item.id,
+                            entity_type: item.entity_type,
+                            entity_id: item.entity_id,
+                            entity_name: item.entity_name,
+                            doc_type: item.doc_type,
+                            status: item.days_until_expiry < 0 ? 'expired' : 'approved',
+                            file_url: item.file_url,
+                            expiry_date: item.expiry_date,
+                            review_notes: null,
+                            created_at: '',
+                            age_seconds: null,
+                          },
+                        },
+                      })}>
                   Re-verify
                 </button>
               </div>
@@ -202,7 +218,23 @@ export default function KycExpiryPage() {
                       <button
                         className="btn sm"
                         style={{ height: 28 }}
-                        onClick={() => navigate(`/kyc/${item.entity_type}-documents/${item.id}`)}
+                        onClick={() => navigate(`/kyc/${item.entity_type}/${item.id}`, {
+                        state: {
+                          item: {
+                            id: item.id,
+                            entity_type: item.entity_type,
+                            entity_id: item.entity_id,
+                            entity_name: item.entity_name,
+                            doc_type: item.doc_type,
+                            status: item.days_until_expiry < 0 ? 'expired' : 'approved',
+                            file_url: item.file_url,
+                            expiry_date: item.expiry_date,
+                            review_notes: null,
+                            created_at: '',
+                            age_seconds: null,
+                          },
+                        },
+                      })}
                       >
                         Re-verify
                       </button>

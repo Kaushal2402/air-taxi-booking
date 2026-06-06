@@ -9,12 +9,6 @@ import { kycService } from '../../services/kycService'
 import type { KycQueueItem } from '../../services/kycService'
 import { formatDate } from '../../lib/utils'
 
-// ── Props ─────────────────────────────────────────────────────────────────────
-
-interface KycDocumentDetailPageProps {
-  entityType: 'driver' | 'operator' | 'vehicle'
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatAge(ageSeconds: number | null): string {
@@ -60,8 +54,8 @@ function DocPlaceholder({ label, h = 280 }: { label: string; h?: number }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function KycDocumentDetailPage({ entityType }: KycDocumentDetailPageProps) {
-  const { docId } = useParams<{ docId: string }>()
+export default function KycDocumentDetailPage() {
+  const { entityType = 'driver', docId } = useParams<{ entityType: string; docId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
   const isMobile = useIsMobile()
@@ -86,7 +80,7 @@ export default function KycDocumentDetailPage({ entityType }: KycDocumentDetailP
     }
     // Fallback: load from queue
     setLoading(true)
-    kycService.getQueue({ page_size: 200 })
+    kycService.getQueue({ page_size: 100 })
       .then(res => {
         const found = res.items.find(i => i.id === docId)
         if (found) {

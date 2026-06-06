@@ -5,6 +5,7 @@ import Icon from '../ui/Icon'
 import { driverService } from '../../services/driverService'
 import { dispatchService } from '../../services/dispatchService'
 import { supportService } from '../../services/supportService'
+import { kycService } from '../../services/kycService'
 import { usePermissionStore } from '../../store/permissionStore'
 
 // Permission keys that gate each nav item.
@@ -59,7 +60,7 @@ const NAV_GROUPS = [
       { id: 'aircraft',  label: 'Aircraft & Crew',   icon: 'helipad',  path: '/aircraft' },
       { id: 'customers',        label: 'Customers',         icon: 'user',     path: '/customers' },
       { id: 'privacy-requests', label: 'Privacy Requests',  icon: 'shield',   path: '/privacy/requests' },
-      { id: 'kyc',              label: 'KYC & Documents',   icon: 'shield',   path: '/kyc', count: '9' },
+      { id: 'kyc',              label: 'KYC & Documents',   icon: 'shield',   path: '/kyc' },
     ],
   },
   {
@@ -120,10 +121,11 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
     return keys.some(k => can(k))
   }
 
-  // Dynamic driver badge: shows in_review count (drivers awaiting review)
+  // Dynamic badges
   const [driverBadge,   setDriverBadge]   = useState<string | undefined>(undefined)
   const [dispatchBadge, setDispatchBadge] = useState<string | undefined>(undefined)
   const [supportBadge,  setSupportBadge]  = useState<string | undefined>(undefined)
+  const [kycBadge,      setKycBadge]      = useState<string | undefined>(undefined)
 
   function fetchBadges() {
     // Drivers awaiting review
@@ -149,6 +151,14 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
         setSupportBadge(n > 0 ? String(n) : undefined)
       })
       .catch(() => setSupportBadge(undefined))
+
+    // KYC documents pending review
+    kycService.getQueue({ page: 1, page_size: 1, status: 'pending' })
+      .then(res => {
+        const n = res.total ?? 0
+        setKycBadge(n > 0 ? String(n) : undefined)
+      })
+      .catch(() => setKycBadge(undefined))
   }
 
   useEffect(() => {
@@ -232,6 +242,7 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
                     item.id === 'drivers'  ? driverBadge   :
                     item.id === 'dispatch' ? dispatchBadge :
                     item.id === 'support'  ? supportBadge  :
+                    item.id === 'kyc'      ? kycBadge      :
                     (item as { count?: string }).count
                   return badge ? <span className="count">{badge}</span> : null
                 })()}

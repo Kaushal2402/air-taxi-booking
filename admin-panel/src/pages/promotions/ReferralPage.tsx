@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { parseApiError } from '../../hooks/useApiError'
 import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
@@ -101,8 +100,11 @@ export default function ReferralPage() {
         fraud_payment_instrument: prog.fraud_payment_instrument,
         fraud_manual_review_threshold_minor: prog.fraud_manual_review_threshold_minor,
       })
-    } catch { /* ignore */ }
-    finally { setLoading(false) }
+    } catch (err: unknown) {
+      if ((err as { response?: { status?: number } })?.response?.status === 403) {
+        setIsForbidden(true)
+      }
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -151,6 +153,8 @@ export default function ReferralPage() {
   const manualReviewOn = draft.fraud_manual_review_threshold_minor != null
     ? draft.fraud_manual_review_threshold_minor !== null
     : program?.fraud_manual_review_threshold_minor != null
+
+  if (isForbidden) return <AccessDeniedPage message="You don't have permission to manage the referral program." />
 
   return (
     <Shell

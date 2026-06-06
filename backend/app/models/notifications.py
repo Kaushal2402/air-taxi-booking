@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
@@ -68,7 +68,7 @@ class NotificationLog(Base, UUIDPrimaryKeyMixin):
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
     recipient: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=NotificationDeliveryStatus.pending)
-    created_at: Mapped[str] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now(), nullable=False
     )
 

@@ -271,7 +271,7 @@ function App() {
           {/* KYC */}
           <Route path="/kyc" element={<PrivateRoute><KycQueuePage /></PrivateRoute>} />
           <Route path="/kyc/expiry" element={<PrivateRoute><KycExpiryPage /></PrivateRoute>} />
-          <Route path="/kyc/:id" element={<PrivateRoute><KycDocumentDetailPage entityType="driver" /></PrivateRoute>} />
+          <Route path="/kyc/:entityType/:docId" element={<PrivateRoute><KycDocumentDetailPage /></PrivateRoute>} />
 
           {/* Promotions */}
           <Route path="/promotions" element={<PrivateRoute><PromotionsPage /></PrivateRoute>} />
@@ -306,6 +306,7 @@ function App() {
 
           {/* Reports — /reports/builder and /reports/exports MUST be before /reports/:templateId */}
           <Route path="/reports" element={<PrivateRoute><ReportLibraryPage /></PrivateRoute>} />
+          <Route path="/reports/exports" element={<PrivateRoute><ReportLibraryPage /></PrivateRoute>} />
           <Route path="/reports/builder" element={<PrivateRoute><ReportBuilderPage /></PrivateRoute>} />
           <Route path="/reports/:templateId" element={<PrivateRoute><RevenueReportPage /></PrivateRoute>} />
 

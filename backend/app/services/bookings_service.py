@@ -554,6 +554,26 @@ async def create_assisted_booking(
 
     await db.commit()
 
+    # Send BOOKING_CREATED notification (non-fatal)
+    try:
+        from app.services.notifications_service import send_event_notification
+        cust = await db.get(Customer, data.customer_id) if data.customer_id else None
+        await send_event_notification(
+            db, "BOOKING_CREATED",
+            {
+                "customer_name": customer_name or "Customer",
+                "booking_ref": booking_ref,
+                "pickup_address": data.pickup_address,
+                "drop_address": data.drop_address,
+                "brand_name": "Air Taxi",
+            },
+            recipient_phone=cust.phone if cust else None,
+            recipient_email=cust.email if cust else None,
+            notify_push=True, notify_sms=True, notify_email=True,
+        )
+    except Exception:
+        pass
+
     # Reload with relationships
     booking = await _load_booking(db, booking.id)
     return _build_detail_dict(booking, customer_name, None)
@@ -687,6 +707,25 @@ async def cancel_booking(
             await driver_suspension_service.check_and_auto_suspend(db, driver_id_before_cancel)
         except Exception:
             pass
+
+    # Send BOOKING_CANCELLED notification (non-fatal)
+    try:
+        from app.services.notifications_service import send_event_notification
+        from app.models.customer import Customer as CustomerModel
+        cust = await db.get(CustomerModel, booking.customer_id) if booking.customer_id else None
+        await send_event_notification(
+            db, "BOOKING_CANCELLED",
+            {
+                "customer_name": cust.name if cust else "Customer",
+                "booking_ref": booking.booking_ref,
+                "brand_name": "Air Taxi",
+            },
+            recipient_phone=cust.phone if cust else None,
+            recipient_email=cust.email if cust else None,
+            notify_push=True, notify_sms=True, notify_email=True,
+        )
+    except Exception:
+        pass
 
     # Reload relationships
     booking = await _load_booking(db, booking_id)

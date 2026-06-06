@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { reportsService } from '../../services/reportsService'
 import type { ReportFrequency, ReportFormat } from '../../services/reportsService'
+import { catalogService } from '../../services/catalogService'
+import api from '../../lib/axios'
 import { useFiscalYearRanges, useCurrencySymbol } from '../../lib/utils'
 
-const ALL_DIMENSIONS = ['Service', 'City', 'Date', 'Payment method', 'Driver', 'Operator', 'Promo code', 'Vehicle class']
+const ALL_DIMENSIONS = ['Service', 'Zone', 'Date', 'Payment method', 'Driver', 'Operator', 'Promo code', 'Vehicle class']
 const ALL_METRICS: Array<[string, boolean]> = [
   ['Gross volume', true], ['Net revenue', true], ['Completed trips', true],
   ['Avg fare', true], ['Take-rate %', false], ['Cancellations', false],
@@ -45,18 +47,29 @@ export default function ReportBuilderPage() {
     `${sym} ${SAMPLE_AMOUNTS[i][3]}`,
   ])
 
-  const [selectedDims, setSelectedDims] = useState<string[]>(['Service', 'City', 'Date'])
+  const [selectedDims, setSelectedDims] = useState<string[]>(['Service', 'Zone', 'Date'])
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['Gross volume', 'Net revenue', 'Completed trips', 'Avg fare'])
   const [dateRange, setDateRange] = useState('Last 30 days')
   const [compareTo, setCompareTo] = useState('Prior period')
-  const [service, setService] = useState('All services')
-  const [city, setCity] = useState('All cities')
+  const [service, setService] = useState('')
+  const [zone, setZone] = useState('')
+  const [serviceOptions, setServiceOptions] = useState<string[]>([])
+  const [zoneOptions, setZoneOptions] = useState<string[]>([])
   const [frequency, setFrequency] = useState<ReportFrequency>('weekly')
   const [format, setFormat] = useState<ReportFormat>('pdf')
   const [recipients, setRecipients] = useState('')
   const [reportName, setReportName] = useState('')
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
+
+  useEffect(() => {
+    api.get<{ value: string; label: string }[]>('/ref/service-types')
+      .then(r => setServiceOptions(r.data.map(x => x.value)))
+      .catch(() => {})
+    catalogService.listServiceZones()
+      .then(zones => setZoneOptions(zones.filter(z => z.is_active).map(z => z.name)))
+      .catch(() => {})
+  }, [])
 
   function toggleDim(d: string) {
     setSelectedDims(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
@@ -73,7 +86,7 @@ export default function ReportBuilderPage() {
       await reportsService.createTemplate({
         name: reportName,
         description: `Custom: ${selectedDims.join(', ')} × ${selectedMetrics.join(', ')}`,
-        config: { dimensions: selectedDims, metrics: selectedMetrics, date_range: dateRange, service, city },
+        config: { dimensions: selectedDims, metrics: selectedMetrics, date_range: dateRange, service, zone },
       })
       navigate('/reports')
     } catch {
@@ -86,11 +99,28 @@ export default function ReportBuilderPage() {
   async function handleRunOnce() {
     setRunning(true)
     try {
-      await reportsService.createExport({
+      // Save as template first so we have an ID for scheduling
+      const tmpl = await reportsService.createTemplate({
         name: reportName || 'Custom report',
-        format,
-        config: { dimensions: selectedDims, metrics: selectedMetrics, date_range: dateRange, service, city },
+        description: `Custom: ${selectedDims.join(', ')} × ${selectedMetrics.join(', ')}`,
+        config: { dimensions: selectedDims, metrics: selectedMetrics, date_range: dateRange, service, zone },
+        default_frequency: frequency,
+        default_format: format,
       })
+
+      if (frequency !== 'once') {
+        // Create a recurring schedule
+        await reportsService.createSchedule(tmpl.id, {
+          name: reportName || 'Custom report',
+          frequency,
+          format,
+          recipients: recipients.trim(),
+        })
+      } else {
+        // Run immediately as a one-off export
+        await reportsService.runTemplate(tmpl.id, { name: tmpl.name, format })
+      }
+
       navigate('/reports/exports')
     } catch {
       // ignore
@@ -192,24 +222,31 @@ export default function ReportBuilderPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '22px 24px' }}>
             <div className="t-label" style={{ marginBottom: 14 }}>Filters & range</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {[
-                ['Date range', dateRange, setDateRange, ['Last 7 days', 'Last 30 days', 'Last 90 days', 'This month', 'Last month', 'Last 6 months', `This FY (${thisFY.label})`, `Last FY (${lastFY.label})`]],
-                ['Compare to', compareTo, setCompareTo, ['Prior period', 'Prior year', 'None']],
-                ['Service', service, setService, ['All services', 'Sedan & XL', 'Bike & auto', 'Air · charter', 'Air · shuttle', 'Outstation']],
-                ['City', city, setCity, ['All cities', 'Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Chennai']],
-              ].map(([label, val, setter, opts]) => (
-                <div key={label as string} className="field">
-                  <div className="field-label">{label as string}</div>
-                  <select
-                    className="input"
-                    style={{ width: '100%', height: 36, padding: '0 10px' }}
-                    value={val as string}
-                    onChange={e => (setter as (v: string) => void)(e.target.value)}
-                  >
-                    {(opts as string[]).map(o => <option key={o} value={o}>{o}</option>)}
+              {([
+                ['Date range', dateRange, setDateRange, ['Last 7 days', 'Last 30 days', 'Last 90 days', 'This month', 'Last month', 'Last 6 months', `This FY (${thisFY.label})`, `Last FY (${lastFY.label})`]] as const,
+                ['Compare to', compareTo, setCompareTo, ['Prior period', 'Prior year', 'None']] as const,
+              ] as [string, string, (v: string) => void, readonly string[]][]).map(([label, val, setter, opts]) => (
+                <div key={label} className="field">
+                  <div className="field-label">{label}</div>
+                  <select className="input" style={{ width: '100%', height: 36, padding: '0 10px' }} value={val} onChange={e => setter(e.target.value)}>
+                    {opts.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
               ))}
+              <div className="field">
+                <div className="field-label">Service</div>
+                <select className="input" style={{ width: '100%', height: 36, padding: '0 10px' }} value={service} onChange={e => setService(e.target.value)}>
+                  <option value="">All services</option>
+                  {serviceOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <div className="field-label">Zone</div>
+                <select className="input" style={{ width: '100%', height: 36, padding: '0 10px' }} value={zone} onChange={e => setZone(e.target.value)}>
+                  <option value="">All zones</option>
+                  {zoneOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 

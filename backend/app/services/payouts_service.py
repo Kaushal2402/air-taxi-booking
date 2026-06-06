@@ -85,8 +85,7 @@ async def approve_run(db: AsyncSession, run_id: str, admin_id: str, notes: str |
         raise HTTPException(status_code=400, detail="Run cannot be approved in current status")
     run.status = PayoutRunStatus.approved
     run.approved_by = admin_id
-    from datetime import datetime
-    run.approved_at = datetime.utcnow()
+    run.approved_at = datetime.now(timezone.utc)
     if notes:
         run.notes = notes
     await db.commit()
@@ -166,8 +165,7 @@ async def update_payee(db: AsyncSession, payee_id: str, data: Dict[str, Any]) ->
     for k, v in data.items():
         setattr(payee, k, v)
     if data.get("status") == PayeeStatus.paid:
-        from datetime import datetime
-        payee.paid_at = datetime.utcnow()
+        payee.paid_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(payee)
     return await get_payee(db, payee_id)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
 import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
+import api from '../../lib/axios'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -115,7 +115,7 @@ function FilterChip({ label, value, options, selected, onSelect }: FilterChipPro
           maxHeight: 240, overflowY: 'auto',
         }}>
           {options.map(opt => (
-            <button style={{ display: canInitiateRefund ? undefined : 'none' }}
+            <button
               key={opt}
               onClick={() => { onSelect(opt); setOpen(false) }}
               style={{
@@ -387,6 +387,7 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [gatewayFilter, setGatewayFilter] = useState('All')
   const [serviceFilter, setServiceFilter] = useState('All')
+  const [serviceOptions, setServiceOptions] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isForbidden, setIsForbidden] = useState(false)
@@ -413,14 +414,25 @@ export default function PaymentsPage() {
       setItems(res.items)
       setTotal(res.total)
       setKpis(res.kpis)
-    } catch {
-      setError('Failed to load transactions. Please try again.')
+    } catch (err: unknown) {
+      if ((err as { response?: { status?: number } })?.response?.status === 403) {
+        setIsForbidden(true)
+      } else {
+        setError('Failed to load transactions. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
   }, [page, search, methodFilter, statusFilter, gatewayFilter, serviceFilter])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    api.get<{ value: string; label: string }[]>('/ref/service-types')
+      .then(r => setServiceOptions(r.data.map(x => x.value)))
+      .catch(() => {})
+  }, [])
+
 
   const handleExport = async () => {
     setExporting(true)
@@ -463,6 +475,8 @@ export default function PaymentsPage() {
       </button>
     </>
   )
+
+  if (isForbidden) return <AccessDeniedPage message="You don't have permission to view payments." />
 
   return (
     <Shell activeId="payments" breadcrumb="Finance · Payments" title="Payments & ledger" subtitle={subtitle} actions={actions}>
@@ -531,7 +545,7 @@ export default function PaymentsPage() {
           />
           <FilterChip
             label="Service" value={serviceFilter}
-            options={['All', 'Sedan', 'Sedan XL', 'Heli', 'Bike', 'Auto', 'Charter']}
+            options={['All', ...serviceOptions]}
             selected={serviceFilter} onSelect={v => { setServiceFilter(v); setPage(1) }}
           />
           <div style={{ flex: 1 }} />

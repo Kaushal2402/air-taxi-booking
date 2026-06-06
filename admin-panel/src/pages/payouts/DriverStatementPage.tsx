@@ -19,6 +19,10 @@ export default function DriverStatementPage() {
   const [payee, setPayee] = useState<PayoutPayee | null>(null)
   const [loading, setLoading] = useState(true)
   const [placeHold, setPlaceHold] = useState(false)
+
+  function handlePrintStatement() {
+    window.print()
+  }
   const [showAdjustDialog, setShowAdjustDialog] = useState(false)
   const [adjDesc, setAdjDesc] = useState('')
   const [adjAmount, setAdjAmount] = useState('')
@@ -101,7 +105,7 @@ export default function DriverStatementPage() {
       subtitle={`${payee.entity_type} statement · ${fmtINR(payee.net_amount)} net`}
       actions={
         <>
-          <button className="btn sm"><Icon name="download" size={13} />Statement PDF</button>
+          <button className="btn sm" onClick={handlePrintStatement}><Icon name="download" size={13} />Statement PDF</button>
           <button className="btn sm" onClick={() => setShowAdjustDialog(true)}>Adjust</button>
           {payee.status !== 'hold' && (
             <button className="btn sm danger" onClick={() => setPlaceHold(true)}>Place hold</button>

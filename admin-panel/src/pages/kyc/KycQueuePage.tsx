@@ -142,6 +142,27 @@ function ReviewModal({ item, action, onClose, onConfirm }: ReviewModalProps) {
   )
 }
 
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3500)
+    return () => clearTimeout(t)
+  }, [onClose])
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, right: 24, zIndex: 400,
+      background: 'var(--ink)', color: 'var(--surface)',
+      padding: '10px 18px', borderRadius: 4, fontSize: 13,
+      boxShadow: 'var(--shadow-pop)',
+      display: 'flex', alignItems: 'center', gap: 10,
+    }}>
+      <Icon name="check" size={14} />
+      {message}
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function KycQueuePage() {
@@ -159,6 +180,7 @@ export default function KycQueuePage() {
 
   const [reviewItem, setReviewItem] = useState<KycQueueItem | null>(null)
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
+  const [toast, setToast] = useState<string | null>(null)
   const canApproveKyc = usePermission('kyc.documents.approve')
 
   const load = async (p = 1) => {
@@ -203,8 +225,9 @@ export default function KycQueuePage() {
     try {
       await callReviewApi(item, { action: 'request_reupload' })
       await load(page)
+      setToast(`Reupload requested for ${item.entity_name}`)
     } catch {
-      // silently fail
+      setToast('Failed to request reupload. Please try again.')
     }
   }
 
@@ -229,7 +252,7 @@ export default function KycQueuePage() {
         borderRadius: 4, padding: '14px 16px', marginBottom: 10,
         cursor: 'pointer',
       }}
-      onClick={() => navigate(`/kyc/${item.entity_type}-documents/${item.id}`)}
+      onClick={() => navigate(`/kyc/${item.entity_type}/${item.id}`)}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div>
@@ -375,7 +398,7 @@ export default function KycQueuePage() {
                     <tr
                       key={item.id}
                       style={{ cursor: 'pointer' }}
-                      onClick={() => navigate(`/kyc/${item.entity_type}-documents/${item.id}`)}
+                      onClick={() => navigate(`/kyc/${item.entity_type}/${item.id}`)}
                     >
                       <td>
                         <span style={{ width: 14, height: 14, border: '1px solid var(--rule-strong)', borderRadius: 3, display: 'inline-block' }} />
@@ -470,6 +493,8 @@ export default function KycQueuePage() {
           onConfirm={handleReviewConfirm}
         />
       )}
+
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </Shell>
   )
 }

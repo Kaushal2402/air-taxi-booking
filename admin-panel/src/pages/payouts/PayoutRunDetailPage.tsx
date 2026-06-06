@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
 import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
@@ -45,6 +44,28 @@ export default function PayoutRunDetailPage() {
   const canApprovePayout = usePermission('payouts.approve')
 
   const PAGE_SIZE = 20
+  const [exportingNach, setExportingNach] = useState(false)
+
+  async function handleNachExport() {
+    if (!runId || !run) return
+    setExportingNach(true)
+    try {
+      const res = await payoutsService.listPayees(runId, { page: 1, page_size: 1000 })
+      const header = ['Payee Name', 'Ref', 'Entity Type', 'Bank Account Ref', 'Net Amount', 'Status', 'UTR']
+      const csv = [header, ...res.items.map(p => [
+        p.entity_name, p.entity_ref ?? '', p.entity_type,
+        p.bank_account_ref ?? '', String(p.net_amount), p.status, p.utr_number ?? '',
+      ])].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `${run.run_ref}-nach.csv`; a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // ignore
+    } finally {
+      setExportingNach(false)
+    }
+  }
 
   // Guard: if runId is "new" or missing, redirect to list immediately
   useEffect(() => {
@@ -64,8 +85,12 @@ export default function PayoutRunDetailPage() {
       setRun(runData)
       setPayees(payeesData.items)
       setTotalPayees(payeesData.total)
-    } catch {
-      setError('Failed to load payout run. Please try again.')
+    } catch (err: unknown) {
+      if ((err as { response?: { status?: number } })?.response?.status === 403) {
+        setIsForbidden(true)
+      } else {
+        setError('Failed to load payout run. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -192,7 +217,7 @@ export default function PayoutRunDetailPage() {
       subtitle={`${runTypeLabel(run.run_type)} · ${run.period_label} · ${run.payee_count.toLocaleString('en-IN')} payees · ${fmtINR(run.net_amount)} · ${run.status}`}
       actions={
         <>
-          <button className="btn sm"><Icon name="download" size={13} />NACH file</button>
+          <button className="btn sm" disabled={exportingNach} onClick={handleNachExport}><Icon name="download" size={13} />{exportingNach ? 'Exporting…' : 'NACH file'}</button>
           {isReview && <button className="btn sm danger" onClick={() => setRejecting(true)} style={{ display: canApprovePayout ? undefined : 'none' }}>Reject</button>}
           {isReview && (
             <button className="btn sm accent" onClick={() => setApproving(true)}>

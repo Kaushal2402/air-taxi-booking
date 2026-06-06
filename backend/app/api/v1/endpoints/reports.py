@@ -26,6 +26,7 @@ from app.schemas.reports import (
     ReportTemplateUpdate,
 )
 from app.services import reports_service
+from app.services.report_queries import run_standard_report, REPORT_DISPATCH
 from app.services.settings_service import get_settings
 
 router = APIRouter()
@@ -171,15 +172,83 @@ async def get_export(
 async def builder_preview(
     body: ReportBuilderPreview,
     _: AdminUser = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Returns a stub preview for the report builder. Real implementation queries the warehouse."""
+    """
+    Preview for the report builder.
+    For standard report templates, runs the real query and returns a 10-row sample.
+    For custom builder queries, returns column schema (full execution via /query).
+    """
+    # If a standard report name is provided, run the real query
+    report_name = getattr(body, "report_name", None) or ""
+    if report_name.lower() in [k.lower() for k in REPORT_DISPATCH]:
+        date_to = datetime.now(timezone.utc)
+        date_from = date_to - timedelta(days=7)  # 7-day sample for preview
+        try:
+            result = await run_standard_report(db, report_name, date_from, date_to)
+            preview_rows = result["rows"][:10]
+            return {
+                "columns": result["columns"],
+                "rows": preview_rows,
+                "total_rows": len(result["rows"]),
+                "estimated_rows": len(result["rows"]),
+                "summary": result.get("summary", {}),
+                "message": f"Live data — last 7 days preview. Full run uses your selected date range.",
+            }
+        except Exception as exc:
+            return {
+                "columns": body.dimensions + body.metrics,
+                "rows": [],
+                "estimated_rows": 0,
+                "message": f"Preview error: {exc}",
+            }
+
+    # Custom builder — return column schema only
     return {
         "columns": body.dimensions + body.metrics,
         "rows": [],
         "estimated_rows": 0,
         "estimated_size_mb": 0,
-        "message": "Preview available once warehouse ETL is connected.",
+        "message": "Custom report builder: run /reports/query with your full date range to see data.",
     }
+
+
+@router.post("/query")
+async def run_report_query(
+    report_name: str = Query(..., description="Exact standard report name"),
+    date_from: str = Query(..., description="ISO date, e.g. 2024-01-01"),
+    date_to: str = Query(..., description="ISO date, e.g. 2024-01-31"),
+    zone: str | None = Query(None),
+    service_type: str | None = Query(None),
+    driver_id: str | None = Query(None),
+    _: AdminUser = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Run a standard report query and return the full result set.
+    This is the live data endpoint — no file generation, instant JSON response.
+    """
+    try:
+        dt_from = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
+        dt_to = datetime.fromisoformat(date_to).replace(hour=23, minute=59, second=59,
+                                                          tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {exc}")
+
+    filters: dict = {}
+    if zone:
+        filters["zone_name"] = zone
+    if service_type:
+        filters["service_type"] = service_type
+    if driver_id:
+        filters["driver_id"] = driver_id
+
+    try:
+        result = await run_standard_report(db, report_name, dt_from, dt_to, filters)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return result
 
 
 # ── Gap 14: Authority export ───────────────────────────────────────────────────

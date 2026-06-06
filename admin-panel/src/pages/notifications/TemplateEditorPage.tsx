@@ -13,7 +13,11 @@ const CHAN_LABELS: Record<string, string> = {
   push: 'Push', sms: 'SMS', email: 'Email', wa: 'WhatsApp',
 }
 
-const TEMPLATE_VARS = ['{{customer_name}}', '{{driver_name}}', '{{vehicle}}', '{{eta}}', '{{plate}}', '{{otp}}', '{{fare}}']
+const TEMPLATE_VARS = [
+  '{{customer_name}}', '{{driver_name}}', '{{vehicle}}', '{{eta}}',
+  '{{plate}}', '{{otp}}', '{{fare}}', '{{booking_ref}}',
+  '{{pickup_address}}', '{{drop_address}}', '{{brand_name}}',
+]
 
 export default function TemplateEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -28,7 +32,7 @@ export default function TemplateEditorPage() {
   const [saving, setSaving] = useState(false)
   const [apiError, setApiError] = useState('')
   const [isForbidden, setIsForbidden] = useState(false)
-  const [activePreview, setActivePreview] = useState<'push' | 'sms'>('push')
+  const [activePreview, setActivePreview] = useState<'push' | 'sms' | 'email' | 'wa'>('push')
 
   const load = async () => {
     if (!id) return
@@ -63,28 +67,24 @@ export default function TemplateEditorPage() {
     patch('channels', channels.includes(ch) ? channels.filter(c => c !== ch) : [...channels, ch])
   }
 
-  const insertVar = (v: string) => {
-    const body = draft.push_body ?? ''
-    patch('push_body', body + v)
+  const insertVar = (field: keyof NotificationTemplate, v: string) => {
+    const body = (draft[field] as string) ?? ''
+    patch(field, body + v)
   }
 
-  const previewBody = (draft.push_body ?? '')
-    .replace('{{customer_name}}', 'Priya')
-    .replace('{{driver_name}}', 'Rajesh')
-    .replace('{{vehicle}}', 'White Swift Dzire')
-    .replace('{{eta}}', '2 min')
-    .replace('{{plate}}', 'KA 01 AB 4521')
-    .replace('{{otp}}', '4821')
-    .replace('{{fare}}', `${sym} 142`)
+  const SAMPLE: Record<string, string> = {
+    '{{customer_name}}': 'Priya', '{{driver_name}}': 'Rajesh',
+    '{{vehicle}}': 'White Swift Dzire', '{{eta}}': '2 min',
+    '{{plate}}': 'KA01AB4521', '{{otp}}': '4821',
+    '{{fare}}': `${sym} 142`, '{{booking_ref}}': 'AC-12345',
+    '{{pickup_address}}': 'Koramangala 5th Block', '{{drop_address}}': 'Whitefield',
+    '{{brand_name}}': 'Acme Mobility',
+  }
+  const render = (text: string | null | undefined) =>
+    Object.entries(SAMPLE).reduce((s, [k, v]) => s.replaceAll(k, v), text ?? '')
 
-  const previewTitle = (draft.push_title ?? '')
-    .replace('{{customer_name}}', 'Priya')
-    .replace('{{driver_name}}', 'Rajesh')
-    .replace('{{vehicle}}', 'White Swift Dzire')
-    .replace('{{eta}}', '2 min')
-    .replace('{{plate}}', 'KA 01 AB 4521')
-    .replace('{{otp}}', '4821')
-    .replace('{{fare}}', `${sym} 142`)
+  const previewBody = render(draft.push_body)
+  const previewTitle = render(draft.push_title)
 
   if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
@@ -223,15 +223,11 @@ export default function TemplateEditorPage() {
                   />
                 </div>
                 <div>
-                  <div className="t-label" style={{ marginBottom: 8 }}>Insert variable</div>
+                  <div className="t-label" style={{ marginBottom: 8 }}>Insert variable into push body</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                     {TEMPLATE_VARS.map(v => (
-                      <button
-                        key={v}
-                        className="btn sm"
-                        onClick={() => insertVar(v)}
-                        style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent-ink)', borderStyle: 'dashed' }}
-                      >
+                      <button key={v} className="btn sm" onClick={() => insertVar('push_body', v)}
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent-ink)', borderStyle: 'dashed' }}>
                         {v}
                       </button>
                     ))}
@@ -252,6 +248,81 @@ export default function TemplateEditorPage() {
                   rows={2}
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--rule-strong)', borderRadius: 3, background: 'var(--surface)', fontSize: 13.5, resize: 'vertical', fontFamily: 'var(--font-sans)' }}
                 />
+              </div>
+            </div>
+
+            {/* Email content */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '20px 22px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div className="t-label">Email content</div>
+                <span className="t-meta">Supports full HTML</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="field">
+                  <label className="field-label">Subject line</label>
+                  <div className="input">
+                    <input
+                      value={draft.email_subject ?? ''}
+                      onChange={e => patch('email_subject', e.target.value || null)}
+                      placeholder="Your booking {{booking_ref}} is confirmed"
+                    />
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="field-label">Email body (HTML)</label>
+                  <textarea
+                    value={draft.email_body ?? ''}
+                    onChange={e => patch('email_body', e.target.value || null)}
+                    placeholder={`<p>Hi {{customer_name}},</p>\n<p>Your booking <strong>{{booking_ref}}</strong> has been confirmed.</p>\n<p>Driver: {{driver_name}} · {{vehicle}} · {{plate}}</p>\n<p>ETA: {{eta}}</p>`}
+                    rows={8}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--rule-strong)', borderRadius: 3, background: 'var(--surface)', fontSize: 13, resize: 'vertical', fontFamily: 'var(--font-mono)', lineHeight: 1.55 }}
+                  />
+                </div>
+                <div>
+                  <div className="t-label" style={{ marginBottom: 8 }}>Insert variable into email body</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {TEMPLATE_VARS.map(v => (
+                      <button key={v} className="btn sm" onClick={() => insertVar('email_body', v)}
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent-ink)', borderStyle: 'dashed' }}>
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* WhatsApp content */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '20px 22px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div className="t-label">WhatsApp content</div>
+                <span className="badge warn" style={{ fontSize: 10.5 }}>Requires Meta pre-approval</span>
+              </div>
+              <div style={{ padding: '9px 12px', background: 'color-mix(in oklab, var(--warn) 8%, var(--surface-2))', border: '1px solid color-mix(in oklab, var(--warn) 25%, var(--rule))', borderRadius: 3, fontSize: 12.5, color: 'var(--ink-2)', marginBottom: 14, lineHeight: 1.55 }}>
+                WhatsApp Business templates must be submitted to and approved by Meta before they can be sent. Use plain text only — no HTML. Variable placeholders <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{'{{variable}}'}</code> map to numbered params at send time.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="field">
+                  <label className="field-label">Template body</label>
+                  <textarea
+                    value={draft.wa_body ?? ''}
+                    onChange={e => patch('wa_body', e.target.value || null)}
+                    placeholder={`Hi {{customer_name}}, your driver {{driver_name}} is {{eta}} away in a {{vehicle}} ({{plate}}). Booking ref: {{booking_ref}}`}
+                    rows={4}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--rule-strong)', borderRadius: 3, background: 'var(--surface)', fontSize: 13.5, resize: 'vertical', fontFamily: 'var(--font-sans)' }}
+                  />
+                </div>
+                <div>
+                  <div className="t-label" style={{ marginBottom: 8 }}>Insert variable into WhatsApp body</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {TEMPLATE_VARS.map(v => (
+                      <button key={v} className="btn sm" onClick={() => insertVar('wa_body', v)}
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent-ink)', borderStyle: 'dashed' }}>
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -301,25 +372,21 @@ export default function TemplateEditorPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                 <div className="t-label">Live preview</div>
                 <div style={{ display: 'flex', border: '1px solid var(--rule)', borderRadius: 3, overflow: 'hidden' }}>
-                  {(['push', 'sms'] as const).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setActivePreview(p)}
-                      style={{
-                        padding: '4px 10px', fontSize: 11.5, border: 'none', cursor: 'pointer',
+                  {(['push', 'sms', 'email', 'wa'] as const).map(p => (
+                    <button key={p} onClick={() => setActivePreview(p)}
+                      style={{ padding: '4px 10px', fontSize: 11.5, border: 'none', cursor: 'pointer',
                         background: activePreview === p ? 'var(--accent)' : 'transparent',
-                        color: activePreview === p ? '#fff' : 'var(--ink-3)',
-                      }}
-                    >
-                      {p === 'push' ? 'Push' : 'SMS'}
+                        color: activePreview === p ? '#fff' : 'var(--ink-3)' }}>
+                      {p === 'push' ? 'Push' : p === 'sms' ? 'SMS' : p === 'email' ? 'Email' : 'WhatsApp'}
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Push preview */}
               {activePreview === 'push' && (
-                <div style={{ background: 'var(--surface-sunk)', borderRadius: 14, padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: 200, justifyContent: 'center' }}>
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 12, padding: '14px 16px', boxShadow: 'var(--shadow-pop)' }}>
+                <div style={{ background: 'var(--surface-sunk)', borderRadius: 14, padding: '28px 20px', minHeight: 160, display: 'flex', alignItems: 'center' }}>
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 12, padding: '14px 16px', boxShadow: 'var(--shadow-pop)', width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
                       <div style={{ width: 22, height: 22, borderRadius: 5, background: 'var(--ink)', color: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600 }}>A</div>
                       <span style={{ fontSize: 11.5, fontWeight: 600 }}>Acme Mobility</span>
@@ -331,16 +398,42 @@ export default function TemplateEditorPage() {
                 </div>
               )}
 
+              {/* SMS preview */}
               {activePreview === 'sms' && (
-                <div style={{ background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 14px', fontSize: 13, lineHeight: 1.5 }}>
-                  {(draft.sms_body ?? '')
-                    .replace('{{customer_name}}', 'Priya')
-                    .replace('{{driver_name}}', 'Rajesh')
-                    .replace('{{vehicle}}', 'White Swift Dzire')
-                    .replace('{{eta}}', '2 min')
-                    .replace('{{plate}}', 'KA01AB4521')
-                    .replace('{{otp}}', '4821')
-                    .replace('{{fare}}', `${sym} 142`) || '(No SMS body)'}
+                <div style={{ background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', fontSize: 13, lineHeight: 1.6 }}>
+                  {render(draft.sms_body) || <span style={{ color: 'var(--ink-4)' }}>(No SMS body)</span>}
+                </div>
+              )}
+
+              {/* Email preview */}
+              {activePreview === 'email' && (
+                <div style={{ border: '1px solid var(--rule)', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{ background: 'var(--surface-2)', padding: '10px 14px', borderBottom: '1px solid var(--rule)', fontSize: 12 }}>
+                    <span className="t-meta">Subject: </span>
+                    <span style={{ fontWeight: 500 }}>{render(draft.email_subject) || '(No subject)'}</span>
+                  </div>
+                  {draft.email_body ? (
+                    <div
+                      style={{ padding: '16px', fontSize: 13.5, lineHeight: 1.6, background: '#fff', color: '#1a1814', minHeight: 120, maxHeight: 320, overflowY: 'auto' }}
+                      dangerouslySetInnerHTML={{ __html: render(draft.email_body) }}
+                    />
+                  ) : (
+                    <div style={{ padding: '24px 16px', color: 'var(--ink-4)', fontSize: 13, textAlign: 'center' }}>No email body</div>
+                  )}
+                </div>
+              )}
+
+              {/* WhatsApp preview */}
+              {activePreview === 'wa' && (
+                <div style={{ background: '#e5ddd5', borderRadius: 10, padding: '16px 12px', minHeight: 100 }}>
+                  {draft.wa_body ? (
+                    <div style={{ background: '#fff', borderRadius: '0 8px 8px 8px', padding: '10px 14px', fontSize: 13.5, lineHeight: 1.55, maxWidth: '85%', boxShadow: '0 1px 2px rgba(0,0,0,.1)' }}>
+                      <p style={{ margin: 0 }}>{render(draft.wa_body)}</p>
+                      <div style={{ fontSize: 10.5, color: '#8696a0', marginTop: 6, textAlign: 'right' }}>now ✓✓</div>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, paddingTop: 12 }}>No WhatsApp body</div>
+                  )}
                 </div>
               )}
 

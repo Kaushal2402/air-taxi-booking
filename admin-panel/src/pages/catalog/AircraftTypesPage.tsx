@@ -168,7 +168,7 @@ export default function AircraftTypesPage() {
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--rule)',
           display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gridTemplateColumns: (isMobile || isTablet) ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
         }}>
           {KPIS.map((k, i) => (
             <div key={k.label} style={{
@@ -176,7 +176,7 @@ export default function AircraftTypesPage() {
               borderRight: isMobile
                 ? (i % 2 === 0 ? '1px solid var(--rule)' : 'none')
                 : (i < 3 ? '1px solid var(--rule)' : 'none'),
-              borderBottom: isMobile && i < 2 ? '1px solid var(--rule)' : 'none',
+              borderBottom: (isMobile || isTablet) && i < 2 ? '1px solid var(--rule)' : 'none',
             }}>
               <div className="t-label">{k.label}</div>
               <div style={{
@@ -201,9 +201,9 @@ export default function AircraftTypesPage() {
             {/* Table toolbar */}
             <div style={{
               padding: '10px 14px', borderBottom: '1px solid var(--rule)',
-              display: 'flex', alignItems: 'center', gap: 10,
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
             }}>
-              <div className="input" style={{ flex: 1, height: 30 }}>
+              <div className="input" style={{ flex: '1 1 160px', height: 30, minWidth: 120 }}>
                 <Icon name="search" size={13} className="icon" />
                 <input
                   placeholder="Search aircraft types…"
@@ -211,15 +211,17 @@ export default function AircraftTypesPage() {
                   onChange={e => setSearch(e.target.value)}
                 />
               </div>
-              {(['all', 'heli', 'jet'] as const).map(f => (
-                <button
-                  key={f}
-                  className={`btn sm ${catFilter === f ? 'accent' : 'ghost'}`}
-                  onClick={() => setCatFilter(f)}
-                >
-                  {f === 'all' ? 'All' : f === 'heli' ? 'Helicopters' : 'Jets'}
-                </button>
-              ))}
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                {(['all', 'heli', 'jet'] as const).map(f => (
+                  <button
+                    key={f}
+                    className={`btn sm ${catFilter === f ? 'accent' : 'ghost'}`}
+                    onClick={() => setCatFilter(f)}
+                  >
+                    {f === 'all' ? 'All' : f === 'heli' ? 'Helicopters' : 'Jets'}
+                  </button>
+                ))}
+              </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer', flexShrink: 0 }}>
                 <input
                   type="checkbox"
@@ -235,7 +237,7 @@ export default function AircraftTypesPage() {
 
             {!loading && (
               <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <table className="tbl" style={{ minWidth: isMobile ? 600 : undefined }}>
+                <table className="tbl" style={{ minWidth: 620 }}>
                   <thead>
                     <tr>
                       <th>Aircraft type</th>
@@ -442,7 +444,7 @@ export default function AircraftTypesPage() {
                   <div style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 12 }}>
+                <div>
                   <div className="field">
                     <label className="field-label">Seats</label>
                     <div className="input">

@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
-import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
+import api from '../../lib/axios'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -49,14 +48,27 @@ function CodeChip({ code, large }: { code: string; large?: boolean }) {
 
 // ── Static options ────────────────────────────────────────────────────────────
 
-const SERVICE_TYPE_OPTIONS: { value: string; label: string }[] = [
+const FALLBACK_SERVICE_OPTIONS: { value: string; label: string }[] = [
   { value: 'cab', label: 'Cab' },
   { value: 'bike', label: 'Bike' },
   { value: 'xl', label: 'XL' },
   { value: 'airport', label: 'Airport' },
   { value: 'air', label: 'Air Taxi' },
-  { value: 'all', label: 'All services' },
+  { value: 'outstation', label: 'Outstation' },
 ]
+
+function useServiceTypeOptions() {
+  const [opts, setOpts] = useState<{ value: string; label: string }[]>(FALLBACK_SERVICE_OPTIONS)
+  const fetched = useRef(false)
+  useEffect(() => {
+    if (fetched.current) return
+    fetched.current = true
+    api.get<{ value: string; label: string }[]>('/ref/service-types')
+      .then(r => { if (r.data.length > 0) setOpts(r.data) })
+      .catch(() => {})
+  }, [])
+  return opts
+}
 
 const SEGMENT_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: '— No restriction' },
@@ -73,9 +85,10 @@ const SEGMENT_OPTIONS: { value: string; label: string }[] = [
 interface NewPromoModalProps {
   onClose: () => void
   onCreated: (p: Promotion) => void
+  serviceTypeOptions: { value: string; label: string }[]
 }
 
-function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
+function NewPromoModal({ onClose, onCreated, serviceTypeOptions = [] }: NewPromoModalProps) {
   const sym = useCurrencySymbol()
   const [form, setForm] = useState<CreatePromotionBody>({
     code: '',
@@ -84,10 +97,16 @@ function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
     validity_from: '',
     validity_to: '',
     total_budget_minor: 0,
+    cap_minor: null,
+    min_trip_value_minor: null,
+    segment: null,
+    service_types: [],
+    new_customers_only: false,
+    per_customer_limit: 1,
+    total_redemption_cap: null,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [isForbidden, setIsForbidden] = useState(false)
 
   const patch = <K extends keyof CreatePromotionBody>(k: K, v: CreatePromotionBody[K]) =>
     setForm(f => ({ ...f, [k]: v }))
@@ -123,53 +142,99 @@ function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
             <Icon name="x" size={14} />
           </button>
         </div>
-        <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ padding: '20px 22px', overflowY: 'auto', maxHeight: 'calc(90vh - 130px)', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {error && (
             <div style={{ padding: '8px 12px', background: 'var(--danger-soft)', border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))', borderRadius: 3, fontSize: 12.5, color: 'var(--danger)' }}>
               {error}
             </div>
           )}
+
+          {/* Code */}
           <div className="field">
             <label className="field-label">Promo code <span style={{ color: 'var(--danger)' }}>*</span></label>
             <div className="input">
-              <input
-                value={form.code}
-                onChange={e => patch('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                placeholder="WELCOME20"
-                style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
-              />
+              <input value={form.code} onChange={e => patch('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="WELCOME20" style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }} />
             </div>
           </div>
+
+          {/* Discount */}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: -6 }}>Discount</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
               <label className="field-label">Type</label>
               <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
-                <select value={form.type} onChange={e => patch('type', e.target.value as 'flat' | 'percent')}
-                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%' }}>
+                <select value={form.type} onChange={e => patch('type', e.target.value as 'flat' | 'percent')} style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%' }}>
                   <option value="percent">Percentage off</option>
                   <option value="flat">Flat amount</option>
                 </select>
               </div>
             </div>
             <div className="field">
-              <label className="field-label">Value {form.type === 'percent' ? '(%)' : `(${sym} in paise)`}</label>
-              <div className="input">
-                <input type="number" min={0} value={form.value} onChange={e => patch('value', Number(e.target.value))} />
+              <label className="field-label">Value {form.type === 'percent' ? '(%)' : `(${sym} paise)`}</label>
+              <div className="input"><input type="number" min={0} value={form.value} onChange={e => patch('value', Number(e.target.value))} /></div>
+            </div>
+            {form.type === 'percent' && (
+              <div className="field">
+                <label className="field-label">Max discount cap (paise)</label>
+                <div className="input"><input type="number" min={0} value={form.cap_minor ?? ''} onChange={e => patch('cap_minor', e.target.value ? Number(e.target.value) : null)} placeholder={`e.g. 15000 = ${sym}150`} /></div>
               </div>
+            )}
+            <div className="field">
+              <label className="field-label">Min trip value (paise)</label>
+              <div className="input"><input type="number" min={0} value={form.min_trip_value_minor ?? ''} onChange={e => patch('min_trip_value_minor', e.target.value ? Number(e.target.value) : null)} placeholder={`e.g. 10000 = ${sym}100`} /></div>
             </div>
           </div>
+
+          {/* Eligibility */}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: -6 }}>Eligibility</div>
+          <div className="field">
+            <label className="field-label">Customer segment</label>
+            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+              <select value={form.segment ?? ''} onChange={e => patch('segment', e.target.value || null)} style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%' }}>
+                {SEGMENT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="field">
+              <label className="field-label">Services (leave empty = all)</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                {serviceTypeOptions.map(svc => {
+                  const checked = (form.service_types ?? []).includes(svc.value)
+                  return (
+                    <label key={svc.value} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, cursor: 'pointer', padding: '4px 9px', border: `1px solid ${checked ? 'var(--accent)' : 'var(--rule)'}`, borderRadius: 3, background: checked ? 'color-mix(in oklab, var(--accent) 12%, var(--surface))' : 'transparent' }}>
+                      <input type="checkbox" checked={checked} onChange={e => {
+                        const cur = form.service_types ?? []
+                        patch('service_types', e.target.checked ? [...cur, svc.value] : cur.filter(x => x !== svc.value))
+                      }} style={{ accentColor: 'var(--accent)' }} />
+                      {svc.label}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-2)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.new_customers_only ?? false} onChange={e => patch('new_customers_only', e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+            New customers only
+          </label>
+
+          {/* Limits & budget */}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: -6 }}>Limits &amp; budget</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
+              <label className="field-label">Per-customer limit</label>
+              <div className="input"><input type="number" min={1} value={form.per_customer_limit ?? 1} onChange={e => patch('per_customer_limit', Number(e.target.value))} /></div>
+            </div>
+            <div className="field">
+              <label className="field-label">Total redemption cap</label>
+              <div className="input"><input type="number" min={0} value={form.total_redemption_cap ?? ''} onChange={e => patch('total_redemption_cap', e.target.value ? Number(e.target.value) : null)} placeholder="Unlimited" /></div>
+            </div>
+            <div className="field">
               <label className="field-label">Validity from <span style={{ color: 'var(--danger)' }}>*</span></label>
-              <div className="input">
-                <input type="datetime-local" value={form.validity_from} onChange={e => patch('validity_from', e.target.value)} />
-              </div>
+              <div className="input"><input type="datetime-local" value={form.validity_from} onChange={e => patch('validity_from', e.target.value)} /></div>
             </div>
             <div className="field">
               <label className="field-label">Validity to <span style={{ color: 'var(--danger)' }}>*</span></label>
-              <div className="input">
-                <input type="datetime-local" value={form.validity_to} onChange={e => patch('validity_to', e.target.value)} />
-              </div>
+              <div className="input"><input type="datetime-local" value={form.validity_to} onChange={e => patch('validity_to', e.target.value)} /></div>
             </div>
           </div>
           <div className="field">
@@ -228,16 +293,17 @@ interface EditorPanelProps {
   onPause: () => void
   onRequestDelete: (p: Promotion) => void
   onBack: () => void
+  canEditPromo: boolean
+  serviceTypeOptions: { value: string; label: string }[]
 }
 
 function EditorPanel({
   selected, draft, saving, statusPending, apiError, isMobile,
   patchDraft, onSave, onActivate, onPause, onRequestDelete, onBack,
+  canEditPromo, serviceTypeOptions = [],
 }: EditorPanelProps) {
   const sym = useCurrencySymbol()
   const fmtMinor = useFormatMoney()
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (!selected) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', color: 'var(--ink-3)', fontSize: 13 }}>
@@ -366,7 +432,7 @@ function EditorPanel({
           <div style={{ marginTop: 12 }}>
             <label className="field-label">Services</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
-              {SERVICE_TYPE_OPTIONS.map(svc => {
+              {serviceTypeOptions.map(svc => {
                 const current = draft.service_types ?? (selected.service_types ?? [])
                 const checked = current.includes(svc.value)
                 return (
@@ -511,6 +577,7 @@ function exportPromotionsCsv(promos: Promotion[], sym: string) {
 export default function PromotionsPage() {
   const fmtMinor = useFormatMoney()
   const sym = useCurrencySymbol()
+  const serviceTypeOptions = useServiceTypeOptions()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
@@ -702,7 +769,7 @@ export default function PromotionsPage() {
                   {filtered.map(p => {
                     const pct = budgetPct(p)
                     const isSel = selected?.id === p.id
-                    const serviceLabels = (p.service_types ?? []).map(v => SERVICE_TYPE_OPTIONS.find(o => o.value === v)?.label ?? v)
+                    const serviceLabels = (p.service_types ?? []).map(v => serviceTypeOptions.find(o => o.value === v)?.label ?? v)
                     return (
                       <div key={p.id}
                         onClick={() => selectPromo(p)}
@@ -760,6 +827,8 @@ export default function PromotionsPage() {
             onPause={handlePause}
             onRequestDelete={setConfirmDelete}
             onBack={() => { setShowMobileEditor(false); setSelected(null) }}
+            canEditPromo={canEditPromo}
+            serviceTypeOptions={serviceTypeOptions}
           />
         </div>
       ) : (
@@ -779,6 +848,8 @@ export default function PromotionsPage() {
               onPause={handlePause}
               onRequestDelete={setConfirmDelete}
               onBack={() => { setShowMobileEditor(false); setSelected(null) }}
+              canEditPromo={canEditPromo}
+              serviceTypeOptions={serviceTypeOptions}
             />
           ) : (
             <>
@@ -829,7 +900,7 @@ export default function PromotionsPage() {
         </div>
       )}
 
-      {showNewModal && <NewPromoModal onClose={() => setShowNewModal(false)} onCreated={handleNewCreated} />}
+      {showNewModal && <NewPromoModal onClose={() => setShowNewModal(false)} onCreated={handleNewCreated} serviceTypeOptions={serviceTypeOptions} />}
 
       {confirmDelete && (
         <ConfirmDialog

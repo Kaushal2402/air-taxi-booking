@@ -367,6 +367,20 @@ async def approve_driver(db: AsyncSession, driver_id: str) -> Driver:
 
     await db.commit()
     await db.refresh(driver)
+
+    # Send DRIVER_APPROVED notification (non-fatal)
+    try:
+        from app.services.notifications_service import send_event_notification
+        await send_event_notification(
+            db, "DRIVER_APPROVED",
+            {"driver_name": driver.name, "brand_name": "Air Taxi"},
+            recipient_phone=driver.phone,
+            recipient_email=driver.email,
+            notify_push=True, notify_sms=True, notify_email=True,
+        )
+    except Exception:
+        pass
+
     return driver
 
 

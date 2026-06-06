@@ -110,4 +110,25 @@ export const reportsService = {
 
   createExport: (body: { name: string; format: ReportFormat; config?: Record<string, unknown> }) =>
     api.post<ReportExport>('/reports/exports', body).then(r => r.data),
+
+  /** Run a standard report query — returns live data immediately as JSON */
+  queryReport: (params: {
+    report_name: string
+    date_from: string   // YYYY-MM-DD
+    date_to: string     // YYYY-MM-DD
+    zone?: string
+    service_type?: string
+    driver_id?: string
+  }) => api.get<ReportQueryResult>('/reports/query', { params }).then(r => r.data),
+}
+
+export interface ReportQueryResult {
+  report: string
+  period: { from: string; to: string }
+  generated_at: string
+  columns: string[]
+  rows: Record<string, unknown>[]
+  summary: Record<string, unknown>
+  unmatched?: Record<string, unknown>[]   // settlement report only
+  filing_note?: string                    // GST report only
 }

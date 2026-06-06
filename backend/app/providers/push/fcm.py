@@ -20,12 +20,15 @@ class FCMAdapter(PushProvider):
         return {"Authorization": f"key={self._server_key}", "Content-Type": "application/json"}
 
     async def send(self, device_token: str, message: PushMessage) -> PushResult:
+        # Extract priority from data payload (set by send_event_notification)
+        priority = message.data.pop("priority", "normal") if message.data else "normal"
         async with httpx.AsyncClient() as client:
             r = await client.post(
                 FCM_URL,
                 headers=self._headers,
                 json={
                     "to": device_token,
+                    "priority": priority,            # FCM: "normal" | "high"
                     "notification": {
                         "title": message.title,
                         "body": message.body,

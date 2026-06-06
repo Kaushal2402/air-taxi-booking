@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
 import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
@@ -36,8 +35,6 @@ function NewRunModal({ onClose, onCreated }: NewRunModalProps) {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isForbidden, setIsForbidden] = useState(false)
-
   const handleCreate = async () => {
     if (!periodLabel.trim()) { setError('Period label is required'); return }
     setSaving(true)
@@ -156,6 +153,29 @@ export default function PayoutRunsPage() {
   const [rejectReason, setRejectReason] = useState('')
   const canApprovePayout = usePermission('payouts.approve')
   const canCreatePayout = usePermission('payouts.create')
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const res = await payoutsService.listRuns({ page: 1, page_size: 1000, status: filterStatus || undefined, search: search || undefined })
+      const rows = res.items
+      const header = ['Run ID', 'Type', 'Period', 'Payees', 'Gross', 'Net', 'Status', 'Created']
+      const csv = [header, ...rows.map(r => [
+        r.run_ref, r.run_type, r.period_label, String(r.payee_count ?? ''),
+        String(r.gross_amount), String(r.net_amount), r.status,
+        r.created_at ? new Date(r.created_at).toLocaleDateString() : '',
+      ])].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'payout-runs.csv'; a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // ignore
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const PAGE_SIZE = 20
 
@@ -214,8 +234,8 @@ export default function PayoutRunsPage() {
       subtitle={`${pendingApproval} runs awaiting approval · escrow ${fmtINR(escrowTotal)}`}
       actions={
         <>
-          <button className="btn sm">
-            <Icon name="download" size={13} />Export
+          <button className="btn sm" disabled={exporting} onClick={handleExport}>
+            <Icon name="download" size={13} />{exporting ? 'Exporting…' : 'Export'}
           </button>
           <button style={{ display: canCreatePayout ? undefined : 'none' }} className="btn sm accent" onClick={() => setShowNewRun(true)}>
             <Icon name="plus" size={13} />New run

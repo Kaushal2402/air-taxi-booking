@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException, ValidationException
 from app.models.promotion import CouponRedemption, Promotion
+from app.models.customer import Customer
 from app.models.referral import Referral, ReferralProgram
 from app.services.settings_service import is_kill_switch_active
 
@@ -263,6 +264,38 @@ async def get_referral_stats(db: AsyncSession) -> dict:
     )
     cpa_minor = int(reward_paid_minor / converted) if converted else 0
 
+    # Fraud saved = rewards that would have been paid on flagged referrals
+    program_result = await db.execute(select(ReferralProgram).limit(1))
+    program = program_result.scalar_one_or_none()
+    referrer_reward = program.referrer_reward_minor if program else 0
+    fraud_saved_minor: int = fraud_blocked * referrer_reward
+
+    # Top referrers — group by referrer_id, join customer name
+    top_q = (
+        select(
+            Referral.referrer_id,
+            func.coalesce(Customer.name, Referral.referrer_id).label("name"),
+            func.count(Referral.id).filter(Referral.status.in_(("converted", "rewarded"))).label("converted"),
+            func.coalesce(func.sum(Referral.reward_minor).filter(Referral.status == "rewarded"), 0).label("reward_minor"),
+        )
+        .outerjoin(Customer, Customer.id == Referral.referrer_id)
+        .group_by(Referral.referrer_id, Customer.name)
+        .order_by(func.count(Referral.id).filter(Referral.status.in_(("converted", "rewarded"))).desc())
+        .limit(10)
+    )
+    top_rows = (await db.execute(top_q)).mappings().all()
+    monthly_cap = program.per_referrer_monthly_cap_minor if program else 0
+    top_referrers = [
+        {
+            "customer_id": r["referrer_id"],
+            "name": r["name"],
+            "converted": r["converted"],
+            "reward_minor": int(r["reward_minor"]),
+            "at_cap": monthly_cap > 0 and int(r["reward_minor"]) >= monthly_cap,
+        }
+        for r in top_rows
+    ]
+
     return {
         "referrals_sent": referrals_sent,
         "converted": converted,
@@ -271,6 +304,6 @@ async def get_referral_stats(db: AsyncSession) -> dict:
         "new_customers": converted,
         "cpa_minor": cpa_minor,
         "fraud_blocked": fraud_blocked,
-        "fraud_saved_minor": 0,  # would require flagged reward tracking
-        "top_referrers": [],     # requires customer name join (not yet available)
+        "fraud_saved_minor": fraud_saved_minor,
+        "top_referrers": top_referrers,
     }
