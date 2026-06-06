@@ -22,6 +22,7 @@ import AircraftTypesPage from './pages/catalog/AircraftTypesPage'
 import AirRoutesPage from './pages/catalog/AirRoutesPage'
 import CustomersPage from './pages/customers/CustomersPage'
 import CustomerDetailPage from './pages/customers/CustomerDetailPage'
+import PrivacyRequestsPage from './pages/privacy/PrivacyRequestsPage'
 import DriverOnboardingPage from './pages/drivers/DriverOnboardingPage'
 import DriverDirectoryPage from './pages/drivers/DriverDirectoryPage'
 import DriverDetailPage from './pages/drivers/DriverDetailPage'
@@ -189,6 +190,7 @@ function App() {
           {/* Customers */}
           <Route path="/customers" element={<PrivateRoute><CustomersPage /></PrivateRoute>} />
           <Route path="/customers/:id" element={<PrivateRoute><CustomerDetailPage /></PrivateRoute>} />
+          <Route path="/privacy/requests" element={<PrivateRoute><PrivacyRequestsPage /></PrivateRoute>} />
 
           {/* Drivers */}
           <Route path="/drivers" element={<PrivateRoute><DriverDirectoryPage /></PrivateRoute>} />

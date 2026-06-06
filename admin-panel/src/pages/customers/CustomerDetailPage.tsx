@@ -6,6 +6,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { customerService } from '../../services/customerService'
 import type { Customer, CustomerSegment, WalletTransaction } from '../../services/customerService'
+import { privacyService } from '../../services/privacyService'
+import type { PrivacyRequest } from '../../services/privacyService'
 import { formatMoney, currencySymbol, formatDate, useFormatMoney } from '../../lib/utils'
 
 function getInitials(name: string): string {
@@ -603,6 +605,12 @@ export default function CustomerDetailPage() {
   const [showUnflagDialog, setShowUnflagDialog]       = useState(false)
   const [apiError, setApiError]                       = useState('')
 
+  // Privacy requests
+  const [privacyRequests, setPrivacyRequests]         = useState<PrivacyRequest[]>([])
+  const [privacyLoading, setPrivacyLoading]           = useState(false)
+  const [showExportConfirm, setShowExportConfirm]     = useState(false)
+  const [showDeletionConfirm, setShowDeletionConfirm] = useState(false)
+
   const loadCustomer = async () => {
     if (!id) return
     setLoading(true)
@@ -613,7 +621,46 @@ export default function CustomerDetailPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { loadCustomer() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadPrivacyRequests = async () => {
+    if (!id) return
+    try {
+      const data = await privacyService.listRequests({ customer_id: id, per_page: 10 })
+      setPrivacyRequests(data.items)
+    } catch { /* ignore */ }
+  }
+
+  const handleExportRequest = async () => {
+    if (!customer) return
+    setPrivacyLoading(true)
+    try {
+      await privacyService.createExportRequest(customer.id)
+      await loadPrivacyRequests()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setApiError(err?.response?.data?.detail || 'Failed to submit export request')
+    } finally {
+      setPrivacyLoading(false)
+      setShowExportConfirm(false)
+    }
+  }
+
+  const handleDeletionRequest = async () => {
+    if (!customer) return
+    setPrivacyLoading(true)
+    try {
+      await privacyService.createDeletionRequest(customer.id)
+      await loadPrivacyRequests()
+      await loadCustomer()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setApiError(err?.response?.data?.detail || 'Failed to submit deletion request')
+    } finally {
+      setPrivacyLoading(false)
+      setShowDeletionConfirm(false)
+    }
+  }
+
+  useEffect(() => { loadCustomer(); loadPrivacyRequests() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSuspend = async (reason: string) => {
     if (!customer) return
@@ -722,6 +769,32 @@ export default function CustomerDetailPage() {
           <button className="btn sm" onClick={openGoodwillCredit}>
             Goodwill credit
           </button>
+          {/* Privacy actions — disabled when an open request of that type already exists */}
+          {(() => {
+            const hasOpenExport   = privacyRequests.some(r => r.request_type === 'export'   && ['pending','processing'].includes(r.status))
+            const hasOpenDeletion = privacyRequests.some(r => r.request_type === 'deletion' && ['pending','processing'].includes(r.status))
+            return (
+              <>
+                <button
+                  className="btn sm ghost"
+                  onClick={() => setShowExportConfirm(true)}
+                  disabled={hasOpenExport || privacyLoading}
+                  title={hasOpenExport ? 'Export request already pending' : 'Request data export (GDPR)'}
+                >
+                  {hasOpenExport ? '⏳ Export pending' : 'Export data'}
+                </button>
+                <button
+                  className="btn sm ghost"
+                  onClick={() => setShowDeletionConfirm(true)}
+                  disabled={hasOpenDeletion || privacyLoading || customer.status === 'deleted'}
+                  title={hasOpenDeletion ? 'Deletion request already pending' : 'Request account deletion (GDPR)'}
+                  style={hasOpenDeletion ? {} : { color: 'var(--danger)', borderColor: 'color-mix(in oklab, var(--danger) 40%, var(--rule))' }}
+                >
+                  {hasOpenDeletion ? '⏳ Deletion pending' : 'Delete account'}
+                </button>
+              </>
+            )
+          })()}
           {customer.status === 'flagged' ? (
             <button className="btn sm" onClick={() => setShowUnflagDialog(true)}>Unflag</button>
           ) : (
@@ -937,6 +1010,28 @@ export default function CustomerDetailPage() {
         variant="default"
         onConfirm={handleUnflag}
         onCancel={() => setShowUnflagDialog(false)}
+      />
+
+      {/* Privacy — Export request confirmation */}
+      <ConfirmDialog
+        open={showExportConfirm}
+        title="Request data export"
+        description={`A GDPR data-export package will be prepared for ${customer.name}. The SLA timer starts immediately. You can track progress in Privacy Requests.`}
+        confirmLabel="Submit export request"
+        variant="default"
+        onConfirm={handleExportRequest}
+        onCancel={() => setShowExportConfirm(false)}
+      />
+
+      {/* Privacy — Deletion request confirmation */}
+      <ConfirmDialog
+        open={showDeletionConfirm}
+        title="Request account deletion"
+        description={`This will permanently anonymize ${customer.name}'s personal data (name, phone, email). If auto-process is enabled in Settings → Data & Privacy, it will execute immediately. This cannot be undone.`}
+        confirmLabel="Submit deletion request"
+        variant="danger"
+        onConfirm={handleDeletionRequest}
+        onCancel={() => setShowDeletionConfirm(false)}
       />
     </Shell>
   )

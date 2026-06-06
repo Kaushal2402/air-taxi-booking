@@ -24,8 +24,9 @@ const NAV_GROUPS = [
       { id: 'vehicles',  label: 'Vehicles & Fleet',  icon: 'car',      path: '/vehicles' },
       { id: 'operators', label: 'Air Operators',     icon: 'building', path: '/operators' },
       { id: 'aircraft',  label: 'Aircraft & Crew',   icon: 'helipad',  path: '/aircraft' },
-      { id: 'customers', label: 'Customers',         icon: 'user',     path: '/customers' },
-      { id: 'kyc',       label: 'KYC & Documents',   icon: 'shield',   path: '/kyc', count: '9' },
+      { id: 'customers',        label: 'Customers',         icon: 'user',     path: '/customers' },
+      { id: 'privacy-requests', label: 'Privacy Requests',  icon: 'shield',   path: '/privacy/requests' },
+      { id: 'kyc',              label: 'KYC & Documents',   icon: 'shield',   path: '/kyc', count: '9' },
     ],
   },
   {

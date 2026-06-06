@@ -38,6 +38,7 @@ class PurgeReport:
     payments_deleted: int = 0
     payout_runs_deleted: int = 0
     audit_logs_deleted: int = 0
+    privacy_deletions_auto_processed: int = 0
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -254,6 +255,13 @@ async def run_all_purges(db: AsyncSession) -> PurgeReport:
     except Exception as exc:
         logger.exception("purge_audit_logs failed")
         report.errors.append(f"audit: {exc}")
+
+    try:
+        from app.services.privacy_service import auto_process_pending_deletions
+        report.privacy_deletions_auto_processed = await auto_process_pending_deletions(db)
+    except Exception as exc:
+        logger.exception("auto_process_pending_deletions failed")
+        report.errors.append(f"privacy: {exc}")
 
     logger.info(
         "run_all_purges complete: %d total affected, %d errors",
