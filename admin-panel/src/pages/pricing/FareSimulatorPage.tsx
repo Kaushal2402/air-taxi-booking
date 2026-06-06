@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -49,6 +51,7 @@ export default function FareSimulatorPage() {
   const [results, setResults]   = useState<SimulateRuleResult[] | null>(null)
   const [running, setRunning]   = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   useEffect(() => {
     catalogService.listVehicleClasses().then(setVehicleClasses).catch(() => null)
@@ -114,8 +117,8 @@ export default function FareSimulatorPage() {
       })
       setResults(res.results)
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } } }
-      setApiError(err?.response?.data?.message || 'Compare failed — check that live/draft rules exist')
+      const err = e as { response?: { data?: { detail?: string; message?: string } } }
+      setApiError(err?.response?.data?.detail || err?.response?.data?.message || 'Compare failed — check that live/draft rules exist')
     } finally {
       setRunning(false)
     }
@@ -158,8 +161,8 @@ export default function FareSimulatorPage() {
       })
       setResults(res.results)
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } } }
-      setApiError(err?.response?.data?.message || 'Simulation failed')
+      const err = e as { response?: { data?: { detail?: string; message?: string } } }
+      setApiError(err?.response?.data?.detail || err?.response?.data?.message || 'Simulation failed')
     } finally { setRunning(false) }
   }
 

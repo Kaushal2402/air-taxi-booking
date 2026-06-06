@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -57,6 +58,7 @@ export default function AuditStreamPage() {
   const [stats, setStats] = useState<AuditStats | null>(null)
   const [exportMsg, setExportMsg] = useState('')
   const [exporting, setExporting] = useState(false)
+  const canExportAudit = usePermission('audit.export')
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -124,7 +126,7 @@ export default function AuditStreamPage() {
       subtitle={`Immutable · ${stats?.events_total?.toLocaleString() ?? '…'} events · 90-day hot retention`}
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn sm" onClick={() => navigate('/audit/security')}>
+          <button style={{ display: canExportAudit ? undefined : 'none' }} className="btn sm" onClick={() => navigate('/audit/security')}>
             <Icon name="shield" size={13} />
             Security
           </button>

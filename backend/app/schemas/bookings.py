@@ -175,6 +175,7 @@ class AssistedBookingCreate(BaseModel):
     fare_estimate_minor: int = 0
     internal_reason: Optional[str] = None
     admin_note: Optional[str] = None
+    region_name: Optional[str] = None  # city/region for maintenance window check
 
 
 class CancelBookingBody(BaseModel):

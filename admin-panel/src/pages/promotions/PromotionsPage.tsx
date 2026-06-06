@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -84,6 +87,7 @@ function NewPromoModal({ onClose, onCreated }: NewPromoModalProps) {
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const patch = <K extends keyof CreatePromotionBody>(k: K, v: CreatePromotionBody[K]) =>
     setForm(f => ({ ...f, [k]: v }))
@@ -232,6 +236,8 @@ function EditorPanel({
 }: EditorPanelProps) {
   const sym = useCurrencySymbol()
   const fmtMinor = useFormatMoney()
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!selected) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', color: 'var(--ink-3)', fontSize: 13 }}>
@@ -273,10 +279,10 @@ function EditorPanel({
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           {selected.status === 'active' && (
-            <button className="btn sm" onClick={onPause} disabled={statusPending}>Pause</button>
+            <button className="btn sm" onClick={onPause} disabled={statusPending} style={{ display: canEditPromo ? undefined : 'none' }}>Pause</button>
           )}
           {(selected.status === 'draft' || selected.status === 'paused') && (
-            <button className="btn sm" onClick={onActivate} disabled={statusPending}>Activate</button>
+            <button className="btn sm" onClick={onActivate} disabled={statusPending} style={{ display: canEditPromo ? undefined : 'none' }}>Activate</button>
           )}
           {selected.status === 'draft' && (
             <button className="btn sm ghost" onClick={() => onRequestDelete(selected)} style={{ color: 'var(--danger)' }}>Delete</button>
@@ -522,6 +528,9 @@ export default function PromotionsPage() {
   const [showNewModal, setShowNewModal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Promotion | null>(null)
   const [statusPending, setStatusPending] = useState(false)
+  const canDeletePromo = usePermission('promotions.delete')
+  const canEditPromo = usePermission('promotions.edit')
+  const canCreatePromo = usePermission('promotions.create')
 
   const loadData = async () => {
     setLoading(true)

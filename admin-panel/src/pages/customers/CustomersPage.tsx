@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -350,6 +353,7 @@ export default function CustomersPage() {
   const [sortField, setSortField]   = useState<'ltv' | 'trips' | 'rating' | 'wallet' | 'last_active' | 'joined' | 'name'>('ltv')
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc')
   const [showSortMenu, setShowSortMenu] = useState(false)
+  const canEditCustomer = usePermission('customers.edit')
   const sortRef = useRef<HTMLDivElement>(null)
 
   const loadCustomers = async (opts?: { seg?: SegmentFilter; status?: CustomerStatus | ''; q?: string; p?: number }) => {
@@ -798,3 +802,4 @@ export default function CustomersPage() {
     </Shell>
   )
 }
+

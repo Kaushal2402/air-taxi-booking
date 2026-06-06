@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.services import audit_service
 from app.schemas.rbac import (
@@ -23,7 +23,7 @@ rbac_router = APIRouter()
 
 @rbac_router.get("/stats", response_model=RbacStatsResponse)
 async def get_stats(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("rbac.roles.view")),
     db=Depends(get_db),
 ):
     return await rbac_service.get_rbac_stats(db)
@@ -31,7 +31,7 @@ async def get_stats(
 
 @rbac_router.get("/permissions", response_model=PermissionCatalogResponse)
 async def list_permissions(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("rbac.roles.view")),
     db=Depends(get_db),
 ):
     domains = await rbac_service.list_permission_catalog(db)
@@ -41,7 +41,7 @@ async def list_permissions(
 
 @rbac_router.get("/roles", response_model=RoleListResponse)
 async def list_roles(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("rbac.roles.view")),
     db=Depends(get_db),
 ):
     items = await rbac_service.list_roles(db)
@@ -52,7 +52,7 @@ async def list_roles(
 async def create_role(
     body: RoleCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("rbac.roles.manage")),
     db=Depends(get_db),
 ):
     role = await rbac_service.create_role(db, body)
@@ -76,7 +76,7 @@ async def create_role(
 @rbac_router.get("/roles/{role_id}/permissions")
 async def get_role_permissions(
     role_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("rbac.roles.view")),
     db=Depends(get_db),
 ):
     role = await rbac_service.get_role(db, role_id)
@@ -89,7 +89,7 @@ async def set_role_permissions(
     role_id: str,
     body: RolePermissionsPayload,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("rbac.roles.manage")),
     db=Depends(get_db),
 ):
     perms = await rbac_service.set_role_permissions(db, role_id, body.permissions)
@@ -110,10 +110,20 @@ async def set_role_permissions(
     return {"role_id": role_id, "permissions": [p.model_dump() for p in perms]}
 
 
+@rbac_router.get("/roles/by-name/{name}", response_model=RoleResponse)
+async def get_role_by_name(
+    name: str,
+    _: AdminUser = Depends(require_permission("rbac.roles.view")),
+    db=Depends(get_db),
+):
+    """Look up a role by its name string (used to resolve AdminUser.role → role id)."""
+    return await rbac_service.get_role_by_name(db, name)
+
+
 @rbac_router.get("/roles/{role_id}", response_model=RoleResponse)
 async def get_role(
     role_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("rbac.roles.view")),
     db=Depends(get_db),
 ):
     return await rbac_service.get_role(db, role_id)
@@ -124,7 +134,7 @@ async def update_role(
     role_id: str,
     body: RoleUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("rbac.roles.manage")),
     db=Depends(get_db),
 ):
     role = await rbac_service.update_role(db, role_id, body)
@@ -149,7 +159,7 @@ async def update_role(
 async def delete_role(
     role_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("rbac.roles.manage")),
     db=Depends(get_db),
 ):
     await rbac_service.delete_role(db, role_id)

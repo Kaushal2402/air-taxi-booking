@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -75,6 +77,7 @@ export default function KycDocumentDetailPage({ entityType }: KycDocumentDetailP
   const [rejectReason, setRejectReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   useEffect(() => {
     if (stateItem) {
@@ -125,6 +128,8 @@ export default function KycDocumentDetailPage({ entityType }: KycDocumentDetailP
       setSaving(false)
     }
   }
+
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) {
     return (

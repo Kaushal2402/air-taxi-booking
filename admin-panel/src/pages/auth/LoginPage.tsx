@@ -7,6 +7,9 @@ import BrandLockup from '../../components/layout/BrandLockup'
 import Icon from '../../components/ui/Icon'
 import { authService } from '../../services/authService'
 import { useAuthStore } from '../../store/authStore'
+import { usePermissionStore } from '../../store/permissionStore'
+import { rbacService } from '../../services/rbacService'
+import { getFirstPermittedPath } from '../../lib/getFirstPermittedPath'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 const schema = z.object({
@@ -20,6 +23,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const setAuth = useAuthStore(s => s.setAuth)
+  const setPermissions = usePermissionStore(s => s.setPermissions)
   const isMobile = useIsMobile()
   const [showPw, setShowPw] = useState(false)
   const [apiError, setApiError] = useState('')
@@ -42,7 +46,25 @@ export default function LoginPage() {
         navigate('/2fa', { state: { partial_token: res.partial_token, email: data.email, has_phone: res.has_phone ?? false } })
       } else if (res.access_token && res.refresh_token && res.user) {
         setAuth(res.user, res.access_token, res.refresh_token)
-        navigate('/dashboard')
+        // Load permissions immediately so UI reflects them before first page renders
+        if (res.user.role === 'super_admin') {
+          setPermissions({}, true)
+          navigate('/dashboard')
+        } else {
+          rbacService.getRoleByName(res.user.role)
+            .then(r => rbacService.getRolePermissions(r.id))
+            .then(({ permissions }) => {
+              const map: Record<string, string> = {}
+              permissions.forEach(p => { map[p.permission_key] = p.state })
+              setPermissions(map, false)
+              const can = (key: string) => map[key] === 'granted' || map[key] === 'scoped'
+              navigate(getFirstPermittedPath(false, can))
+            })
+            .catch(() => {
+              setPermissions({}, false)
+              navigate('/no-access')
+            })
+        }
       }
     } catch (e: any) {
       const status = e?.response?.status

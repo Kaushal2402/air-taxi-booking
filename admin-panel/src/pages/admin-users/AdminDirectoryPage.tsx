@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -6,6 +7,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import api from '../../lib/axios'
 import { useIsMobile, useIsCompact } from '../../hooks/useIsMobile'
 import { formatDate } from '../../lib/utils'
+import { rbacService } from '../../services/rbacService'
+import type { Role } from '../../services/rbacService'
 
 interface AdminUser {
   id: string
@@ -46,7 +49,6 @@ const CONFIRM_CLOSED: ConfirmState = {
   open: false, title: '', description: '', confirmLabel: '', loading: false, onConfirm: () => {},
 }
 
-const ROLES = ['super_admin', 'admin', 'dispatcher', 'finance', 'support', 'compliance']
 
 function statusBadge(u: AdminUser) {
   const s = u.status
@@ -176,9 +178,12 @@ export default function AdminDirectoryPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
+  // Roles (live from RBAC)
+  const [roles, setRoles] = useState<Role[]>([])
+
   // Invite modal
   const [showInvite, setShowInvite] = useState(false)
-  const [inviteForm, setInviteForm] = useState<InviteForm>({ name: '', email: '', role: 'admin' })
+  const [inviteForm, setInviteForm] = useState<InviteForm>({ name: '', email: '', role: '' })
   const [inviteError, setInviteError] = useState('')
   const [inviting, setInviting] = useState(false)
 
@@ -188,6 +193,7 @@ export default function AdminDirectoryPage() {
 
   // Toast
   const [toastMsg, setToastMsg] = useState('')
+  const canManageAdmins = usePermission('admin_users.manage')
   const showToast = (msg: string) => {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(''), 4000)
@@ -204,7 +210,18 @@ export default function AdminDirectoryPage() {
       setLoading(false)
     }
   }
-  useEffect(() => { load() }, [])
+
+  const loadRoles = async () => {
+    try {
+      const res = await rbacService.listRoles()
+      const active = res.items.filter(r => r.is_active)
+      setRoles(active)
+      // Set invite default to first active role
+      if (active.length > 0) setInviteForm(f => f.role ? f : { ...f, role: active[0].name })
+    } catch { /* keep empty — role select will show placeholder */ }
+  }
+
+  useEffect(() => { load(); loadRoles() }, [])
 
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -392,7 +409,7 @@ export default function AdminDirectoryPage() {
               Access requests
             </button>
           )}
-          {!isMobile && (
+          {!isMobile && canManageAdmins && (
             <button className="btn sm accent" onClick={() => setShowInvite(true)}>
               <Icon name="plus" size={13} />{isCompact ? 'Invite' : 'Invite admin'}
             </button>
@@ -607,7 +624,12 @@ export default function AdminDirectoryPage() {
                 <label className="field-label">Role</label>
                 <div className="input">
                   <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))} style={{ flex: 1, border: 0, outline: 0, background: 'transparent' }}>
-                    {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                    {roles.length === 0 && <option value="">Loading roles…</option>}
+                    {roles.filter(r => r.name !== 'super_admin').map(r => (
+                      <option key={r.id} value={r.name}>
+                        {r.name.replace(/_/g, ' ')}{r.is_system ? '' : ' (custom)'}
+                      </option>
+                    ))}
                   </select>
                   <Icon name="chevDown" size={14} className="icon" />
                 </div>

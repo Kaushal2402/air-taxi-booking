@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundException, ValidationException
 from app.models.promotion import CouponRedemption, Promotion
 from app.models.referral import Referral, ReferralProgram
+from app.services.settings_service import is_kill_switch_active
 
 
 # ── Promotions ─────────────────────────────────────────────────────────────────
@@ -95,6 +96,8 @@ async def update_promotion(db: AsyncSession, promotion_id: str, data: dict) -> P
 
 
 async def activate_promotion(db: AsyncSession, promotion_id: str) -> Promotion:
+    if await is_kill_switch_active(db, "promotions_engine"):
+        raise ValidationException("The promotions engine is currently disabled. Promotions cannot be activated at this time.")
     promo = await get_promotion(db, promotion_id)
     if promo.status not in ("draft", "paused"):
         raise ValidationException(

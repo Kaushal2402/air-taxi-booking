@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.models.air_booking import AirBooking
 from app.models.booking import RoadBooking
@@ -81,7 +81,7 @@ def _today_range() -> tuple[datetime, datetime]:
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
     window: str = Query("today", regex="^(today|7d|30d|90d)$"),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("dashboard.view")),
     db: AsyncSession = Depends(get_db),
 ) -> DashboardResponse:
     now = datetime.now(timezone.utc)

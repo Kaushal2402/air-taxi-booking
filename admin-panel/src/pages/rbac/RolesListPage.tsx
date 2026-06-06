@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -38,7 +41,9 @@ export default function RolesListPage() {
   const [draft, setDraft] = useState<RoleCreate>({ ...EMPTY_ROLE })
   const [saving, setSaving] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Role | null>(null)
+  const canManageRoles = usePermission('rbac.roles.manage')
 
   const load = async () => {
     setLoading(true)
@@ -78,9 +83,16 @@ export default function RolesListPage() {
 
   const saveNew = async () => {
     if (!draft.name.trim()) { setApiError('Name is required'); return }
+    if (draft.scope !== 'Global' && !draft.scope_detail?.trim()) {
+      setApiError(`Specify the ${draft.scope.toLowerCase()} name or ID for scoped access`); return
+    }
     setSaving(true); setApiError('')
+    // Combine scope type + detail into the stored scope string
+    const scopeValue = draft.scope === 'Global'
+      ? 'Global'
+      : `${draft.scope}:${draft.scope_detail?.trim()}`
     try {
-      await rbacService.createRole(draft)
+      await rbacService.createRole({ ...draft, scope: scopeValue })
       await load()
       setShowNewForm(false)
       setShowMobileEditor(false)
@@ -119,7 +131,7 @@ export default function RolesListPage() {
           <button className="btn sm" onClick={() => navigate('/rbac/permissions')}>
             <Icon name="archive" size={13} />Permission catalog
           </button>
-          <button className="btn sm accent" onClick={startNew}>
+          <button style={{ display: canManageRoles ? undefined : 'none' }} className="btn sm accent" onClick={startNew}>
             <Icon name="plus" size={13} />New role
           </button>
         </div>
@@ -308,7 +320,26 @@ export default function RolesListPage() {
                 </div>
                 <div className="field">
                   <label className="field-label">Scope</label>
-                  <div className="input"><input value={draft.scope} onChange={e => setDraft(d => ({ ...d, scope: e.target.value }))} placeholder="Global" /></div>
+                  <div className="input">
+                    <select
+                      value={draft.scope}
+                      onChange={e => setDraft(d => ({ ...d, scope: e.target.value }))}
+                      style={{ flex: 1, border: 0, outline: 0, background: 'transparent' }}
+                    >
+                      <option value="Global">Global — platform-wide, no restriction</option>
+                      <option value="Zone">Zone — restricted to specific service zones</option>
+                      <option value="Operator">Operator — restricted to one air operator</option>
+                    </select>
+                  </div>
+                  {draft.scope !== 'Global' && (
+                    <div className="input" style={{ marginTop: 6 }}>
+                      <input
+                        value={draft.scope_detail || ''}
+                        onChange={e => setDraft(d => ({ ...d, scope_detail: e.target.value }))}
+                        placeholder={draft.scope === 'Zone' ? 'Zone name or ID…' : 'Operator name or ID…'}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                   <button className="btn sm" onClick={() => { setShowNewForm(false); setShowMobileEditor(false) }}>Cancel</button>

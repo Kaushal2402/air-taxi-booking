@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.catalog import (
     AircraftTypeCreate, AircraftTypeResponse, AircraftTypeUpdate,
@@ -25,7 +25,7 @@ router = APIRouter()
 @router.get("/vehicle-classes", response_model=List[VehicleClassResponse])
 async def list_vehicle_classes(
     include_inactive: bool = Query(False),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("catalog.vehicle_classes.view")),
     db=Depends(get_db),
 ):
     return await catalog_service.list_vehicle_classes(db, include_inactive)
@@ -35,7 +35,7 @@ async def list_vehicle_classes(
 async def create_vehicle_class(
     body: VehicleClassCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.vehicle_classes.manage")),
     db=Depends(get_db),
 ):
     result = await catalog_service.create_vehicle_class(db, body.model_dump())
@@ -51,7 +51,7 @@ async def update_vehicle_class(
     id: str,
     body: VehicleClassUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.vehicle_classes.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -67,7 +67,7 @@ async def update_vehicle_class(
 async def deactivate_vehicle_class(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.vehicle_classes.manage")),
     db=Depends(get_db),
 ):
     await catalog_service.deactivate_vehicle_class(db, id)
@@ -83,7 +83,7 @@ async def deactivate_vehicle_class(
 @router.get("/aircraft-types", response_model=List[AircraftTypeResponse])
 async def list_aircraft_types(
     include_inactive: bool = Query(False),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("catalog.aircraft_types.view")),
     db=Depends(get_db),
 ):
     return await catalog_service.list_aircraft_types(db, include_inactive)
@@ -93,7 +93,7 @@ async def list_aircraft_types(
 async def create_aircraft_type(
     body: AircraftTypeCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.aircraft_types.manage")),
     db=Depends(get_db),
 ):
     result = await catalog_service.create_aircraft_type(db, body.model_dump())
@@ -109,7 +109,7 @@ async def update_aircraft_type(
     id: str,
     body: AircraftTypeUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.aircraft_types.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -125,7 +125,7 @@ async def update_aircraft_type(
 async def deactivate_aircraft_type(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.aircraft_types.manage")),
     db=Depends(get_db),
 ):
     await catalog_service.deactivate_aircraft_type(db, id)
@@ -141,7 +141,7 @@ async def deactivate_aircraft_type(
 @router.get("/zones", response_model=List[ServiceZoneResponse])
 async def list_service_zones(
     include_inactive: bool = Query(False),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("catalog.zones.view")),
     db=Depends(get_db),
 ):
     return await catalog_service.list_service_zones(db, include_inactive)
@@ -151,7 +151,7 @@ async def list_service_zones(
 async def create_service_zone(
     body: ServiceZoneCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.zones.manage")),
     db=Depends(get_db),
 ):
     result = await catalog_service.create_service_zone(db, body.model_dump())
@@ -167,7 +167,7 @@ async def update_service_zone(
     id: str,
     body: ServiceZoneUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.zones.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -183,7 +183,7 @@ async def update_service_zone(
 async def publish_service_zone(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.zones.manage")),
     db=Depends(get_db),
 ):
     result = await catalog_service.publish_service_zone(db, id)
@@ -197,7 +197,7 @@ async def publish_service_zone(
 @router.post("/zones/validate-geometry", response_model=GeometryValidationResponse)
 async def validate_zone_geometry(
     body: dict,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("catalog.zones.view")),
 ):
     polygon = body.get("polygon", [])
     result = await catalog_service.validate_zone_geometry(polygon)
@@ -207,7 +207,7 @@ async def validate_zone_geometry(
 @router.delete("/zones/{id}", response_model=MessageResponse)
 async def deactivate_service_zone(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("catalog.zones.manage")),
     db=Depends(get_db),
 ):
     from app.core.exceptions import NotFoundException
@@ -225,7 +225,7 @@ async def deactivate_service_zone(
 @router.get("/air-routes", response_model=List[AirRouteResponse])
 async def list_air_routes(
     include_inactive: bool = Query(False),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("catalog.routes.view")),
     db=Depends(get_db),
 ):
     return await catalog_service.list_air_routes(db, include_inactive)
@@ -235,7 +235,7 @@ async def list_air_routes(
 async def create_air_route(
     body: AirRouteCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.routes.manage")),
     db=Depends(get_db),
 ):
     result = await catalog_service.create_air_route(db, body.model_dump())
@@ -251,7 +251,7 @@ async def update_air_route(
     id: str,
     body: AirRouteUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.routes.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -267,7 +267,7 @@ async def update_air_route(
 async def deactivate_air_route(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("catalog.routes.manage")),
     db=Depends(get_db),
 ):
     await catalog_service.deactivate_air_route(db, id)

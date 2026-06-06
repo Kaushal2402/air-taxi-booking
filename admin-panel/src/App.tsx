@@ -4,7 +4,9 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/queryClient'
 import { useAuthStore } from './store/authStore'
 import { usePlatformStore } from './store/platformStore'
+import { usePermissionStore } from './store/permissionStore'
 import { authService } from './services/authService'
+import { rbacService } from './services/rbacService'
 
 import DashboardPage from './pages/dashboard/DashboardPage'
 import LiveMapPage from './pages/dashboard/LiveMapPage'
@@ -23,7 +25,6 @@ import AirRoutesPage from './pages/catalog/AirRoutesPage'
 import CustomersPage from './pages/customers/CustomersPage'
 import CustomerDetailPage from './pages/customers/CustomerDetailPage'
 import PrivacyRequestsPage from './pages/privacy/PrivacyRequestsPage'
-import CookieBanner from './components/ui/CookieBanner'
 import DriverOnboardingPage from './pages/drivers/DriverOnboardingPage'
 import DriverDirectoryPage from './pages/drivers/DriverDirectoryPage'
 import DriverDetailPage from './pages/drivers/DriverDetailPage'
@@ -88,6 +89,8 @@ import PermissionsCatalogPage from './pages/rbac/PermissionsCatalogPage'
 import NotificationTemplatesPage from './pages/notifications/NotificationTemplatesPage'
 import TemplateEditorPage from './pages/notifications/TemplateEditorPage'
 import DeliveryLogPage from './pages/notifications/DeliveryLogPage'
+import NoAccessPage from './pages/auth/NoAccessPage'
+import { getFirstPermittedPath } from './lib/getFirstPermittedPath'
 
 // Blocks access to protected pages when not authenticated.
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -101,7 +104,14 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const accessToken = useAuthStore(s => s.accessToken)
-  if (isAuthenticated && accessToken) return <Navigate to="/dashboard" replace />
+  const can = usePermissionStore(s => s.can)
+  const isSuperAdmin = usePermissionStore(s => s.isSuperAdmin)
+  const permissionsLoaded = usePermissionStore(s => s.permissionsLoaded)
+  if (isAuthenticated && accessToken) {
+    // Wait until permissions are loaded so we redirect to the right place
+    if (!permissionsLoaded) return null
+    return <Navigate to={getFirstPermittedPath(isSuperAdmin, can)} replace />
+  }
   return <>{children}</>
 }
 
@@ -116,10 +126,32 @@ function App() {
   const refreshToken = useAuthStore(s => s.refreshToken)
   const setAuth = useAuthStore(s => s.setAuth)
   const loadPlatform = usePlatformStore(s => s.load)
+  const setPermissions = usePermissionStore(s => s.setPermissions)
+  const clearPermissions = usePermissionStore(s => s.clearPermissions)
+
+  // Load the current user's effective permissions from the RBAC API.
+  // Called once after auth is confirmed (session restore or login).
+  async function loadPermissions(role: string) {
+    if (role === 'super_admin') {
+      setPermissions({}, true)
+      return
+    }
+    try {
+      const roleRow = await rbacService.getRoleByName(role)
+      const { permissions } = await rbacService.getRolePermissions(roleRow.id)
+      const map: Record<string, string> = {}
+      permissions.forEach(p => { map[p.permission_key] = p.state })
+      setPermissions(map, false)
+    } catch {
+      // Network/auth error — permissions stay empty (safest default: deny)
+      setPermissions({}, false)
+    }
+  }
 
   useEffect(() => {
     if (!isAuthenticated || !refreshToken) {
       // Not logged in — nothing to validate, render immediately.
+      clearPermissions()
       setSessionChecked(true)
       return
     }
@@ -130,8 +162,9 @@ function App() {
       .then(res => {
         // Update store with fresh tokens (also embeds new session ID in access token).
         setAuth(res.user, res.access_token, res.refresh_token)
-        // Load platform settings (base_currency, timezone) once after auth is confirmed.
+        // Load platform settings and permissions concurrently.
         void loadPlatform()
+        void loadPermissions(res.user.role)
         setSessionChecked(true)
       })
       .catch(() => {
@@ -250,9 +283,10 @@ function App() {
           <Route path="/audit/events/:id" element={<PrivateRoute><AuditEventPage /></PrivateRoute>} />
           <Route path="/audit/security" element={<PrivateRoute><SecurityCompliancePage /></PrivateRoute>} />
 
-          {/* Admin users (extra pages) */}
-          <Route path="/admin-users/:id" element={<PrivateRoute><AdminDetailPage /></PrivateRoute>} />
+          {/* Admin users (extra pages — static segments must come before :id) */}
           <Route path="/admin-users/invites" element={<PrivateRoute><InvitesPage /></PrivateRoute>} />
+          <Route path="/admin-users/access" element={<PrivateRoute><InvitesPage /></PrivateRoute>} />
+          <Route path="/admin-users/:id" element={<PrivateRoute><AdminDetailPage /></PrivateRoute>} />
 
           {/* Dispatch */}
           <Route path="/dispatch" element={<Navigate to="/dispatch/console" replace />} />
@@ -301,11 +335,13 @@ function App() {
           <Route path="/notifications/delivery" element={<PrivateRoute><DeliveryLogPage /></PrivateRoute>} />
           <Route path="/notifications/:id/edit" element={<PrivateRoute><TemplateEditorPage /></PrivateRoute>} />
 
+          {/* No access — shown when user has zero permissions */}
+          <Route path="/no-access" element={<NoAccessPage />} />
+
           {/* Default */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-        <CookieBanner />
       </BrowserRouter>
     </QueryClientProvider>
   )

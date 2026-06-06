@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from app.core.exceptions import NotFoundException
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.common import MessageResponse
 from app.schemas.settings import (
@@ -34,7 +34,7 @@ settings_router = APIRouter()
 
 @settings_router.get("", response_model=PlatformSettingsResponse)
 async def get_platform_settings(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("settings.view")),
     db=Depends(get_db),
 ):
     return await settings_service.get_settings(db)
@@ -44,7 +44,7 @@ async def get_platform_settings(
 async def update_platform_settings(
     body: PlatformSettingsUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -70,7 +70,7 @@ async def update_platform_settings(
 
 @settings_router.get("/toggles", response_model=List[PlatformToggleResponse])
 async def list_platform_toggles(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("settings.view")),
     db=Depends(get_db),
 ):
     return await settings_service.list_toggles(db)
@@ -81,7 +81,7 @@ async def update_platform_toggle(
     key: str,
     body: PlatformToggleUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     result = await settings_service.update_toggle(db, key, body.enabled)
@@ -107,7 +107,7 @@ async def update_platform_toggle(
 @settings_router.get("/flags", response_model=FeatureFlagsListResponse)
 async def list_feature_flags(
     environment: Optional[str] = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("settings.view")),
     db=Depends(get_db),
 ):
     items = await settings_service.list_flags(db, environment)
@@ -118,7 +118,7 @@ async def list_feature_flags(
 async def create_feature_flag(
     body: FeatureFlagCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     result = await settings_service.create_flag(db, body.model_dump())
@@ -144,7 +144,7 @@ async def update_feature_flag(
     id: str,
     body: FeatureFlagUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -169,7 +169,7 @@ async def update_feature_flag(
 @settings_router.get("/flags/{id}/metrics", response_model=FlagMetrics)
 async def get_flag_metrics(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("settings.view")),
     db=Depends(get_db),
 ):
     data = await settings_service.get_flag_metrics(db, id)
@@ -182,7 +182,7 @@ async def get_flag_metrics(
 
 @settings_router.get("/kill-switches", response_model=List[KillSwitchResponse])
 async def list_kill_switches(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("settings.view")),
     db=Depends(get_db),
 ):
     return await settings_service.list_kill_switches(db)
@@ -193,7 +193,7 @@ async def update_kill_switch(
     key: str,
     body: KillSwitchUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     result = await settings_service.update_kill_switch(db, key, body.enabled)
@@ -218,7 +218,7 @@ async def update_kill_switch(
 
 @settings_router.get("/maintenance-windows", response_model=MaintenanceWindowsListResponse)
 async def list_maintenance_windows(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("settings.view")),
     db=Depends(get_db),
 ):
     items = await settings_service.list_maintenance_windows(db)
@@ -229,7 +229,7 @@ async def list_maintenance_windows(
 async def create_maintenance_window(
     body: MaintenanceWindowCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     result = await settings_service.create_maintenance_window(db, body.model_dump())
@@ -254,7 +254,7 @@ async def create_maintenance_window(
 async def delete_maintenance_window(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("settings.manage")),
     db=Depends(get_db),
 ):
     await settings_service.delete_maintenance_window(db, id)

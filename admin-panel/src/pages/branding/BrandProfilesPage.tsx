@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -27,6 +28,7 @@ export default function BrandProfilesPage() {
     partner_name: '',
   })
   const [saving, setSaving] = useState(false)
+  const canManageBranding = usePermission('branding.manage')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -88,7 +90,7 @@ export default function BrandProfilesPage() {
       actions={
         <>
           <button className="btn sm">Brand guidelines</button>
-          <button className="btn sm accent" onClick={() => setShowNew(true)}>
+          <button style={{ display: canManageBranding ? undefined : 'none' }} className="btn sm accent" onClick={() => setShowNew(true)}>
             <Icon name="plus" size={13} />New profile
           </button>
         </>

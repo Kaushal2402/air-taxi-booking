@@ -25,6 +25,7 @@ from app.api.v1.endpoints.notifications import notifications_router
 from app.api.v1.endpoints.sos import router as sos_router
 from app.api.v1.endpoints.data_purge import router as data_purge_router
 from app.api.v1.endpoints.privacy import router as privacy_router
+from app.api.v1.endpoints.reference import router as reference_router
 
 api_router = APIRouter()
 
@@ -59,3 +60,4 @@ api_router.include_router(notifications_router,  prefix="/notifications",  tags=
 api_router.include_router(sos_router,            prefix="/sos",            tags=["Safety SOS"])
 api_router.include_router(data_purge_router,     prefix="/data/purge",     tags=["Data Retention"])
 api_router.include_router(privacy_router,        prefix="/privacy",        tags=["Privacy Requests"])
+api_router.include_router(reference_router,      prefix="/ref",            tags=["Reference Lookups"])

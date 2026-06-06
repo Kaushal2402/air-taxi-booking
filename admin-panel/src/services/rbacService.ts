@@ -65,6 +65,7 @@ export interface RoleCreate {
   description: string
   is_system: boolean
   scope: string
+  scope_detail?: string  // secondary input when scope !== Global
 }
 
 export interface RoleUpdate {
@@ -98,6 +99,9 @@ export const rbacService = {
 
   getPermissionCatalog: () =>
     api.get<PermissionCatalogResponse>('/rbac/permissions').then(r => r.data),
+
+  getRoleByName: (name: string) =>
+    api.get<Role>(`/rbac/roles/by-name/${encodeURIComponent(name)}`).then(r => r.data),
 
   getRolePermissions: (roleId: string) =>
     api.get<RolePermissionsResponse>(`/rbac/roles/${roleId}/permissions`).then(r => r.data),

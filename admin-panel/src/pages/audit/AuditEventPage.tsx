@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate, useParams } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -86,6 +88,7 @@ export default function AuditEventPage() {
   const [event, setEvent] = useState<AuditEventDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [isForbidden, setIsForbidden] = useState(false)
   const [copyMsg, setCopyMsg] = useState('')
   const [targetNotice, setTargetNotice] = useState('')
 
@@ -125,6 +128,8 @@ export default function AuditEventPage() {
   ] : []
 
   const hasHashes = event && (event.prev_hash || event.this_hash)
+
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) {
     return (

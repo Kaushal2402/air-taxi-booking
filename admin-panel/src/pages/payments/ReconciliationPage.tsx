@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -95,6 +97,7 @@ export default function ReconciliationPage() {
   const [unmatched, setUnmatched] = useState<UnmatchedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
 
   // Action states
   const [rerunning, setRerunning] = useState(false)

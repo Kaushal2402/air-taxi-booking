@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.payments import (
     BatchListResponse,
@@ -37,7 +37,7 @@ async def list_transactions(
     service: str | None = Query(None),
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("payments.view")),
     db=Depends(get_db),
 ):
     return await payments_service.list_transactions(
@@ -58,7 +58,7 @@ async def list_transactions(
 async def create_manual_entry(
     body: ManualEntryRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("payments.view")),
     db=Depends(get_db),
 ):
     result = await payments_service.create_manual_entry(db, body)
@@ -84,7 +84,7 @@ async def create_manual_entry(
 @router.get("/booking-search", response_model=BookingSearchResult)
 async def search_booking(
     ref: str = Query(..., description="Booking reference e.g. BK-RD-88421"),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("payments.view")),
     db=Depends(get_db),
 ):
     result = await payments_service.search_booking(db, ref)
@@ -97,7 +97,7 @@ async def search_booking(
 
 @router.get("/reconciliation/summary", response_model=ReconciliationSummaryResponse)
 async def get_reconciliation_summary(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("payments.reconcile")),
     db=Depends(get_db),
 ):
     return await payments_service.get_reconciliation_summary(db)
@@ -108,7 +108,7 @@ async def list_settlement_batches(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     hours: int = Query(48, ge=1),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("payments.reconcile")),
     db=Depends(get_db),
 ):
     return await payments_service.list_settlement_batches(db, page=page, page_size=page_size, hours=hours)
@@ -116,7 +116,7 @@ async def list_settlement_batches(
 
 @router.get("/reconciliation/unmatched", response_model=UnmatchedResponse)
 async def list_unmatched_items(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("payments.reconcile")),
     db=Depends(get_db),
 ):
     return await payments_service.list_unmatched_items(db)
@@ -125,7 +125,7 @@ async def list_unmatched_items(
 @router.post("/reconciliation/rerun", response_model=RerunMatchResponse)
 async def rerun_match(
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("payments.reconcile")),
     db=Depends(get_db),
 ):
     result = await payments_service.rerun_match(db)
@@ -148,7 +148,7 @@ async def rerun_match(
 @router.post("/reconciliation/resolve-all", response_model=ResolveAllResponse)
 async def resolve_all_unmatched(
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("payments.reconcile")),
     db=Depends(get_db),
 ):
     result = await payments_service.resolve_all_unmatched(db)
@@ -173,7 +173,7 @@ async def resolve_all_unmatched(
 @router.get("/{txn_id}", response_model=PaymentDetail)
 async def get_transaction(
     txn_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("payments.view")),
     db=Depends(get_db),
 ):
     detail = await payments_service.get_transaction(db, txn_id)
@@ -187,7 +187,7 @@ async def issue_refund(
     txn_id: str,
     body: RefundRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("payments.refund.initiate")),
     db=Depends(get_db),
 ):
     result = await payments_service.issue_refund(db, txn_id, body)

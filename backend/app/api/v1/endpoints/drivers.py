@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request, UploadFile, File
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.driver import (
     DriverActionRequest,
@@ -42,7 +42,7 @@ async def list_drivers(
     include_inactive: bool = Query(False),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return await driver_service.list_drivers(
@@ -65,7 +65,7 @@ async def list_drivers(
 @router.post("", response_model=DriverResponse, status_code=201)
 async def create_driver(
     body: DriverCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.create")),
     db=Depends(get_db),
 ):
     return await driver_service.create_driver(db, body.model_dump())
@@ -80,7 +80,7 @@ async def get_onboarding_queue(
     vehicle_class: str | None = Query(None),
     zone_code: str | None = Query(None),
     missing_doc: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return await driver_service.get_onboarding_queue(
@@ -98,7 +98,7 @@ async def get_onboarding_queue(
 @router.get("/{id}", response_model=DriverResponse)
 async def get_driver(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return await driver_service.get_driver(db, id)
@@ -108,7 +108,7 @@ async def get_driver(
 async def update_driver(
     id: str,
     body: DriverUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.edit")),
     db=Depends(get_db),
 ):
     return await driver_service.update_driver(db, id, body.model_dump(exclude_unset=True))
@@ -120,7 +120,7 @@ async def update_driver(
 async def approve_driver(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("drivers.approve")),
     db=Depends(get_db),
 ):
     result = await driver_service.approve_driver(db, id)
@@ -145,7 +145,7 @@ async def reject_driver(
     id: str,
     body: DriverActionRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("drivers.approve")),
     db=Depends(get_db),
 ):
     result = await driver_service.reject_driver(db, id, body.reason)
@@ -170,7 +170,7 @@ async def suspend_driver(
     id: str,
     body: DriverActionRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("drivers.suspend")),
     db=Depends(get_db),
 ):
     result = await driver_service.suspend_driver(db, id, body.reason)
@@ -194,7 +194,7 @@ async def suspend_driver(
 async def reactivate_driver(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("drivers.suspend")),
     db=Depends(get_db),
 ):
     result = await driver_service.reactivate_driver(db, id)
@@ -219,7 +219,7 @@ async def deactivate_driver(
     id: str,
     body: DriverActionRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("drivers.suspend")),
     db=Depends(get_db),
 ):
     result = await driver_service.deactivate_driver(db, id, body.reason)
@@ -243,7 +243,7 @@ async def deactivate_driver(
 async def force_offline(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("drivers.suspend")),
     db=Depends(get_db),
 ):
     result = await driver_service.force_offline(db, id)
@@ -268,7 +268,7 @@ async def force_offline(
 @router.get("/{id}/documents", response_model=DriverDocumentListResponse)
 async def get_documents(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return await driver_service.get_documents(db, id)
@@ -278,7 +278,7 @@ async def get_documents(
 async def create_document(
     id: str,
     body: DriverDocumentCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.edit")),
     db=Depends(get_db),
 ):
     return await driver_service.create_document(db, id, body.model_dump())
@@ -290,7 +290,7 @@ async def review_document(
     doc_id: str,
     body: DriverDocumentReviewRequest,
     request: Request,
-    admin_user: AdminUser = Depends(get_current_admin_user),
+    admin_user: AdminUser = Depends(require_permission("drivers.kyc.review")),
     db=Depends(get_db),
 ):
     result = await driver_service.review_document(db, id, doc_id, body, reviewed_by=admin_user.email)
@@ -315,7 +315,7 @@ async def upload_document_image(
     id: str,
     doc_id: str,
     file: UploadFile = File(...),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.edit")),
     db=Depends(get_db),
 ):
     return await driver_service.upload_document_image(db, id, doc_id, file)
@@ -326,7 +326,7 @@ async def upload_document_image(
 @router.get("/{id}/trips", response_model=StubResponse)
 async def get_driver_trips(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return StubResponse(
@@ -339,7 +339,7 @@ async def get_driver_trips(
 @router.get("/{id}/earnings", response_model=StubResponse)
 async def get_driver_earnings(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return StubResponse(
@@ -356,7 +356,7 @@ async def get_wallet_transactions(
     id: str,
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     return await driver_service.get_wallet_transactions(db, id, page=page, per_page=per_page)
@@ -367,7 +367,7 @@ async def adjust_wallet(
     id: str,
     body: DriverWalletAdjustRequest,
     request: Request,
-    admin_user: AdminUser = Depends(get_current_admin_user),
+    admin_user: AdminUser = Depends(require_permission("payouts.hold")),
     db=Depends(get_db),
 ):
     result = await driver_service.adjust_wallet(db, id, body, created_by=admin_user.email)
@@ -393,7 +393,7 @@ async def adjust_wallet(
 async def check_driver_thresholds(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     """
@@ -424,7 +424,7 @@ async def check_driver_thresholds(
 @router.post("/sweep-thresholds", status_code=200)
 async def sweep_all_driver_thresholds(
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("drivers.view")),
     db=Depends(get_db),
 ):
     """

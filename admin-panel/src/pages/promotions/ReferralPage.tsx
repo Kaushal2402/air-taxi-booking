@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -74,6 +76,7 @@ export default function ReferralPage() {
   const [saving, setSaving] = useState(false)
   const [toggleSaving, setToggleSaving] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const load = async () => {

@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -33,11 +36,13 @@ export default function PayoutRunDetailPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
   const [approving, setApproving] = useState(false)
   const [rejecting, setRejecting] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showMobileEditor, setShowMobileEditor] = useState(false)
   const [selectedPayee, setSelectedPayee] = useState<PayoutPayee | null>(null)
+  const canApprovePayout = usePermission('payouts.approve')
 
   const PAGE_SIZE = 20
 
@@ -116,6 +121,8 @@ export default function PayoutRunDetailPage() {
     )
   }
 
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!run) return null
 
   const isReview = run.status === 'review'
@@ -186,10 +193,10 @@ export default function PayoutRunDetailPage() {
       actions={
         <>
           <button className="btn sm"><Icon name="download" size={13} />NACH file</button>
-          {isReview && <button className="btn sm danger" onClick={() => setRejecting(true)}>Reject</button>}
+          {isReview && <button className="btn sm danger" onClick={() => setRejecting(true)} style={{ display: canApprovePayout ? undefined : 'none' }}>Reject</button>}
           {isReview && (
             <button className="btn sm accent" onClick={() => setApproving(true)}>
-              <Icon name="check" size={13} />Approve & release
+              <Icon name="check" size={13} />Approve &amp; release
             </button>
           )}
         </>

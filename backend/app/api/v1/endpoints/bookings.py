@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.bookings import (
     AddNoteBody,
@@ -41,7 +41,7 @@ async def list_disputes(
     search: Optional[str] = Query(None),
     stage: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     items, total = await bookings_service.list_disputes(
@@ -56,7 +56,7 @@ async def list_disputes(
 @road_bookings_router.get("/{booking_id}/cancel-preview")
 async def cancel_preview(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     """Return computed cancellation fee preview based on platform settings."""
@@ -77,7 +77,7 @@ async def list_bookings(
     flagged: Optional[bool] = Query(None),
     payment_method: Optional[str] = Query(None),
     customer_id: Optional[str] = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     items, total, stats_dict = await bookings_service.list_bookings(
@@ -107,7 +107,7 @@ async def list_bookings(
 async def create_booking(
     body: AssistedBookingCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.create_assisted")),
     db=Depends(get_db),
 ):
     result = await bookings_service.create_assisted_booking(db, body, current_user.id)
@@ -132,7 +132,7 @@ async def create_booking(
 @road_bookings_router.get("/{booking_id}", response_model=RoadBookingDetail)
 async def get_booking(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     return await bookings_service.get_booking(db, booking_id)
@@ -143,7 +143,7 @@ async def cancel_booking(
     booking_id: str,
     body: CancelBookingBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.cancel")),
     db=Depends(get_db),
 ):
     result = await bookings_service.cancel_booking(db, booking_id, body)
@@ -169,7 +169,7 @@ async def reassign_driver(
     booking_id: str,
     body: ReassignBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.reassign")),
     db=Depends(get_db),
 ):
     result = await bookings_service.reassign_driver(db, booking_id, body.driver_id, body.reason)
@@ -195,7 +195,7 @@ async def adjust_fare(
     booking_id: str,
     body: AdjustFareBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.adjust_fare")),
     db=Depends(get_db),
 ):
     result = await bookings_service.adjust_fare(db, booking_id, body.new_fare_minor, body.reason)
@@ -221,7 +221,7 @@ async def process_refund(
     booking_id: str,
     body: RefundBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.refund")),
     db=Depends(get_db),
 ):
     result = await bookings_service.process_refund(
@@ -249,7 +249,7 @@ async def open_dispute(
     booking_id: str,
     body: OpenDisputeBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     result = await bookings_service.open_dispute(db, booking_id, body.reason, body.note)
@@ -275,7 +275,7 @@ async def resolve_dispute(
     booking_id: str,
     body: ResolveDisputeBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.dispute.resolve")),
     db=Depends(get_db),
 ):
     result = await bookings_service.resolve_dispute(db, booking_id, body)
@@ -300,7 +300,7 @@ async def resolve_dispute(
 async def add_note(
     booking_id: str,
     body: AddNoteBody,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     return await bookings_service.add_note(db, booking_id, body.note)
@@ -311,7 +311,7 @@ async def flag_booking(
     booking_id: str,
     body: FlagBookingBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     result = await bookings_service.flag_booking(db, booking_id, body.flagged, body.flag_reason)
@@ -335,7 +335,7 @@ async def flag_booking(
 @road_bookings_router.get("/{booking_id}/telemetry")
 async def get_telemetry(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     return await bookings_service.get_telemetry(db, booking_id)
@@ -346,7 +346,7 @@ async def advance_status(
     booking_id: str,
     body: AdvanceStatusBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.road.view")),
     db=Depends(get_db),
 ):
     """Manually advance booking status for ops workflow."""

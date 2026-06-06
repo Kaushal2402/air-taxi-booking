@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.core.currency import fmt_major, fmt_minor
-from app.services.settings_service import get_base_currency, get_toggle, get_settings, is_in_quiet_window
+from app.services.settings_service import get_base_currency, get_toggle, get_settings, is_in_quiet_window, is_kill_switch_active, get_active_maintenance_window
 from app.services import driver_suspension_service
 from app.models.settings import PlatformSettings
 from app.models.booking import (
@@ -374,6 +374,20 @@ async def create_assisted_booking(
     data: AssistedBookingCreate,
     created_by_id: str,
 ) -> dict:
+    # ── Kill switch enforcement ───────────────────────────────────────────────
+    if await is_kill_switch_active(db, "new_bookings"):
+        raise ValidationException("New bookings are currently suspended. Please try again later.")
+
+    # ── Regional maintenance window enforcement ───────────────────────────────
+    if data.region_name:
+        mw = await get_active_maintenance_window(db, data.region_name)
+        if mw:
+            raise ValidationException(
+                f"Bookings in '{data.region_name}' are paused due to a scheduled maintenance window "
+                f"({mw.starts_at.strftime('%H:%M')}–{mw.ends_at.strftime('%H:%M')} UTC). "
+                "Please try again later."
+            )
+
     # ── Toggle enforcement ────────────────────────────────────────────────────
     if data.payment_method == "cash" and not await get_toggle(db, "cash_payments"):
         raise ValidationException("Cash payments are currently disabled on this platform.")

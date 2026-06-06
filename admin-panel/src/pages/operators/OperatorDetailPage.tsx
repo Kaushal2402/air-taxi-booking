@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -121,6 +124,9 @@ export default function OperatorDetailPage() {
   const [showGroundPilot, setShowGroundPilot]     = useState(false)
   const [groundPilotReason, setGroundPilotReason] = useState('')
   const [siteVisitRequired, setSiteVisitRequired] = useState(false)
+  const canApproveDoc = usePermission('kyc.documents.approve')
+  const canSuspendOperator = usePermission('operators.suspend')
+  const canApproveOperator = usePermission('operators.approve')
 
   const loadOperator = async () => {
     if (!id) return
@@ -407,6 +413,8 @@ export default function OperatorDetailPage() {
     { id: 'performance', label: 'Performance' },
     { id: 'compliance',  label: 'Compliance' },
   ]
+
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) {
     return (
@@ -893,7 +901,7 @@ export default function OperatorDetailPage() {
                           <td>
                             {doc.status === 'pending' && (
                               <div style={{ display: 'flex', gap: 6 }}>
-                                <button className="btn sm accent" onClick={() => handleApproveDoc(doc)}>Approve</button>
+                                <button className="btn sm accent" onClick={() => handleApproveDoc(doc)} style={{ display: canApproveDoc ? undefined : 'none' }}>Approve</button>
                                 <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => handleRejectDoc(doc)}>Reject</button>
                               </div>
                             )}

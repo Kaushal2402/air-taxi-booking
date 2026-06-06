@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
@@ -47,6 +50,8 @@ export default function OperatorOnboardingPage() {
   const [rejectTarget, setRejectTarget] = useState<Operator | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const canApproveDoc = usePermission('kyc.documents.approve')
+  const canApproveOperator = usePermission('operators.approve')
   const [apiError, setApiError]         = useState('')
 
   // Invite operator modal
@@ -273,8 +278,8 @@ export default function OperatorOnboardingPage() {
                     </div>
                     {doc.status === 'pending' && (
                       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                        <button className="btn sm accent" onClick={() => handleApproveDoc(doc)}>Approve</button>
-                        <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => handleRejectDoc(doc)}>Reject</button>
+                        <button className="btn sm accent" onClick={() => handleApproveDoc(doc)} style={{ display: canApproveDoc ? undefined : 'none' }}>Approve</button>
+                        <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => handleRejectDoc(doc)} style={{ display: canApproveOperator ? undefined : 'none' }}>Reject</button>
                       </div>
                     )}
                   </div>

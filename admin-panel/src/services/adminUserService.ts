@@ -29,6 +29,17 @@ export interface AdminSession {
   is_current: boolean
 }
 
+export interface AdminActivityEvent {
+  id: string
+  action: string
+  target: string
+  category: string
+  severity: string
+  source_ip: string | null
+  created_at: string
+  timestamp: string
+}
+
 export interface InviteAdminBody {
   name: string
   email: string
@@ -102,4 +113,7 @@ export const adminUserService = {
 
   unlockAdmin: (id: string) =>
     api.post<AdminUser>(`/admin-users/${id}/unlock`).then(r => r.data),
+
+  getAdminActivity: (id: string, limit = 10) =>
+    api.get<AdminActivityEvent[]>(`/admin-users/${id}/activity`, { params: { limit } }).then(r => r.data),
 }

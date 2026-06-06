@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.common import MessageResponse
 from app.schemas.vehicle import (
@@ -42,7 +42,7 @@ async def list_vehicles(
     year_max: int | None = Query(None, le=2100),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.view")),
     db=Depends(get_db),
 ):
     return await vehicle_service.list_vehicles(
@@ -63,7 +63,7 @@ async def list_vehicles(
 @vehicles_router.post("", status_code=201)
 async def create_vehicle(
     body: VehicleCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.create_vehicle(db, body.model_dump())
@@ -72,7 +72,7 @@ async def create_vehicle(
 @vehicles_router.get("/{id}")
 async def get_vehicle_detail(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.view")),
     db=Depends(get_db),
 ):
     return await vehicle_service.get_vehicle_detail(db, id)
@@ -82,7 +82,7 @@ async def get_vehicle_detail(
 async def update_vehicle(
     id: str,
     body: VehicleUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.update_vehicle(db, id, body.model_dump(exclude_unset=True))
@@ -92,7 +92,7 @@ async def update_vehicle(
 async def approve_vehicle(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.approve_vehicle(db, id)
@@ -117,7 +117,7 @@ async def ground_vehicle(
     id: str,
     body: GroundVehicleRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.ground_vehicle(db, id, body.reason)
@@ -141,7 +141,7 @@ async def ground_vehicle(
 async def reactivate_vehicle(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.reactivate_vehicle(db, id)
@@ -166,7 +166,7 @@ async def link_driver(
     id: str,
     body: LinkDriverRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.link_driver(db, id, body.driver_id)
@@ -190,7 +190,7 @@ async def link_driver(
 async def unlink_driver(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.unlink_driver(db, id)
@@ -214,7 +214,7 @@ async def unlink_driver(
 async def reassign_class(
     id: str,
     body: ReassignClassRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.reassign_class(db, id, body.vehicle_class_id)
@@ -224,7 +224,7 @@ async def reassign_class(
 async def upload_vehicle_image(
     id: str,
     file: UploadFile = File(...),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.upload_vehicle_image(db, id, file)
@@ -235,7 +235,7 @@ async def upload_vehicle_image(
 @vehicles_router.get("/{id}/documents")
 async def get_documents(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.view")),
     db=Depends(get_db),
 ):
     docs = await vehicle_service.get_documents(db, id)
@@ -246,7 +246,7 @@ async def get_documents(
 async def create_document(
     id: str,
     body: VehicleDocumentCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.create_document(db, id, body.model_dump())
@@ -258,7 +258,7 @@ async def review_document(
     doc_id: str,
     body: VehicleDocumentReview,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("kyc.documents.approve")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.review_document(
@@ -291,7 +291,7 @@ async def upload_document_image(
     id: str,
     doc_id: str,
     file: UploadFile = File(...),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.upload_document_image(db, id, doc_id, file)
@@ -302,7 +302,7 @@ async def upload_document_image(
 @vehicles_router.get("/{id}/maintenances")
 async def get_maintenances(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.view")),
     db=Depends(get_db),
 ):
     maints = await vehicle_service.get_maintenances(db, id)
@@ -313,7 +313,7 @@ async def get_maintenances(
 async def create_maintenance(
     id: str,
     body: VehicleMaintenanceCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.create_maintenance(db, id, body.model_dump())
@@ -324,7 +324,7 @@ async def update_maintenance(
     id: str,
     m_id: str,
     body: VehicleMaintenanceUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.update_maintenance(db, id, m_id, body.model_dump(exclude_unset=True))
@@ -334,7 +334,7 @@ async def update_maintenance(
 async def delete_maintenance(
     id: str,
     m_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     await vehicle_service.delete_maintenance(db, id, m_id)
@@ -349,7 +349,7 @@ async def list_vendors(
     status: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.view")),
     db=Depends(get_db),
 ):
     return await vehicle_service.list_vendors(
@@ -364,7 +364,7 @@ async def list_vendors(
 @vendors_router.post("", status_code=201)
 async def create_vendor(
     body: VendorCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.create_vendor(db, body.model_dump())
@@ -373,7 +373,7 @@ async def create_vendor(
 @vendors_router.get("/{id}")
 async def get_vendor_detail(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.view")),
     db=Depends(get_db),
 ):
     return await vehicle_service.get_vendor_detail(db, id)
@@ -383,7 +383,7 @@ async def get_vendor_detail(
 async def update_vendor(
     id: str,
     body: VendorUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     return await vehicle_service.update_vendor(db, id, body.model_dump(exclude_unset=True))
@@ -393,7 +393,7 @@ async def update_vendor(
 async def activate_vendor(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.activate_vendor(db, id)
@@ -418,7 +418,7 @@ async def suspend_vendor(
     id: str,
     body: SuspendVendorRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("vehicles.manage")),
     db=Depends(get_db),
 ):
     result = await vehicle_service.suspend_vendor(db, id, body.reason)

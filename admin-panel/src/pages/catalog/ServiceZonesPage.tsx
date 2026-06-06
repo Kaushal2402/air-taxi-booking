@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Polygon, CircleMarker, Marker, Polyline, ZoomControl, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -143,6 +146,7 @@ export default function ServiceZonesPage() {
   const [apiError, setApiError]               = useState('')
   const [search, setSearch]                   = useState('')
   const [confirmDeactivate, setConfirmDeactivate] = useState<ServiceZone | null>(null)
+  const canManageCatalog = usePermission('catalog.zones.manage')
   const validateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Keep a live ref to toolMode so Leaflet polygon event handlers (registered
   // once by react-leaflet v5) always see the current value without stale closures.
@@ -303,7 +307,7 @@ export default function ServiceZonesPage() {
     <>
       {/* Mobile back button */}
       {isMobile && (
-        <button
+        <button style={{ display: canManageCatalog ? undefined : 'none' }}
           onClick={() => {
             setMobileTab('list')
             setSelected(null); setIsNew(false); setEditPolygon([])
@@ -576,7 +580,7 @@ export default function ServiceZonesPage() {
               <button className="btn sm" onClick={() => navigate('/catalog/air-routes')}>Air routes</button>
             </>
           )}
-          <button className="btn sm accent" onClick={startNew}><Icon name="plus" size={13} />New zone</button>
+          <button className="btn sm accent" onClick={startNew} style={{ display: canManageCatalog ? undefined : 'none' }}><Icon name="plus" size={13} />New zone</button>
         </div>
       }
     >

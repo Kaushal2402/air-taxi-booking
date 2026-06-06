@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.common import MessageResponse
 from app.schemas.promotions import (
@@ -32,7 +32,7 @@ async def list_promotions(
     page_size: int = Query(50, ge=1, le=200),
     search: str | None = Query(None),
     status: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("promotions.view")),
     db=Depends(get_db),
 ):
     items, total = await promotions_service.list_promotions(
@@ -46,7 +46,7 @@ async def list_promotions(
 async def create_promotion(
     body: PromotionCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("promotions.create")),
     db=Depends(get_db),
 ):
     result = await promotions_service.create_promotion(db, body.model_dump())
@@ -71,7 +71,7 @@ async def create_promotion(
 @promotions_router.get("/analytics", response_model=PromotionAnalytics)
 async def get_analytics(
     days: int = Query(14, ge=1, le=365),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("promotions.view")),
     db=Depends(get_db),
 ):
     data = await promotions_service.get_analytics(db, days=days)
@@ -81,7 +81,7 @@ async def get_analytics(
 @promotions_router.get("/{promotion_id}", response_model=PromotionResponse)
 async def get_promotion(
     promotion_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("promotions.view")),
     db=Depends(get_db),
 ):
     return await promotions_service.get_promotion(db, promotion_id)
@@ -92,7 +92,7 @@ async def update_promotion(
     promotion_id: str,
     body: PromotionUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("promotions.edit")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -118,7 +118,7 @@ async def update_promotion(
 async def activate_promotion(
     promotion_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("promotions.edit")),
     db=Depends(get_db),
 ):
     result = await promotions_service.activate_promotion(db, promotion_id)
@@ -142,7 +142,7 @@ async def activate_promotion(
 async def pause_promotion(
     promotion_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("promotions.edit")),
     db=Depends(get_db),
 ):
     result = await promotions_service.pause_promotion(db, promotion_id)
@@ -166,7 +166,7 @@ async def pause_promotion(
 async def delete_promotion(
     promotion_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("promotions.delete")),
     db=Depends(get_db),
 ):
     await promotions_service.delete_promotion(db, promotion_id)
@@ -190,7 +190,7 @@ async def delete_promotion(
 
 @referrals_router.get("/program", response_model=ReferralProgramResponse)
 async def get_referral_program(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("referrals.view")),
     db=Depends(get_db),
 ):
     return await promotions_service.get_referral_program(db)
@@ -200,7 +200,7 @@ async def get_referral_program(
 async def update_referral_program(
     body: ReferralProgramUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("referrals.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -224,7 +224,7 @@ async def update_referral_program(
 
 @referrals_router.get("/stats", response_model=ReferralStats)
 async def get_referral_stats(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("referrals.view")),
     db=Depends(get_db),
 ):
     data = await promotions_service.get_referral_stats(db)

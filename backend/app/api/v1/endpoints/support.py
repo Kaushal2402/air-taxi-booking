@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.support import (
     SlaPolicyCreate,
@@ -38,7 +38,7 @@ async def list_tickets(
     assignee_id: str | None = Query(None),
     sla_breach: bool | None = Query(None),
     search: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("support.tickets.view")),
     db=Depends(get_db),
 ):
     return await support_service.list_tickets(
@@ -49,7 +49,7 @@ async def list_tickets(
 @router.get("/tickets/{ticket_id}", response_model=TicketDetailResponse)
 async def get_ticket(
     ticket_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("support.tickets.view")),
     db=Depends(get_db),
 ):
     return await support_service.get_ticket(db, ticket_id)
@@ -59,7 +59,7 @@ async def get_ticket(
 async def create_ticket(
     body: TicketCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.view")),
     db=Depends(get_db),
 ):
     result = await support_service.create_ticket(
@@ -90,7 +90,7 @@ async def assign_ticket(
     ticket_id: str,
     body: TicketAssignRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.reply")),
     db=Depends(get_db),
 ):
     result = await support_service.assign_ticket(db, ticket_id, body.assignee_id)
@@ -115,7 +115,7 @@ async def assign_ticket(
 async def add_message(
     ticket_id: str,
     body: TicketMessageCreate,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.reply")),
     db=Depends(get_db),
 ):
     return await support_service.add_message(
@@ -133,7 +133,7 @@ async def add_message(
 async def update_ticket_status(
     ticket_id: str,
     body: TicketStatusUpdateRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("support.tickets.close")),
     db=Depends(get_db),
 ):
     """Move a ticket to a new status. Validates allowed transitions."""
@@ -147,7 +147,7 @@ async def resolve_ticket(
     ticket_id: str,
     body: TicketResolveRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.close")),
     db=Depends(get_db),
 ):
     result = await support_service.resolve_ticket(
@@ -175,7 +175,7 @@ async def escalate_ticket(
     ticket_id: str,
     body: TicketEscalateRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.escalate")),
     db=Depends(get_db),
 ):
     result = await support_service.escalate_ticket(
@@ -207,7 +207,7 @@ async def escalate_ticket(
 
 @router.get("/sla-policies", response_model=List[SlaPolicyResponse])
 async def list_sla_policies(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("support.tickets.view")),
     db=Depends(get_db),
 ):
     return await support_service.list_sla_policies(db)
@@ -217,7 +217,7 @@ async def list_sla_policies(
 async def create_sla_policy(
     body: SlaPolicyCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.close")),
     db=Depends(get_db),
 ):
     result = await support_service.create_sla_policy(db, body)
@@ -242,7 +242,7 @@ async def update_sla_policy(
     policy_id: str,
     body: SlaPolicyUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("support.tickets.close")),
     db=Depends(get_db),
 ):
     result = await support_service.update_sla_policy(db, policy_id, body)

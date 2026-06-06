@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -33,6 +36,7 @@ export default function TaxesPage() {
   const [showMobileEditor, setShowMobileEditor] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<TaxRule | null>(null)
   const [notice, setNotice] = useState('')
+  const canManagePricing = usePermission('pricing.rules.manage')
 
   const loadTaxes = async () => {
     setLoading(true)
@@ -119,7 +123,7 @@ export default function TaxesPage() {
           <button className="btn sm" onClick={() => setNotice('Tax statement export will be available once the Payments module is connected.')}>
             <Icon name="download" size={13} />Tax statement export
           </button>
-          <button className="btn sm accent" onClick={startNew}>
+          <button style={{ display: canManagePricing ? undefined : 'none' }} className="btn sm accent" onClick={startNew}>
             <Icon name="plus" size={13} />New tax rule
           </button>
         </div>

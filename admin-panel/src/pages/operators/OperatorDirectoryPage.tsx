@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -50,6 +51,7 @@ export default function OperatorDirectoryPage() {
   const [form, setForm]               = useState<CreateOperatorBody>({ ...EMPTY_FORM })
   const [creating, setCreating]       = useState(false)
   const [createError, setCreateError] = useState('')
+  const canCreateOperator = usePermission('operators.create')
 
   const load = async () => {
     setLoading(true)
@@ -128,7 +130,7 @@ export default function OperatorDirectoryPage() {
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn sm" onClick={() => navigate('/operators/onboarding')}>Onboarding queue</button>
-          <button className="btn sm accent" onClick={() => setShowCreate(true)}>
+          <button style={{ display: canCreateOperator ? undefined : 'none' }} className="btn sm accent" onClick={() => setShowCreate(true)}>
             <Icon name="plus" size={13} />Add operator
           </button>
         </div>

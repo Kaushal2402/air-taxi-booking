@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -16,6 +18,8 @@ function toDatetimeLocal(d: Date): string {
 }
 
 function fmtTime(iso: string | null): string {
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!iso) return '—'
   try { return formatTimeHM(iso) } catch { return iso }
 }
@@ -48,6 +52,7 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const [operators, setOperators] = useState<Operator[]>([])
   const [aircraft, setAircraft] = useState<Aircraft[]>([])

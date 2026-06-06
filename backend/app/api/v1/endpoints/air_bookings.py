@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.air_bookings import (
     AddNoteRequest,
@@ -36,7 +36,7 @@ async def create_air_booking(
     body: CreateAirBookingRequest,
     request: Request,
     db=Depends(get_db),
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.air.create")),
 ) -> AirBookingDetail:
     result = await air_bookings_service.create_air_booking(db, body)
     try:
@@ -68,7 +68,7 @@ async def list_air_bookings(
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
     flagged: bool | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.list_air_bookings(
@@ -90,7 +90,7 @@ async def list_air_bookings(
 @router.get("/{booking_id}", response_model=AirBookingDetail)
 async def get_air_booking(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.get_air_booking(db, booking_id)
@@ -103,7 +103,7 @@ async def assign_operator(
     booking_id: str,
     body: AssignOperatorRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.air.confirm")),
     db=Depends(get_db),
 ):
     result = await air_bookings_service.assign_operator(db, booking_id, body)
@@ -129,7 +129,7 @@ async def assign_operator(
 @router.get("/{booking_id}/cancel-preview", response_model=CancelPreviewResponse)
 async def cancel_preview(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.cancel_preview(db, booking_id)
@@ -142,7 +142,7 @@ async def cancel_booking(
     booking_id: str,
     body: CancelRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.air.cancel")),
     db=Depends(get_db),
 ):
     result = await air_bookings_service.cancel_booking(db, booking_id, body)
@@ -170,7 +170,7 @@ async def reschedule_booking(
     booking_id: str,
     body: RescheduleRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.air.confirm")),
     db=Depends(get_db),
 ):
     result = await air_bookings_service.reschedule_booking(db, booking_id, body)
@@ -198,7 +198,7 @@ async def process_refund(
     booking_id: str,
     body: RefundRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.air.refund")),
     db=Depends(get_db),
 ):
     result = await air_bookings_service.process_refund(db, booking_id, body)
@@ -224,7 +224,7 @@ async def process_refund(
 @router.get("/{booking_id}/manifest", response_model=ManifestResponse)
 async def get_manifest(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.get_manifest(db, booking_id)
@@ -234,7 +234,7 @@ async def get_manifest(
 async def update_manifest(
     booking_id: str,
     body: ManifestUpdateRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.manifest.edit")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.update_manifest(db, booking_id, body)
@@ -243,7 +243,7 @@ async def update_manifest(
 @router.post("/{booking_id}/manifest/lock", response_model=ManifestResponse)
 async def lock_manifest(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.manifest.edit")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.lock_manifest(db, booking_id)
@@ -254,7 +254,7 @@ async def lock_manifest(
 @router.get("/{booking_id}/quotes", response_model=QuotesListResponse)
 async def list_quotes(
     booking_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.list_quotes(db, booking_id)
@@ -264,7 +264,7 @@ async def list_quotes(
 async def add_quote(
     booking_id: str,
     body: AddQuoteRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.pricing.override")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.add_quote(db, booking_id, body)
@@ -274,7 +274,7 @@ async def add_quote(
 async def push_quote(
     booking_id: str,
     quote_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.confirm")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.push_quote(db, booking_id, quote_id)
@@ -284,7 +284,7 @@ async def push_quote(
 async def decline_quote(
     booking_id: str,
     quote_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.confirm")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.decline_quote(db, booking_id, quote_id)
@@ -296,7 +296,7 @@ async def decline_quote(
 async def add_note(
     booking_id: str,
     body: AddNoteRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.add_note(db, booking_id, body)
@@ -308,7 +308,7 @@ async def add_note(
 async def advance_status(
     booking_id: str,
     body: AdvanceStatusRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     return await air_bookings_service.advance_status(db, booking_id, body)
@@ -321,7 +321,7 @@ async def flag_booking(
     booking_id: str,
     body: FlagRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
     result = await air_bookings_service.flag_booking(db, booking_id, body)

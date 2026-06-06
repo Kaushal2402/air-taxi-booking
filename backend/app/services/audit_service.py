@@ -38,6 +38,7 @@ def _window_cutoff(time_window: str) -> datetime:
         "24h": timedelta(hours=24),
         "7d": timedelta(days=7),
         "30d": timedelta(days=30),
+        "90d": timedelta(days=90),
     }
     delta = mapping.get(time_window, timedelta(hours=24))
     return now - delta

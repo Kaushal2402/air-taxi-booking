@@ -5,6 +5,39 @@ import Icon from '../ui/Icon'
 import { driverService } from '../../services/driverService'
 import { dispatchService } from '../../services/dispatchService'
 import { supportService } from '../../services/supportService'
+import { usePermissionStore } from '../../store/permissionStore'
+
+// Permission keys that gate each nav item.
+// A user sees the item if they have ANY of the listed keys granted/scoped,
+// OR if they are a super admin (which bypasses all checks).
+// Items with an empty array are always visible to any authenticated user.
+const NAV_PERMISSIONS: Record<string, string[]> = {
+  'dashboard':        ['dashboard.view'],
+  'dispatch':         ['dispatch.console.view'],
+  'bookings-r':       ['bookings.road.view'],
+  'bookings-a':       ['bookings.air.view'],
+  'support':          ['support.tickets.view'],
+  'drivers':          ['drivers.view'],
+  'vehicles':         ['vehicles.view'],
+  'operators':        ['operators.view'],
+  'aircraft':         ['aircraft.view'],
+  'customers':        ['customers.view'],
+  'privacy-requests': ['customers.data.export', 'customers.data.delete'],
+  'kyc':              ['kyc.documents.view'],
+  'catalog':          ['catalog.vehicle_classes.view', 'catalog.zones.view', 'catalog.aircraft_types.view', 'catalog.routes.view'],
+  'pricing':          ['pricing.rules.view'],
+  'promotions':       ['promotions.view', 'referrals.view'],
+  'payments':         ['payments.view'],
+  'payouts':          ['payouts.view'],
+  'reports':          ['reports.view'],
+  'notifications':    ['notifications.templates.view', 'notifications.delivery.view'],
+  'branding':         ['branding.view'],
+  'rbac':             ['rbac.roles.view'],
+  'admins':           ['admin_users.view'],
+  'settings':         ['settings.view'],
+  'audit':            ['audit.events.view', 'audit.security.view'],
+  'integrations':     [],  // always visible when module exists
+}
 
 const NAV_GROUPS = [
   {
@@ -69,6 +102,23 @@ interface NavRailProps {
 export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRailProps) {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Permission-based visibility
+  const can = usePermissionStore(s => s.can)
+  const isSuperAdmin = usePermissionStore(s => s.isSuperAdmin)
+  const permissionsLoaded = usePermissionStore(s => s.permissionsLoaded)
+
+  const canSeeItem = (id: string): boolean => {
+    // Before permissions load, hide nothing (avoids flash)
+    if (!permissionsLoaded) return true
+    // Super admin sees everything
+    if (isSuperAdmin) return true
+    const keys = NAV_PERMISSIONS[id]
+    // Unknown item or empty array = always show
+    if (!keys || keys.length === 0) return true
+    // Show if user has ANY of the required keys
+    return keys.some(k => can(k))
+  }
 
   // Dynamic driver badge: shows in_review count (drivers awaiting review)
   const [driverBadge,   setDriverBadge]   = useState<string | undefined>(undefined)
@@ -163,10 +213,13 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 16 }}>
-        {NAV_GROUPS.map(group => (
+        {NAV_GROUPS.map(group => {
+          const visibleItems = group.items.filter(item => canSeeItem(item.id))
+          if (visibleItems.length === 0) return null
+          return (
           <div key={group.label}>
             <div className="nav-section-label">{group.label}</div>
-            {group.items.map(item => (
+            {visibleItems.map(item => (
               <div
                 key={item.id}
                 className={'nav-item' + (isActive(item) ? ' active' : '')}
@@ -185,7 +238,8 @@ export default function NavRail({ activeId, isMobile, isOpen, onClose }: NavRail
               </div>
             ))}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div style={{

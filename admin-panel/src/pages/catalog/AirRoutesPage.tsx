@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -126,6 +129,7 @@ export default function AirRoutesPage() {
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
   const [showMobileEditor, setShowMobileEditor] = useState(false)
+  const canManageCatalog = usePermission('catalog.routes.manage')
 
   const load = async (inactive: boolean) => {
     setLoading(true)
@@ -233,7 +237,7 @@ export default function AirRoutesPage() {
       subtitle={`${allRoutes.length} routes · ${activeCount} active`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm accent" onClick={startNew}><Icon name="plus" size={13} />New route</button>
+          <button className="btn sm accent" onClick={startNew} style={{ display: canManageCatalog ? undefined : 'none' }}><Icon name="plus" size={13} />New route</button>
         </div>
       }
     >

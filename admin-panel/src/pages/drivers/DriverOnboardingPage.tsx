@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -160,9 +163,9 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn accent sm" style={{ flex: 1 }} onClick={() => onReview(item)}>Review →</button>
+          <button className="btn accent sm" style={{ flex: 1 }} onClick={() => onReview(item)} style={{ display: canReviewKyc ? undefined : 'none' }}>Review →</button>
           <button className="btn sm" style={{ flex: 1 }} onClick={() => onReupload(item)}>Re-upload</button>
-          <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => onReject(item)}>Reject</button>
+          <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => onReject(item)} style={{ display: canApproveDriver ? undefined : 'none' }}>Reject</button>
         </div>
       </div>
     )
@@ -314,6 +317,8 @@ export default function DriverOnboardingPage() {
   // Catalog dropdown options (loaded once when modal first opens)
   const [zoneOptions, setZoneOptions]       = useState<SelectOption[]>([])
   const [vehicleOptions, setVehicleOptions] = useState<SelectOption[]>([])
+  const canReviewKyc = usePermission('drivers.kyc.review')
+  const canApproveDriver = usePermission('drivers.approve')
   const [optionsLoaded, setOptionsLoaded]   = useState(false)
 
   const handleOnboardSubmit = async () => {

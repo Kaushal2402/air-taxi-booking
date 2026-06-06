@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -70,6 +71,7 @@ export default function KycExpiryPage() {
   const [items, setItems] = useState<KycExpiryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
+  const canManageExpiry = usePermission('kyc.expiry.manage')
 
   const load = async () => {
     setLoading(true)
@@ -144,7 +146,7 @@ export default function KycExpiryPage() {
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn sm" style={{ height: 28 }} onClick={() => handleRemind(item.entity_name)}>
+                <button className="btn sm" style={{ height: 28 }} onClick={() => handleRemind(item.entity_name)} style={{ display: canManageExpiry ? undefined : 'none' }}>
                   <Icon name="envelope" size={12} />Remind
                 </button>
                 <button className="btn sm" style={{ height: 28 }} onClick={() => navigate(`/kyc/${item.entity_type}-documents/${item.id}`)}>
@@ -226,7 +228,7 @@ export default function KycExpiryPage() {
           <button className="btn sm" onClick={() => navigate('/kyc')}>
             <Icon name="chevLeft" size={13} />Back to queue
           </button>
-          <button className="btn sm accent" onClick={handleSendAll}>
+          <button style={{ display: canManageExpiry ? undefined : 'none' }} className="btn sm accent" onClick={handleSendAll}>
             <Icon name="envelope" size={13} />Send all reminders
           </button>
         </div>

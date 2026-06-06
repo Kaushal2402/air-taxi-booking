@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -89,6 +92,7 @@ export default function AircraftTypesPage() {
   }, [allTypes, search, catFilter])
 
   const [showMobileEditor, setShowMobileEditor] = useState(false)
+  const canManageCatalog = usePermission('catalog.aircraft_types.manage')
 
   const selectType = (t: AircraftType) => {
     setSelected(t); setIsNew(false); setDraft({ ...t }); setApiError('')
@@ -154,7 +158,7 @@ export default function AircraftTypesPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn sm" onClick={() => navigate('/catalog/vehicle-classes')}>Vehicle classes</button>
           <button className="btn sm" onClick={() => navigate('/catalog/air-routes')}>Air routes</button>
-          <button className="btn sm accent" onClick={startNew}><Icon name="plus" size={13} />New type</button>
+          <button className="btn sm accent" onClick={startNew} style={{ display: canManageCatalog ? undefined : 'none' }}><Icon name="plus" size={13} />New type</button>
         </div>
       }
     >

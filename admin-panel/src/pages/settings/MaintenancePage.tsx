@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -190,6 +191,7 @@ export default function MaintenancePage() {
   // Add window modal
   const [showAddWindow, setShowAddWindow] = useState(false)
   const [savingWindow, setSavingWindow] = useState(false)
+  const canManageSettings = usePermission('settings.manage')
 
   const loadData = async () => {
     try {
@@ -272,7 +274,7 @@ export default function MaintenancePage() {
       subtitle="Use with extreme care — actions are immediate · each toggle requires confirmation"
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn sm" onClick={() => setShowAddWindow(true)}>
+          <button className="btn sm" onClick={() => setShowAddWindow(true)} style={{ display: canManageSettings ? undefined : 'none' }}>
             <Icon name="clock" size={13} />
             Schedule window
           </button>

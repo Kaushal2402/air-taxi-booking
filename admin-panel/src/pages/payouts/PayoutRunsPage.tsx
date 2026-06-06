@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -33,6 +36,7 @@ function NewRunModal({ onClose, onCreated }: NewRunModalProps) {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const handleCreate = async () => {
     if (!periodLabel.trim()) { setError('Period label is required'); return }
@@ -150,6 +154,8 @@ export default function PayoutRunsPage() {
   const [approving, setApproving] = useState<PayoutRun | null>(null)
   const [rejecting, setRejecting] = useState<PayoutRun | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const canApprovePayout = usePermission('payouts.approve')
+  const canCreatePayout = usePermission('payouts.create')
 
   const PAGE_SIZE = 20
 
@@ -211,7 +217,7 @@ export default function PayoutRunsPage() {
           <button className="btn sm">
             <Icon name="download" size={13} />Export
           </button>
-          <button className="btn sm accent" onClick={() => setShowNewRun(true)}>
+          <button style={{ display: canCreatePayout ? undefined : 'none' }} className="btn sm accent" onClick={() => setShowNewRun(true)}>
             <Icon name="plus" size={13} />New run
           </button>
         </>
@@ -311,8 +317,8 @@ export default function PayoutRunsPage() {
                     <td style={{ textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                       {r.status === 'review' ? (
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                          <button className="btn sm danger" onClick={() => setRejecting(r)}>Reject</button>
-                          <button className="btn sm accent" onClick={() => setApproving(r)}>Approve</button>
+                          <button className="btn sm danger" onClick={() => setRejecting(r)} style={{ display: canApprovePayout ? undefined : 'none' }}>Reject</button>
+                          <button className="btn sm accent" onClick={() => setApproving(r)} style={{ display: canApprovePayout ? undefined : 'none' }}>Approve</button>
                         </div>
                       ) : (
                         <button className="btn sm ghost" onClick={() => navigate(`/payouts/runs/${r.id}`)}>

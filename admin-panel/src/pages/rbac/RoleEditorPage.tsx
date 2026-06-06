@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -70,9 +73,11 @@ export default function RoleEditorPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [draftDesc, setDraftDesc] = useState('')
+  const canManageRoles = usePermission('rbac.roles.manage')
 
   const load = async () => {
     if (!id) return
@@ -165,6 +170,8 @@ export default function RoleEditorPage() {
     return { d: d.domain.split('·')[0].trim(), v: `${granted} / ${total}`, tone }
   })
 
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (loading) {
     return (
       <Shell activeId="rbac" breadcrumb="System · Identity & Access · Roles" title="Loading…" subtitle="">
@@ -190,10 +197,10 @@ export default function RoleEditorPage() {
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
           {!role.is_system && (
-            <button className="btn sm" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDelete(true)}>Delete</button>
+            <button className="btn sm" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDelete(true)} style={{ display: canManageRoles ? undefined : 'none' }}>Delete</button>
           )}
           <button className="btn sm" onClick={() => navigate('/rbac')}>← Roles</button>
-          <button className="btn accent sm" onClick={saveChanges} disabled={saving}>
+          <button className="btn accent sm" onClick={saveChanges} disabled={saving || !canManageRoles}>
             {saving ? 'Saving…' : `Publish · v${role.version + 1}`}
           </button>
         </div>
@@ -228,7 +235,7 @@ export default function RoleEditorPage() {
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           {[
             ['Permissions granted', String(totalGranted), `/ ${totalPerms}`],
-            ['Scope', role.scope, ''],
+            ['Scope', role.scope.split(':')[0], role.scope.includes(':') ? role.scope.split(':').slice(1).join(':') : ''],
             ['Version', `v${role.version}`, role.is_system ? 'System role' : 'Custom'],
           ].map(([k, v, m]) => (
             <div key={k}>
@@ -362,7 +369,7 @@ export default function RoleEditorPage() {
               <div className="t-label" style={{ marginBottom: 10 }}>Role info</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {[
-                  ['Scope', role.scope],
+                  ['Scope', role.scope.includes(':') ? role.scope.replace(':', ': ') : role.scope],
                   ['Members', String(role.member_count)],
                   ['Version', `v${role.version}`],
                   ['Kind', role.is_system ? 'System' : 'Custom'],

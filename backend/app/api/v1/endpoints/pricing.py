@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.pricing import (
     AirRuleCreate, AirRuleResponse, AirRuleUpdate,
@@ -32,7 +32,7 @@ async def list_road_rules(
     zone_id: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("pricing.rules.view")),
     db=Depends(get_db),
 ):
     return await pricing_service.list_road_rules(
@@ -50,7 +50,7 @@ async def list_road_rules(
 async def create_road_rule(
     body: RoadRuleCreate,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     result = await pricing_service.create_road_rule(db, body.model_dump())
@@ -64,7 +64,7 @@ async def create_road_rule(
 @pricing_router.get("/road-rules/{id}", response_model=RoadRuleResponse)
 async def get_road_rule(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("pricing.rules.view")),
     db=Depends(get_db),
 ):
     return await pricing_service.get_road_rule(db, id)
@@ -75,7 +75,7 @@ async def update_road_rule(
     id: str,
     body: RoadRuleUpdate,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -91,7 +91,7 @@ async def update_road_rule(
 async def publish_road_rule(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     result = await pricing_service.publish_road_rule(db, id)
@@ -115,7 +115,7 @@ async def publish_road_rule(
 async def delete_road_rule(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     await pricing_service.delete_road_rule(db, id)
@@ -144,7 +144,7 @@ async def list_air_rules(
     category: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("pricing.rules.view")),
     db=Depends(get_db),
 ):
     return await pricing_service.list_air_rules(
@@ -161,7 +161,7 @@ async def list_air_rules(
 async def create_air_rule(
     body: AirRuleCreate,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     result = await pricing_service.create_air_rule(db, body.model_dump())
@@ -175,7 +175,7 @@ async def create_air_rule(
 @pricing_router.get("/air-rules/{id}", response_model=AirRuleResponse)
 async def get_air_rule(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("pricing.rules.view")),
     db=Depends(get_db),
 ):
     return await pricing_service.get_air_rule(db, id)
@@ -186,7 +186,7 @@ async def update_air_rule(
     id: str,
     body: AirRuleUpdate,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -202,7 +202,7 @@ async def update_air_rule(
 async def publish_air_rule(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     result = await pricing_service.publish_air_rule(db, id)
@@ -226,7 +226,7 @@ async def publish_air_rule(
 async def delete_air_rule(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     await pricing_service.delete_air_rule(db, id)
@@ -253,7 +253,7 @@ async def list_taxes(
     active: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("pricing.rules.view")),
     db=Depends(get_db),
 ):
     return await pricing_service.list_taxes(db, active=active, page=page, per_page=per_page)
@@ -263,7 +263,7 @@ async def list_taxes(
 async def create_tax(
     body: TaxRuleCreate,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     result = await pricing_service.create_tax(db, body.model_dump())
@@ -279,7 +279,7 @@ async def update_tax(
     id: str,
     body: TaxRuleUpdate,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -295,7 +295,7 @@ async def update_tax(
 async def delete_tax(
     id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("pricing.rules.manage")),
     db=Depends(get_db),
 ):
     await pricing_service.delete_tax(db, id)
@@ -311,7 +311,7 @@ async def delete_tax(
 @pricing_router.post("/simulate", response_model=SimulateResponse)
 async def simulate_fare(
     body: SimulateRequest,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("pricing.rules.view")),
     db=Depends(get_db),
 ):
     return await pricing_service.simulate_fare(db, body)

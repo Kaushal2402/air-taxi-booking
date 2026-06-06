@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -60,6 +61,7 @@ export default function AircraftDirectoryPage() {
   const [form, setForm]             = useState<CreateAircraftBody>({ ...EMPTY })
   const [creating, setCreating]     = useState(false)
   const [createError, setCreateError] = useState('')
+  const canManageAircraft = usePermission('aircraft.manage')
 
   const load = async () => {
     setLoading(true)

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -211,6 +212,7 @@ export default function FeatureFlagsPage() {
   // Env filter dropdown
   const [envFilter, setEnvFilter] = useState<'All' | 'Prod' | 'Staging'>('All')
   const [showEnvDropdown, setShowEnvDropdown] = useState(false)
+  const canManageSettings = usePermission('settings.manage')
   const envDropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown on outside click

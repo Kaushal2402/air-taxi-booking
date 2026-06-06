@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -112,7 +115,7 @@ function FilterChip({ label, value, options, selected, onSelect }: FilterChipPro
           maxHeight: 240, overflowY: 'auto',
         }}>
           {options.map(opt => (
-            <button
+            <button style={{ display: canInitiateRefund ? undefined : 'none' }}
               key={opt}
               onClick={() => { onSelect(opt); setOpen(false) }}
               style={{
@@ -386,10 +389,13 @@ export default function PaymentsPage() {
   const [serviceFilter, setServiceFilter] = useState('All')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [showExportConfirm, setShowExportConfirm] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const canReconcile = usePermission('payments.reconcile')
+  const canInitiateRefund = usePermission('payments.refund.initiate')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -451,7 +457,7 @@ export default function PaymentsPage() {
       <button className="btn sm" disabled={exporting} onClick={() => setShowExportConfirm(true)}>
         <Icon name="download" size={13} />{exporting ? 'Exporting…' : 'Export'}
       </button>
-      <button className="btn sm" onClick={() => navigate('/payments/reconciliation')}>Reconcile</button>
+      <button className="btn sm" onClick={() => navigate('/payments/reconciliation')} style={{ display: canReconcile ? undefined : 'none' }}>Reconcile</button>
       <button className="btn sm accent" onClick={() => setShowManualEntry(true)}>
         <Icon name="plus" size={13} />Manual entry
       </button>

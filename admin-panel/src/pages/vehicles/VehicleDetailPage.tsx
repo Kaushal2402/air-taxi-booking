@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -21,6 +23,8 @@ const STATIC_BASE = import.meta.env.VITE_API_BASE_URL
   : 'http://localhost:8001'
 
 function daysUntil(isoDate: string | null): number | null {
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!isoDate) return null
   const diff = new Date(isoDate).getTime() - Date.now()
   return Math.ceil(diff / (24 * 3600 * 1000))
@@ -197,6 +201,7 @@ function EditVehicleModal({ vehicle, classes, onConfirm, onCancel }: {
   const [vendors, setVendors] = useState<{ id: string; name: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   useEffect(() => {
     vehicleService.listVendors({ per_page: 100 })

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import { supportService } from '../../services/supportService'
@@ -500,6 +501,8 @@ export default function TicketQueuePage() {
   const [page, setPage]                 = useState(1)
   const [loading, setLoading]           = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
+  const canReplyTickets = usePermission('support.tickets.reply')
+  const canViewTickets = usePermission('support.tickets.view')
 
   const [search,          setSearch]          = useState('')
   const [filterCategory,  setFilterCategory]  = useState('')
@@ -557,7 +560,7 @@ export default function TicketQueuePage() {
             <button className="btn sm" onClick={() => navigate('/support/sla')}>
               SLA &amp; Escalation
             </button>
-            <button className="btn sm accent" onClick={() => setShowNewModal(true)}>
+            <button className="btn sm accent" onClick={() => setShowNewModal(true)} style={{ display: canReplyTickets ? undefined : 'none' }}>
               + New ticket
             </button>
           </div>

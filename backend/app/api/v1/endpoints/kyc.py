@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundException
 from app.core.doc_types import get_doc_types
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.services import audit_service
 from app.models.driver import Driver, DriverDocument
@@ -106,7 +106,7 @@ def _days_until(expiry: date) -> int:
 
 @router.get("/doc-types", response_model=DocTypesResponse)
 async def get_kyc_doc_types(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("kyc.documents.view")),
     db: AsyncSession = Depends(get_db),
 ) -> DocTypesResponse:
     """
@@ -133,7 +133,7 @@ async def get_kyc_queue(
     page_size: int = Query(20, ge=1, le=100),
     entity_type: Optional[str] = Query(None, description="driver|operator|vehicle"),
     status: Optional[str] = Query(None, description="pending|in_review|approved|rejected|expired"),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("kyc.documents.view")),
     db: AsyncSession = Depends(get_db),
 ) -> KycQueueResponse:
     """
@@ -244,7 +244,7 @@ async def get_kyc_queue(
 @router.get("/expiry-watchlist", response_model=List[KycExpiryItem])
 async def get_expiry_watchlist(
     days: int = Query(14, ge=0, le=365),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("kyc.expiry.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> List[KycExpiryItem]:
     """
@@ -397,7 +397,7 @@ async def get_expiry_watchlist(
 async def review_driver_document(
     doc_id: str,
     body: KycReviewRequest,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("kyc.documents.approve")),
     db: AsyncSession = Depends(get_db),
 ) -> KycQueueItem:
     """
@@ -485,7 +485,7 @@ async def review_driver_document(
 async def review_operator_document(
     doc_id: str,
     body: KycReviewRequest,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("kyc.documents.approve")),
     db: AsyncSession = Depends(get_db),
 ) -> KycQueueItem:
     """
@@ -570,7 +570,7 @@ async def review_operator_document(
 async def review_vehicle_document(
     doc_id: str,
     body: KycReviewRequest,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("kyc.documents.approve")),
     db: AsyncSession = Depends(get_db),
 ) -> KycQueueItem:
     """

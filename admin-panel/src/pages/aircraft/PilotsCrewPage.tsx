@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
@@ -15,6 +18,8 @@ function statusBadge(status: string) {
 }
 
 function medicalColor(expiryDate: string | null): string {
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!expiryDate) return 'var(--ink-2)'
   const today    = new Date()
   const expiry   = new Date(expiryDate)
@@ -61,6 +66,7 @@ export default function PilotsCrewPage() {
   const [groundTarget, setGroundTarget] = useState<Pilot | null>(null)
   const [groundReason, setGroundReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const canManageAircraft = usePermission('aircraft.manage')
 
   const load = async () => {
     setLoading(true)
@@ -337,7 +343,7 @@ export default function PilotsCrewPage() {
       subtitle={`${pilots.length} crew · ${activeCount} active · ${groundedCount} grounded`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm accent" onClick={startNew}>
+          <button style={{ display: canManageAircraft ? undefined : 'none' }} className="btn sm accent" onClick={startNew}>
             <Icon name="plus" size={13} />Onboard pilot
           </button>
         </div>

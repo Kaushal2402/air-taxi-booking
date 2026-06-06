@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -30,6 +33,7 @@ function VendorDetailModal({
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const handleSave = async () => {
     const rate = parseFloat(form.commission_rate)
@@ -361,13 +365,13 @@ function VendorCard({
           Drivers
         </button>
         {vendor.status === 'review' && (
-          <button className="btn sm accent" onClick={() => onActivate(vendor)}>Activate</button>
+          <button className="btn sm accent" onClick={() => onActivate(vendor)} style={{ display: canManageVehicles ? undefined : 'none' }}>Activate</button>
         )}
         {vendor.status === 'active' && (
           <button
             className="btn sm"
             style={{ color: 'var(--danger)', borderColor: 'color-mix(in oklab, var(--danger) 40%, var(--rule))' }}
-            onClick={() => onSuspend(vendor)}
+            onClick={() => onSuspend(vendor)} style={{ display: canManageVehicles ? undefined : 'none' }}
           >
             Suspend
           </button>
@@ -396,6 +400,7 @@ export default function VendorDirectoryPage() {
   const [suspendPending, setSuspendPending] = useState<Vendor | null>(null)
   const [openFileVendor, setOpenFileVendor] = useState<Vendor | null>(null)
   const [compositionMap, setCompositionMap] = useState<Record<string, ClassSlice[]>>({})
+  const canManageVehicles = usePermission('vehicles.manage')
 
   const CLASS_COLORS = ['var(--ink-2)', 'var(--accent)', 'var(--info)', 'var(--warn)']
 

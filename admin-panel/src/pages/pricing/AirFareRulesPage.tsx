@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -165,6 +168,7 @@ export default function AirFareRulesPage() {
   }
 
   const [notice, setNotice] = useState('')
+  const canManagePricing = usePermission('pricing.rules.manage')
 
   const showEditor = isNew || selected !== null
   const isTwoPanel = !isMobile && !isTablet
@@ -181,7 +185,7 @@ export default function AirFareRulesPage() {
             <Icon name="bolt" size={13} />Simulate flight
           </button>
           <button className="btn sm" onClick={() => setNotice('Surge configuration is managed in System Settings — available in a future module.')}>Surge config</button>
-          <button className="btn sm accent" onClick={startNew}>
+          <button style={{ display: canManagePricing ? undefined : 'none' }} className="btn sm accent" onClick={startNew}>
             <Icon name="plus" size={13} />New air rule
           </button>
         </div>

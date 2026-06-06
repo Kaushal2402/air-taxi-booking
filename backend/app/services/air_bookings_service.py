@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.settings import PlatformSettings
 from app.core.currency import fmt_minor
-from app.services.settings_service import get_toggle, get_settings, is_in_quiet_window
+from app.services.settings_service import get_toggle, get_settings, is_in_quiet_window, is_kill_switch_active, get_active_maintenance_window
 from app.services import driver_suspension_service
 from app.models.air_booking import (
     AirBooking,
@@ -730,6 +730,36 @@ async def create_air_booking(
     booking_ref = f"AC-A5-{suffix}"
 
     etd_dt = datetime.fromisoformat(req.etd.replace("Z", "+00:00"))
+
+    # ── Kill switch enforcement ───────────────────────────────────────────────
+    if await is_kill_switch_active(db, "new_bookings"):
+        raise HTTPException(status_code=503, detail="New bookings are currently suspended. Please try again later.")
+    if await is_kill_switch_active(db, "heli_air"):
+        raise HTTPException(status_code=503, detail="Air / helicopter bookings are currently paused. Please try again later.")
+
+    # ── Regional maintenance window enforcement ───────────────────────────────
+    if req.region_name:
+        mw = await get_active_maintenance_window(db, req.region_name)
+        if mw:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Air bookings in '{req.region_name}' are paused due to a scheduled maintenance window "
+                    f"({mw.starts_at.strftime('%H:%M')}–{mw.ends_at.strftime('%H:%M')} UTC). "
+                    "Please try again later."
+                ),
+            )
+    # Also check the global "Air · all" window
+    air_mw = await get_active_maintenance_window(db, "Air · all")
+    if air_mw:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"All air bookings are paused due to a platform-wide maintenance window "
+                f"({air_mw.starts_at.strftime('%H:%M')}–{air_mw.ends_at.strftime('%H:%M')} UTC). "
+                "Please try again later."
+            ),
+        )
 
     # ── Max simultaneous active rides per rider ───────────────────────────────
     if req.customer_id:

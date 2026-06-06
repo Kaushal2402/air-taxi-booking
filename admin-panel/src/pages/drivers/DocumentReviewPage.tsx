@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -397,6 +399,7 @@ export default function DocumentReviewPage() {
   const [docs, setDocs]       = useState<DriverDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [mobileStep, setMobileStep] = useState<MobileStep>('preview')
 
   const [expiryDate, setExpiryDate] = useState('')
@@ -516,6 +519,8 @@ export default function DocumentReviewPage() {
     if (!currentDoc?.image_url) return
     window.open(`${STATIC_BASE}${currentDoc.image_url}`, '_blank', 'noopener,noreferrer')
   }
+
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) {
     return (

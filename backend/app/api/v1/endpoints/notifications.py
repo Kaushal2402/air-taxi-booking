@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.notifications import (
     BroadcastCreate,
@@ -23,7 +23,7 @@ notifications_router = APIRouter()
 
 @notifications_router.get("/stats", response_model=NotificationStatsResponse)
 async def get_stats(
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("notifications.delivery.view")),
     db=Depends(get_db),
 ):
     return await notifications_service.get_stats(db)
@@ -33,7 +33,7 @@ async def get_stats(
 async def list_delivery_log(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("notifications.delivery.view")),
     db=Depends(get_db),
 ):
     items, total = await notifications_service.list_delivery_log(db, page, page_size)
@@ -47,7 +47,7 @@ async def list_delivery_log(
 async def create_broadcast(
     body: BroadcastCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("notifications.broadcast.send")),
     db=Depends(get_db),
 ):
     result = await notifications_service.create_broadcast(db, body)
@@ -74,7 +74,7 @@ async def list_templates(
     channel: str | None = Query(None),
     status: str | None = Query(None),
     category: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("notifications.templates.view")),
     db=Depends(get_db),
 ):
     items = await notifications_service.list_templates(db, search, channel, status, category)
@@ -85,7 +85,7 @@ async def list_templates(
 async def create_template(
     body: NotificationTemplateCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("notifications.templates.manage")),
     db=Depends(get_db),
 ):
     result = await notifications_service.create_template(db, body)
@@ -108,7 +108,7 @@ async def create_template(
 @notifications_router.get("/templates/{template_id}", response_model=NotificationTemplateResponse)
 async def get_template(
     template_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("notifications.templates.view")),
     db=Depends(get_db),
 ):
     tmpl = await notifications_service.get_template(db, template_id)
@@ -120,7 +120,7 @@ async def update_template(
     template_id: str,
     body: NotificationTemplateUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("notifications.templates.manage")),
     db=Depends(get_db),
 ):
     result = await notifications_service.update_template(db, template_id, body)
@@ -144,7 +144,7 @@ async def update_template(
 async def delete_template(
     template_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("notifications.templates.manage")),
     db=Depends(get_db),
 ):
     await notifications_service.delete_template(db, template_id)

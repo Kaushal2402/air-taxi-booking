@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -25,6 +27,7 @@ export default function TemplateEditorPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [activePreview, setActivePreview] = useState<'push' | 'sms'>('push')
 
   const load = async () => {
@@ -82,6 +85,8 @@ export default function TemplateEditorPage() {
     .replace('{{plate}}', 'KA 01 AB 4521')
     .replace('{{otp}}', '4821')
     .replace('{{fare}}', `${sym} 142`)
+
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) {
     return (

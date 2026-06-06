@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -67,9 +70,11 @@ export default function VehicleClassesPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [apiError, setApiError] = useState('')
   const [search, setSearch] = useState('')
   const [confirmDeactivate, setConfirmDeactivate] = useState<VehicleClass | null>(null)
+  const canManageCatalog = usePermission('catalog.vehicle_classes.manage')
 
   const load = async (inactive: boolean) => {
     setLoading(true)
@@ -153,7 +158,7 @@ export default function VehicleClassesPage() {
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn sm" onClick={() => navigate('/catalog/aircraft-types')}>Aircraft types</button>
-          <button className="btn sm accent" onClick={startNew}><Icon name="plus" size={13} />New class</button>
+          <button className="btn sm accent" onClick={startNew} style={{ display: canManageCatalog ? undefined : 'none' }}><Icon name="plus" size={13} />New class</button>
         </div>
       }
     >

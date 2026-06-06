@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.branding import (
     BrandAssetCreate,
@@ -31,7 +31,7 @@ router = APIRouter()
 @router.get("/profiles", response_model=BrandProfileListResponse)
 async def list_profiles(
     include_archived: bool = Query(False),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("branding.view")),
     db=Depends(get_db),
 ):
     return await branding_service.list_profiles(db, include_archived)
@@ -41,7 +41,7 @@ async def list_profiles(
 async def create_profile(
     body: BrandProfileCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     result = await branding_service.create_profile(db, body.model_dump(), current_user.id)
@@ -64,7 +64,7 @@ async def create_profile(
 @router.get("/profiles/{profile_id}", response_model=BrandProfileResponse)
 async def get_profile(
     profile_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("branding.view")),
     db=Depends(get_db),
 ):
     return await branding_service.get_profile(db, profile_id)
@@ -75,7 +75,7 @@ async def update_profile(
     profile_id: str,
     body: BrandProfileUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -102,7 +102,7 @@ async def publish_profile(
     profile_id: str,
     body: PublishRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     result = await branding_service.publish_profile(db, profile_id, body.target, current_user.id)
@@ -127,7 +127,7 @@ async def publish_profile(
 async def delete_profile(
     profile_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     await branding_service.delete_profile(db, profile_id)
@@ -152,7 +152,7 @@ async def delete_profile(
 @router.get("/profiles/{profile_id}/assets", response_model=List[BrandAssetResponse])
 async def list_assets(
     profile_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("branding.view")),
     db=Depends(get_db),
 ):
     return await branding_service.list_assets(db, profile_id)
@@ -163,7 +163,7 @@ async def create_asset(
     profile_id: str,
     body: BrandAssetCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     result = await branding_service.create_asset(db, profile_id, body.model_dump(), current_user.id)
@@ -188,7 +188,7 @@ async def update_asset(
     asset_id: str,
     body: BrandAssetUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -214,7 +214,7 @@ async def update_asset(
 async def delete_asset(
     asset_id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     await branding_service.delete_asset(db, asset_id)
@@ -239,7 +239,7 @@ async def delete_asset(
 @router.get("/profiles/{profile_id}/touchpoints", response_model=List[TouchpointResponse])
 async def list_touchpoints(
     profile_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("branding.view")),
     db=Depends(get_db),
 ):
     return await branding_service.list_touchpoints(db, profile_id)
@@ -249,7 +249,7 @@ async def list_touchpoints(
 async def create_touchpoint(
     profile_id: str,
     body: TouchpointCreate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     return await branding_service.create_touchpoint(db, profile_id, body.model_dump())
@@ -259,7 +259,7 @@ async def create_touchpoint(
 async def update_touchpoint(
     tp_id: str,
     body: TouchpointUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("branding.manage")),
     db=Depends(get_db),
 ):
     return await branding_service.update_touchpoint(db, tp_id, body.model_dump(exclude_unset=True))

@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate, useLocation } from 'react-router-dom'
 import BrandLockup from '../../components/layout/BrandLockup'
 import Icon from '../../components/ui/Icon'
 import OTPInput from '../../components/ui/OTPInput'
 import { authService } from '../../services/authService'
 import { useAuthStore } from '../../store/authStore'
+import { usePermissionStore } from '../../store/permissionStore'
+import { rbacService } from '../../services/rbacService'
+import { getFirstPermittedPath } from '../../lib/getFirstPermittedPath'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 /** Mask an email for display: jane.doe@example.com → j***e@example.com */
@@ -21,7 +26,25 @@ export default function TwoFAPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const setAuth = useAuthStore(s => s.setAuth)
+  const setPermissions = usePermissionStore(s => s.setPermissions)
   const isMobile = useIsMobile()
+
+  const applyPermissions = (role: string): Promise<string> => {
+    if (role === 'super_admin') {
+      setPermissions({}, true)
+      return Promise.resolve('/dashboard')
+    }
+    return rbacService.getRoleByName(role)
+      .then(r => rbacService.getRolePermissions(r.id))
+      .then(({ permissions }) => {
+        const map: Record<string, string> = {}
+        permissions.forEach(p => { map[p.permission_key] = p.state })
+        setPermissions(map, false)
+        const can = (key: string) => map[key] === 'granted' || map[key] === 'scoped'
+        return getFirstPermittedPath(false, can)
+      })
+      .catch(() => { setPermissions({}, false); return '/no-access' })
+  }
 
   const state = (location.state as { partial_token?: string; email?: string; has_phone?: boolean }) || {}
   const partial_token: string | undefined = state.partial_token
@@ -51,6 +74,7 @@ export default function TwoFAPage() {
 
   // ── Shared ────────────────────────────────────────────────────
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [loading, setLoading] = useState(false)
 
   // ── Cooldown ticker ───────────────────────────────────────────
@@ -82,6 +106,8 @@ export default function TwoFAPage() {
   }, [smsSentAt])
 
   // ── Guard: must arrive here via the login flow ────────────────
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!partial_token) {
     navigate('/login')
     return null
@@ -107,7 +133,8 @@ export default function TwoFAPage() {
     try {
       const res = await authService.verify2FA(partial_token, code, trustDevice)
       setAuth(res.user, res.access_token, res.refresh_token)
-      navigate('/dashboard')
+      const destination = await applyPermissions(res.user.role)
+      navigate(destination)
     } catch (e: unknown) {
       if (isExpiredSession(e)) { handleExpiredSession(); return }
       const err = e as { response?: { data?: { message?: string } } }
@@ -126,7 +153,8 @@ export default function TwoFAPage() {
     try {
       const res = await authService.verifyBackupCode(partial_token, normalised)
       setAuth(res.user, res.access_token, res.refresh_token)
-      navigate('/dashboard')
+      const destination = await applyPermissions(res.user.role)
+      navigate(destination)
     } catch (e: unknown) {
       if (isExpiredSession(e)) { handleExpiredSession(); return }
       const err = e as { response?: { data?: { message?: string } } }

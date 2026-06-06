@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -54,6 +57,7 @@ function ReviewModal({ item, action, onClose, onConfirm }: ReviewModalProps) {
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const handleConfirm = async () => {
     if (action === 'approve' && !expiry.trim()) { setError('Expiry date is required to approve'); return }
@@ -155,6 +159,7 @@ export default function KycQueuePage() {
 
   const [reviewItem, setReviewItem] = useState<KycQueueItem | null>(null)
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
+  const canApproveKyc = usePermission('kyc.documents.approve')
 
   const load = async (p = 1) => {
     setLoading(true)

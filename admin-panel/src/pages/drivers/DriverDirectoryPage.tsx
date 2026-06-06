@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -195,6 +198,9 @@ export default function DriverDirectoryPage() {
   const [sortField, setSortField]   = useState<'trips' | 'rating' | 'acceptance' | 'cancellation' | 'name'>('trips')
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc')
   const [showSortMenu, setShowSortMenu] = useState(false)
+  const canSuspendDriver = usePermission('drivers.suspend')
+  const canApproveDriver = usePermission('drivers.approve')
+  const canCreateDriver = usePermission('drivers.create')
   const sortRef = useRef<HTMLDivElement>(null)
 
   const loadDrivers = async (opts?: { tab?: TabKey; q?: string; status?: string; kyc?: string; p?: number }) => {

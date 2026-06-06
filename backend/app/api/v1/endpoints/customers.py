@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.customer import (
     CustomerCreate,
@@ -32,7 +32,7 @@ async def list_customers_endpoint(
     include_inactive: bool = Query(False),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("customers.view")),
     db=Depends(get_db),
 ):
     return await customer_service.list_customers(
@@ -52,7 +52,7 @@ async def list_customers_endpoint(
 @router.post("", response_model=CustomerResponse, status_code=201)
 async def create_customer_endpoint(
     body: CustomerCreate,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("customers.edit")),
     db=Depends(get_db),
 ):
     return await customer_service.create_customer(db, body, created_by=current_user.name)
@@ -63,7 +63,7 @@ async def create_customer_endpoint(
 @router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer_endpoint(
     customer_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("customers.view")),
     db=Depends(get_db),
 ):
     return await customer_service.get_customer(db, customer_id)
@@ -75,7 +75,7 @@ async def get_customer_endpoint(
 async def update_customer_endpoint(
     customer_id: str,
     body: CustomerUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("customers.edit")),
     db=Depends(get_db),
 ):
     return await customer_service.update_customer(db, customer_id, body)
@@ -88,7 +88,7 @@ async def suspend_customer_endpoint(
     customer_id: str,
     body: SuspendRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("customers.suspend")),
     db=Depends(get_db),
 ):
     result = await customer_service.suspend_customer(db, customer_id, reason=body.reason)
@@ -114,7 +114,7 @@ async def suspend_customer_endpoint(
 async def reactivate_customer_endpoint(
     customer_id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("customers.suspend")),
     db=Depends(get_db),
 ):
     result = await customer_service.reactivate_customer(db, customer_id)
@@ -141,7 +141,7 @@ async def flag_customer_endpoint(
     customer_id: str,
     body: FlagRequest,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("customers.edit")),
     db=Depends(get_db),
 ):
     result = await customer_service.flag_customer(db, customer_id, reason=body.reason)
@@ -167,7 +167,7 @@ async def flag_customer_endpoint(
 async def unflag_customer_endpoint(
     customer_id: str,
     request: Request,
-    admin: AdminUser = Depends(get_current_admin_user),
+    admin: AdminUser = Depends(require_permission("customers.edit")),
     db=Depends(get_db),
 ):
     result = await customer_service.unflag_customer(db, customer_id)
@@ -194,7 +194,7 @@ async def adjust_wallet_endpoint(
     customer_id: str,
     body: WalletAdjustRequest,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("customers.wallet.adjust")),
     db=Depends(get_db),
 ):
     result = await customer_service.adjust_wallet(
@@ -223,7 +223,7 @@ async def list_wallet_transactions_endpoint(
     customer_id: str,
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("customers.wallet.view")),
     db=Depends(get_db),
 ):
     return await customer_service.list_wallet_transactions(

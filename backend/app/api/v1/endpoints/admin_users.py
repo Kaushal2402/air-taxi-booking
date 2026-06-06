@@ -3,10 +3,14 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from app.core.security import decode_token
+
+_bearer = HTTPBearer(auto_error=False)
 
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_admin_user, require_role
+from app.dependencies import get_current_admin_user, require_role, require_permission
 from app.models.admin_user import AdminUser
 from app.providers import get_email_provider
 from app.providers.base.email import EmailMessage
@@ -69,6 +73,12 @@ async def invite_admin(
     existing = await repo.get_by_email(body.email)
     if existing:
         raise ConflictException("An account with that email already exists")
+
+    # Enforce single super_admin constraint
+    if body.role == "super_admin":
+        existing_super_admins = await repo.get_super_admins()
+        if existing_super_admins:
+            raise ValidationException("Only one super admin account is allowed. Change the existing super admin's role first.")
 
     # Create the user with a random placeholder password (overwritten on acceptance)
     from app.models.admin_user import AdminUser as M
@@ -189,6 +199,16 @@ async def update_admin(
     user = await repo.get_by_id(user_id)
     if not user:
         raise NotFoundException("AdminUser")
+
+    # Super admin account is immutable — role cannot be changed
+    if user.role == "super_admin":
+        raise ValidationException("The super admin account's role cannot be changed.")
+
+    # Prevent promoting another account to super_admin if one already exists
+    if body.role == "super_admin":
+        existing_super_admins = await repo.get_super_admins()
+        if any(sa.id != user_id for sa in existing_super_admins):
+            raise ValidationException("Only one super admin account is allowed.")
 
     from sqlalchemy import update as sa_update
     from app.models.admin_user import AdminUser as M
@@ -400,8 +420,16 @@ async def delete_admin(
 async def get_admin_sessions(
     user_id: str,
     current_user: AdminUser = Depends(require_role("super_admin")),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db=Depends(get_db),
 ):
+    # Determine the caller's active session ID so we can mark is_current correctly.
+    caller_sid: str | None = None
+    if credentials:
+        payload = decode_token(credentials.credentials)
+        if payload:
+            caller_sid = payload.get("sid")
+
     repo = AdminUserRepository(db)
     sessions = await repo.get_sessions_for_user(user_id)
     return [
@@ -413,6 +441,7 @@ async def get_admin_sessions(
             location=s.location,
             two_fa_method=s.two_fa_method,
             last_activity_at=s.last_activity_at,
+            is_current=(s.id == caller_sid),
         )
         for s in sessions
     ]
@@ -441,6 +470,29 @@ async def revoke_all_admin_sessions(
     except Exception:
         pass
     return MessageResponse(message="All sessions revoked")
+
+
+@router.get("/{user_id}/activity")
+async def get_admin_activity(
+    user_id: str,
+    limit: int = 10,
+    current_user: AdminUser = Depends(require_role("super_admin", "admin")),
+    db=Depends(get_db),
+):
+    """Return the most recent audit-log entries where this admin was the actor."""
+    from app.services import audit_service
+    repo = AdminUserRepository(db)
+    user = await repo.get_by_id(user_id)
+    if not user:
+        raise NotFoundException("AdminUser")
+    result = await audit_service.list_events(
+        db,
+        actor_name=user.email,
+        time_window="90d",
+        per_page=limit,
+        page=1,
+    )
+    return result.items
 
 
 @router.post("/{user_id}/unlock", response_model=AdminUserResponse)

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 
 from app.core.exceptions import ForbiddenException, UnauthorizedException
 from app.core.security import decode_token
 from app.database import get_db
 from app.models.admin_user import AdminUser
+from app.models.rbac import Role, RolePermission
 from app.repositories.admin_user_repository import AdminUserRepository
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -51,6 +53,46 @@ def require_role(*roles: str):
         if user.role not in roles:
             raise ForbiddenException(f"Role '{user.role}' does not have access to this resource")
         return user
+    return _check
+
+
+def require_permission(key: str):
+    """Gate an endpoint behind a specific permission key.
+
+    Super admin bypasses all checks.
+    All other roles must have the permission in the role_permissions table
+    with state 'granted' or 'scoped'.
+    """
+    async def _check(
+        user: AdminUser = Depends(get_current_admin_user),
+        db=Depends(get_db),
+    ) -> AdminUser:
+        if user.role == "super_admin":
+            return user
+
+        # Resolve role row by name
+        role_row = (await db.execute(
+            select(Role).where(Role.name == user.role, Role.is_active == True)  # noqa: E712
+        )).scalar_one_or_none()
+
+        if not role_row:
+            raise ForbiddenException(f"Role '{user.role}' is not active or does not exist")
+
+        # Check permission state
+        perm = (await db.execute(
+            select(RolePermission).where(
+                RolePermission.role_id == role_row.id,
+                RolePermission.permission_key == key,
+                RolePermission.state.in_(["granted", "scoped"]),
+            )
+        )).scalar_one_or_none()
+
+        if not perm:
+            raise ForbiddenException(
+                f"Access denied — '{key}' permission required for this action"
+            )
+        return user
+
     return _check
 
 

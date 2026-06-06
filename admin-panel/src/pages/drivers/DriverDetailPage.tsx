@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -204,6 +207,8 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
     return <span className="badge">{s}</span>
   }
 
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (loading) return <div style={{ padding: 32, color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
 
   return (
@@ -295,9 +300,9 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
               </button>
               {doc.status === 'pending' && (
                 <>
-                  <button className="btn sm accent" onClick={() => setPending({ doc, action: 'approve' })}>Approve</button>
-                  <button className="btn sm" onClick={() => setPending({ doc, action: 'reupload' })}>Re-upload</button>
-                  <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => setPending({ doc, action: 'reject' })}>Reject</button>
+                  <button className="btn sm accent" onClick={() => setPending({ doc, action: 'approve' })} style={{ display: canReviewKyc ? undefined : 'none' }}>Approve</button>
+                  <button className="btn sm" onClick={() => setPending({ doc, action: 'reupload' })} style={{ display: canReviewKyc ? undefined : 'none' }}>Re-upload</button>
+                  <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => setPending({ doc, action: 'reject' })} style={{ display: canReviewKyc ? undefined : 'none' }}>Reject</button>
                 </>
               )}
             </div>
@@ -781,6 +786,9 @@ export default function DriverDetailPage() {
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', city: '', zone_code: '', vehicle_class: '', vehicle_plate: '' })
   const [editError, setEditError]   = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const canReviewKyc = usePermission('drivers.kyc.review')
+  const canSuspendDriver = usePermission('drivers.suspend')
+  const canApproveDriver = usePermission('drivers.approve')
 
   const loadDriver = async () => {
     if (!id) return

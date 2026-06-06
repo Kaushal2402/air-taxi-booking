@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.operators import (
     AircraftCreate,
@@ -46,7 +46,7 @@ async def list_operators(
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("operators.view")),
     db=Depends(get_db),
 ):
     return await operator_service.list_operators(db, status, search, page, page_size)
@@ -56,7 +56,7 @@ async def list_operators(
 async def create_operator(
     body: OperatorCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.create")),
     db=Depends(get_db),
 ):
     result = await operator_service.create_operator(db, body.model_dump())
@@ -80,7 +80,7 @@ async def create_operator(
 @operators_router.get("/{id}", response_model=OperatorDetail)
 async def get_operator(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("operators.view")),
     db=Depends(get_db),
 ):
     return await operator_service.get_operator_detail(db, id)
@@ -91,7 +91,7 @@ async def update_operator(
     id: str,
     body: OperatorUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.edit")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -117,7 +117,7 @@ async def update_operator(
 async def approve_operator(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.approve")),
     db=Depends(get_db),
 ):
     result = await operator_service.approve_operator(db, id)
@@ -142,7 +142,7 @@ async def reject_operator(
     id: str,
     body: RejectBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.approve")),
     db=Depends(get_db),
 ):
     result = await operator_service.reject_operator(db, id, body.reason)
@@ -168,7 +168,7 @@ async def pause_operator(
     id: str,
     body: PauseBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.suspend")),
     db=Depends(get_db),
 ):
     result = await operator_service.pause_operator(db, id, body.reason)
@@ -193,7 +193,7 @@ async def pause_operator(
 async def reactivate_operator(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.suspend")),
     db=Depends(get_db),
 ):
     result = await operator_service.reactivate_operator(db, id)
@@ -218,7 +218,7 @@ async def configure_commission(
     id: str,
     body: CommissionBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.edit")),
     db=Depends(get_db),
 ):
     result = await operator_service.configure_commission(db, id, body.commission_pct)
@@ -242,7 +242,7 @@ async def configure_commission(
 @operators_router.get("/{id}/performance", response_model=OperatorPerformanceResponse)
 async def get_operator_performance(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("operators.view")),
     db=Depends(get_db),
 ):
     return await operator_service.get_performance(db, id)
@@ -251,7 +251,7 @@ async def get_operator_performance(
 @operators_router.get("/{id}/documents", response_model=List[OperatorDocumentResponse])
 async def list_operator_documents(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("operators.view")),
     db=Depends(get_db),
 ):
     docs = await operator_service.list_operator_docs(db, id)
@@ -263,7 +263,7 @@ async def add_operator_document(
     id: str,
     body: OperatorDocumentCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("operators.edit")),
     db=Depends(get_db),
 ):
     result = await operator_service.add_operator_doc(db, id, body.model_dump())
@@ -289,7 +289,7 @@ async def update_operator_document(
     doc_id: str,
     body: OperatorDocumentUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("kyc.documents.approve")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -320,7 +320,7 @@ async def list_aircraft(
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("aircraft.view")),
     db=Depends(get_db),
 ):
     return await operator_service.list_aircraft(db, operator_id, status, search, page, page_size)
@@ -330,7 +330,7 @@ async def list_aircraft(
 async def create_aircraft(
     body: AircraftCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.create_aircraft(db, body.model_dump())
@@ -353,7 +353,7 @@ async def create_aircraft(
 @aircraft_router.get("/{id}", response_model=AircraftResponse)
 async def get_aircraft(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("aircraft.view")),
     db=Depends(get_db),
 ):
     return await operator_service.get_aircraft(db, id)
@@ -364,7 +364,7 @@ async def update_aircraft(
     id: str,
     body: AircraftUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -390,7 +390,7 @@ async def update_aircraft(
 async def approve_aircraft(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.approve_aircraft(db, id)
@@ -415,7 +415,7 @@ async def ground_aircraft(
     id: str,
     body: GroundBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.ground_aircraft(db, id, body.reason)
@@ -440,7 +440,7 @@ async def ground_aircraft(
 async def unground_aircraft(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.unground_aircraft(db, id)
@@ -465,7 +465,7 @@ async def set_maintenance(
     id: str,
     body: MaintenanceBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.set_maintenance(
@@ -497,7 +497,7 @@ async def list_pilots(
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("aircraft.view")),
     db=Depends(get_db),
 ):
     return await operator_service.list_pilots(db, operator_id, status, search, page, page_size)
@@ -507,7 +507,7 @@ async def list_pilots(
 async def create_pilot(
     body: PilotCreate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.create_pilot(db, body.model_dump())
@@ -530,7 +530,7 @@ async def create_pilot(
 @pilots_router.get("/{id}", response_model=PilotResponse)
 async def get_pilot(
     id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("aircraft.view")),
     db=Depends(get_db),
 ):
     return await operator_service.get_pilot(db, id)
@@ -541,7 +541,7 @@ async def update_pilot(
     id: str,
     body: PilotUpdate,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     changes = body.model_dump(exclude_unset=True)
@@ -567,7 +567,7 @@ async def update_pilot(
 async def approve_pilot(
     id: str,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.approve_pilot(db, id)
@@ -592,7 +592,7 @@ async def ground_pilot(
     id: str,
     body: GroundBody,
     request: Request,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("aircraft.manage")),
     db=Depends(get_db),
 ):
     result = await operator_service.ground_pilot(db, id, body.reason)

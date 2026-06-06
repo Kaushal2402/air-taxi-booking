@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -435,6 +438,8 @@ function WalletTab({ customerId }: { customerId: string }) {
       .finally(() => setLoading(false))
   }, [customerId])
 
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (loading) {
     return <div style={{ padding: 32, color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
   }
@@ -610,6 +615,8 @@ export default function CustomerDetailPage() {
   const [privacyLoading, setPrivacyLoading]           = useState(false)
   const [showExportConfirm, setShowExportConfirm]     = useState(false)
   const [showDeletionConfirm, setShowDeletionConfirm] = useState(false)
+  const canAdjustWallet = usePermission('customers.wallet.adjust')
+  const canSuspendCustomer = usePermission('customers.suspend')
 
   const loadCustomer = async () => {
     if (!id) return

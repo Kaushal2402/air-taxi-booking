@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -87,6 +90,7 @@ export default function AircraftDetailPage() {
   // Ground pilot dialog
   const [showGroundPilot, setShowGroundPilot] = useState(false)
   const [groundPilotReason, setGroundPilotReason] = useState('')
+  const canManageAircraft = usePermission('aircraft.manage')
 
   const load = async () => {
     if (!id) return
@@ -300,6 +304,8 @@ export default function AircraftDetailPage() {
     { id: 'maintenance',   label: 'Maintenance' },
   ]
 
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (loading) {
     return (
       <Shell activeId="aircraft" breadcrumb="Operations · Aircraft & Crew · Aircraft · …" title="Loading…">
@@ -452,7 +458,7 @@ export default function AircraftDetailPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>Aircraft specs</h3>
                 {!editing ? (
-                  <button className="btn sm" onClick={() => setEditing(true)}>Edit specs</button>
+                  <button className="btn sm" onClick={() => setEditing(true)} style={{ display: canManageAircraft ? undefined : 'none' }}>Edit specs</button>
                 ) : (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn sm" onClick={() => setEditing(false)}>Discard</button>

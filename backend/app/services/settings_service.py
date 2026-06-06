@@ -356,7 +356,29 @@ async def update_kill_switch(db: AsyncSession, key: str, enabled: bool) -> KillS
     return row
 
 
+async def is_kill_switch_active(db: AsyncSession, key: str) -> bool:
+    """Return True when the named kill switch is OFF (enabled=False), meaning the feature is blocked."""
+    result = await db.execute(select(KillSwitch).where(KillSwitch.key == key))
+    row = result.scalar_one_or_none()
+    if row is None:
+        return False
+    return not row.enabled
+
+
 # ── Maintenance Windows ───────────────────────────────────────────────────────
+
+async def get_active_maintenance_window(db: AsyncSession, region_name: str) -> "MaintenanceWindow | None":
+    """Return an active maintenance window for *region_name* if one exists right now."""
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(MaintenanceWindow).where(
+            MaintenanceWindow.region_name == region_name,
+            MaintenanceWindow.starts_at <= now,
+            MaintenanceWindow.ends_at >= now,
+        )
+    )
+    return result.scalar_one_or_none()
+
 
 async def list_maintenance_windows(db: AsyncSession) -> List[MaintenanceWindow]:
     result = await db.execute(select(MaintenanceWindow).order_by(MaintenanceWindow.starts_at))

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -82,6 +84,7 @@ function ResolutionPanel({ dispute, onResolve }: ResolutionPanelProps) {
   const [resolutionNote, setResolutionNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const actionOptions: { key: DisputeAction; label: string }[] = [
     { key: 'uphold_fare',    label: 'Uphold fare · close dispute' },

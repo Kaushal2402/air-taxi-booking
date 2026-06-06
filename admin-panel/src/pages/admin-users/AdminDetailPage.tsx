@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -6,57 +9,13 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { formatDate, formatDateTime } from '../../lib/utils'
 import { adminUserService } from '../../services/adminUserService'
-import type { AdminUser, AdminSession } from '../../services/adminUserService'
+import type { AdminUser, AdminSession, AdminActivityEvent } from '../../services/adminUserService'
+import { rbacService } from '../../services/rbacService'
+import type { Role, RolePermissionItem } from '../../services/rbacService'
 
-// ── Permission mapping ────────────────────────────────────────────────────────
-
-const ALL_MODULES = [
-  'Bookings', 'Dispatch', 'Drivers & fleet',
-  'Payments', 'Payouts', 'Pricing',
-  'RBAC & admins', 'Settings',
-]
-
-function getPermissions(role: string): Array<[string, string]> {
-  switch (role) {
-    case 'super_admin':
-      return ALL_MODULES.map(m => [m, 'Full'])
-    case 'admin':
-      return [
-        ['Bookings', 'Full'], ['Dispatch', 'Full'], ['Drivers & fleet', 'Full'],
-        ['Payments', 'View'], ['Payouts', 'Approve'], ['Pricing', 'Edit'],
-        ['RBAC & admins', 'View'], ['Settings', 'View'],
-      ]
-    case 'finance':
-      return [
-        ['Bookings', 'View'], ['Dispatch', 'None'], ['Drivers & fleet', 'None'],
-        ['Payments', 'Full'], ['Payouts', 'Full'], ['Pricing', 'View'],
-        ['RBAC & admins', 'None'], ['Settings', 'None'],
-      ]
-    case 'dispatcher':
-      return [
-        ['Bookings', 'Full'], ['Dispatch', 'Full'], ['Drivers & fleet', 'View'],
-        ['Payments', 'None'], ['Payouts', 'None'], ['Pricing', 'None'],
-        ['RBAC & admins', 'None'], ['Settings', 'None'],
-      ]
-    case 'support':
-      return [
-        ['Bookings', 'View'], ['Dispatch', 'View'], ['Drivers & fleet', 'None'],
-        ['Payments', 'None'], ['Payouts', 'None'], ['Pricing', 'None'],
-        ['RBAC & admins', 'None'], ['Settings', 'None'],
-      ]
-    case 'catalog_editor':
-      return [
-        ['Bookings', 'None'], ['Dispatch', 'None'], ['Drivers & fleet', 'None'],
-        ['Payments', 'None'], ['Payouts', 'None'], ['Pricing', 'Edit'],
-        ['RBAC & admins', 'None'], ['Settings', 'None'],
-      ]
-    default:
-      return ALL_MODULES.map(m => [m, 'View'])
-  }
-}
-
-function permColor(level: string): string {
-  if (level === 'Full' || level === 'Approve' || level === 'Edit') return 'var(--accent)'
+function permColor(state: string): string {
+  if (state === 'granted') return 'var(--accent)'
+  if (state === 'scoped') return 'var(--warn)'
   return 'var(--ink-3)'
 }
 
@@ -84,14 +43,21 @@ export default function AdminDetailPage() {
 
   const [admin, setAdmin] = useState<AdminUser | null>(null)
   const [sessions, setSessions] = useState<AdminSession[]>([])
+  const [activity, setActivity] = useState<AdminActivityEvent[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
+  const [permissions, setPermissions] = useState<RolePermissionItem[]>([])
+  const [permsLoading, setPermsLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [activityLoading, setActivityLoading] = useState(true)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   const [confirm, setConfirm] = useState<ConfirmState>(CONFIRM_CLOSED)
   const closeConfirm = () => setConfirm(CONFIRM_CLOSED)
 
   const [toastMsg, setToastMsg] = useState('')
+  const canManageAdmins = usePermission('admin_users.manage')
   const showToast = (msg: string) => {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(''), 4000)
@@ -126,10 +92,50 @@ export default function AdminDetailPage() {
     }
   }
 
+  const loadActivity = async () => {
+    if (!id) return
+    setActivityLoading(true)
+    try {
+      const data = await adminUserService.getAdminActivity(id, 10)
+      setActivity(data)
+    } catch {
+      setActivity([])
+    } finally {
+      setActivityLoading(false)
+    }
+  }
+
+  const loadRoles = async () => {
+    try {
+      const res = await rbacService.listRoles()
+      setRoles(res.items.filter(r => r.is_active))
+    } catch { /* ignore */ }
+  }
+
+  const loadPermissions = async (roleName: string) => {
+    setPermsLoading(true)
+    try {
+      const role = await rbacService.getRoleByName(roleName)
+      const res = await rbacService.getRolePermissions(role.id)
+      setPermissions(res.permissions.filter(p => p.state !== 'none'))
+    } catch {
+      setPermissions([])
+    } finally {
+      setPermsLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadAdmin()
     loadSessions()
+    loadActivity()
+    loadRoles()
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load permissions whenever admin (and their role) is resolved
+  useEffect(() => {
+    if (admin?.role) loadPermissions(admin.role)
+  }, [admin?.role]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -254,9 +260,10 @@ export default function AdminDetailPage() {
     ? admin.name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
     : '?'
 
-  const perms = admin ? getPermissions(admin.role) : []
 
   // ── Render ──────────────────────────────────────────────────────────────────
+
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) {
     return (
@@ -290,21 +297,21 @@ export default function AdminDetailPage() {
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {admin.status === 'suspended' && (
-            <button className="btn sm accent" onClick={handleReactivate}>Reactivate</button>
+            <button className="btn sm accent" onClick={handleReactivate} style={{ display: canManageAdmins ? undefined : 'none' }}>Reactivate</button>
           )}
           {admin.status === 'active' && (
             <button
               className="btn sm"
               style={{ color: 'var(--danger)', borderColor: 'color-mix(in oklab, var(--danger) 30%, var(--rule))' }}
-              onClick={handleSuspend}
+              onClick={handleSuspend} style={{ display: canManageAdmins ? undefined : 'none' }}
             >
               Suspend
             </button>
           )}
-          <button className="btn sm" onClick={handleForceLogout}>
+          <button className="btn sm" onClick={handleForceLogout} style={{ display: canManageAdmins ? undefined : 'none' }}>
             <Icon name="logout" size={13} />Force logout
           </button>
-          <button className="btn sm" onClick={handleReset2fa}>
+          <button className="btn sm" onClick={handleReset2fa} style={{ display: canManageAdmins ? undefined : 'none' }}>
             <Icon name="shield" size={13} />Reset 2FA
           </button>
         </div>
@@ -395,30 +402,74 @@ export default function AdminDetailPage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '22px 24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div className="t-label">Effective permissions</div>
-              <span className="t-meta">via {admin.role.replace(/_/g, ' ')} role</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
-              {perms.map(([module, level]) => (
-                <div
-                  key={module}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '9px 12px',
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--rule)',
-                    borderRadius: 3,
+              {/* Role change select — locked for super_admin */}
+              {admin.role === 'super_admin' ? (
+                <span className="badge" style={{ fontSize: 11 }}>super admin · locked</span>
+              ) : (
+              <div className="input" style={{ height: 28, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <select
+                  value={admin.role}
+                  onChange={async e => {
+                    const newRole = e.target.value
+                    try {
+                      const updated = await adminUserService.updateAdmin(admin.id, { role: newRole })
+                      setAdmin(updated)
+                      showToast(`Role updated to ${newRole.replace(/_/g, ' ')}`)
+                    } catch (e: unknown) {
+                      const err = e as { response?: { data?: { detail?: string } } }
+                      showToast(err?.response?.data?.detail || 'Failed to update role')
+                    }
                   }}
+                  style={{ border: 0, outline: 0, background: 'transparent', fontSize: 12, color: 'var(--ink-2)' }}
                 >
-                  <span style={{ fontSize: 12.5 }}>{module}</span>
-                  <span
-                    className="t-mono"
-                    style={{ fontSize: 11, color: permColor(level) }}
-                  >
-                    {level}
-                  </span>
-                </div>
-              ))}
+                  {roles.filter(r => r.name !== 'super_admin').map(r => (
+                    <option key={r.id} value={r.name}>
+                      {r.name.replace(/_/g, ' ')}{r.is_system ? '' : ' (custom)'}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="chevDown" size={12} style={{ color: 'var(--ink-3)', flexShrink: 0 }} />
+              </div>
+              )}
             </div>
+
+            {permsLoading && (
+              <div style={{ fontSize: 13, color: 'var(--ink-3)', padding: '8px 0' }}>Loading permissions…</div>
+            )}
+            {!permsLoading && permissions.length === 0 && (
+              <div className="t-meta" style={{ padding: '8px 0' }}>
+                No permissions granted for this role. Configure them in Role &amp; Access.
+              </div>
+            )}
+            {!permsLoading && permissions.length > 0 && (
+              <>
+                {/* Group by domain */}
+                {Array.from(new Set(permissions.map(p => p.domain))).map(domain => (
+                  <div key={domain} style={{ marginBottom: 12 }}>
+                    <div className="t-label" style={{ padding: '0 0 6px', fontSize: 10.5 }}>{domain}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {permissions.filter(p => p.domain === domain).map(p => (
+                        <div
+                          key={p.permission_key}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '7px 10px',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--rule)',
+                            borderRadius: 3,
+                          }}
+                        >
+                          <span style={{ fontSize: 12.5 }}>{p.description || p.permission_key}</span>
+                          <span className="t-mono" style={{ fontSize: 11, color: permColor(p.state) }}>
+                            {p.state}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
@@ -436,7 +487,7 @@ export default function AdminDetailPage() {
               <button
                 className="btn sm ghost"
                 style={{ color: 'var(--danger)' }}
-                onClick={handleRevokeAllSessions}
+                onClick={handleRevokeAllSessions} style={{ display: canManageAdmins ? undefined : 'none' }}
               >
                 Revoke all others
               </button>
@@ -486,10 +537,35 @@ export default function AdminDetailPage() {
                 View audit log
               </button>
             </div>
-            <div style={{ padding: '16px 22px' }}>
-              <div className="t-meta" style={{ textAlign: 'center', padding: '8px 0' }}>
-                No recent activity logged
-              </div>
+            <div style={{ padding: '4px 22px 12px' }}>
+              {activityLoading && (
+                <div style={{ padding: '16px 0', fontSize: 13, color: 'var(--ink-3)' }}>Loading activity…</div>
+              )}
+              {!activityLoading && activity.length === 0 && (
+                <div className="t-meta" style={{ padding: '16px 0', textAlign: 'center' }}>No recent activity logged</div>
+              )}
+              {!activityLoading && activity.map((ev, i) => (
+                <div
+                  key={ev.id}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    padding: '11px 0',
+                    borderBottom: i < activity.length - 1 ? '1px solid var(--rule-soft)' : 'none',
+                  }}
+                >
+                  <span
+                    className={'dot ' + (ev.severity === 'high' ? 'warn' : ev.severity === 'critical' ? 'danger' : 'ok')}
+                    style={{ marginTop: 5, flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{ev.action}</div>
+                    <div className="t-meta" style={{ marginTop: 2, wordBreak: 'break-all' }}>{ev.target}</div>
+                  </div>
+                  <div className="t-meta" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {formatDateTime(ev.timestamp || ev.created_at)}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

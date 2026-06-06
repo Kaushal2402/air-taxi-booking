@@ -201,6 +201,14 @@ async def get_role(db: AsyncSession, role_id: str) -> Role:
     return role
 
 
+async def get_role_by_name(db: AsyncSession, name: str) -> Role:
+    result = await db.execute(select(Role).where(Role.name == name))
+    role = result.scalar_one_or_none()
+    if not role:
+        raise HTTPException(status_code=404, detail=f"Role '{name}' not found")
+    return role
+
+
 async def create_role(db: AsyncSession, body: RoleCreate) -> Role:
     existing = await db.execute(select(Role).where(Role.name == body.name))
     if existing.scalar_one_or_none():

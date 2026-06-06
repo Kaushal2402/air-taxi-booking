@@ -12,7 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.driver import Driver, DriverDocument, DriverWalletTransaction
-from app.services.settings_service import get_settings
+from app.services.settings_service import get_settings, is_kill_switch_active
 from app.schemas.driver import (
     DriverDocumentListResponse,
     DriverDocumentResponse,
@@ -156,6 +156,12 @@ async def list_drivers(
 # ── Create driver (manual onboard) ───────────────────────────────────────────
 
 async def create_driver(db: AsyncSession, data: dict) -> Driver:
+    if await is_kill_switch_active(db, "driver_onboarding"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Driver onboarding is currently paused. New signups are not accepted at this time.",
+        )
+
     phone = (data.get("phone") or "").strip()
     if not phone:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Phone is required")
@@ -324,6 +330,12 @@ async def update_driver(db: AsyncSession, driver_id: str, data: dict) -> Driver:
 
 async def approve_driver(db: AsyncSession, driver_id: str) -> Driver:
     from datetime import timedelta
+
+    if await is_kill_switch_active(db, "driver_onboarding"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Driver onboarding is currently paused. Approvals are not permitted at this time.",
+        )
 
     driver = await get_driver(db, driver_id)
     settings = await get_settings(db)

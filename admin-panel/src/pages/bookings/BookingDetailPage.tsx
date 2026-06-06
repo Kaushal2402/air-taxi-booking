@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate, useParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from 'react-leaflet'
 import L from 'leaflet'
@@ -61,6 +63,8 @@ function bStatusBadge(s: string) {
 }
 
 function initials(name: string | null | undefined): string {
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!name) return '?'
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
@@ -93,6 +97,7 @@ function CancelModal({ booking, onClose, onConfirm }: CancelModalProps) {
   const [destination, setDestination] = useState<'original' | 'wallet' | 'none'>('original')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [preview, setPreview] = useState<CancelPreview | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(true)
   const [noShowWaitMin, setNoShowWaitMin] = useState(5)

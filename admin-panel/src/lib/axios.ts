@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { usePlatformStore } from '../store/platformStore'
+import { usePermissionStore } from '../store/permissionStore'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
 
@@ -101,6 +102,21 @@ api.interceptors.response.use(
     const original = error.config as typeof error.config & { _retry?: boolean }
     const url: string = original?.url ?? ''
     const isPublic = PUBLIC_AUTH_PATHS.some(p => url.includes(p))
+
+    // 403 Forbidden — surface the permission error globally via the store
+    if (error.response?.status === 403) {
+      const detail: string =
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        'You do not have permission to perform this action.'
+      // Extract permission key from messages like "Access denied — 'payments.view' permission required"
+      const keyMatch = detail.match(/'([\w.]+)'\s+permission/)
+      usePermissionStore.getState().setDenied({
+        message: detail,
+        permissionKey: keyMatch ? keyMatch[1] : null,
+      })
+      return Promise.reject(error)
+    }
 
     // Only attempt a refresh for authenticated endpoints that return 401
     // and only once per request (guard with _retry flag).

@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -403,6 +406,7 @@ export default function VehicleDirectoryPage() {
   const [sortField, setSortField]   = useState<'plate' | 'make' | 'year' | 'odometer'>('plate')
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('asc')
   const [showSortMenu, setShowSortMenu] = useState(false)
+  const canManageVehicles = usePermission('vehicles.manage')
   const sortRef = useRef<HTMLDivElement>(null)
 
   const loadVehicles = async (opts?: { tab?: TabKey; q?: string; status?: string; docStatus?: string; classId?: string; ownerType?: string; yearMin?: string; p?: number; vendorId?: string }) => {

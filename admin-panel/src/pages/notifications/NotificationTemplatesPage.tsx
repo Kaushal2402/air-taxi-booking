@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { usePermission } from '../../hooks/usePermission'
+import { parseApiError } from '../../hooks/useApiError'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -63,7 +66,10 @@ export default function NotificationTemplatesPage() {
   const [draft, setDraft] = useState({ ...EMPTY_TEMPLATE })
   const [saving, setSaving] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<NotificationTemplate | null>(null)
+  const canBroadcast = usePermission('notifications.broadcast.send')
+  const canManageTemplates = usePermission('notifications.templates.manage')
 
   const load = async () => {
     setLoading(true)

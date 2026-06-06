@@ -287,6 +287,7 @@ class CreateAirBookingRequest(BaseModel):
     aircraft_id: str | None = None
     internal_reason: str | None = None    # required for assisted bookings
     notes: str | None = None
+    region_name: str | None = None  # city/region for maintenance window check
 
 
 # ── Note response ─────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { dispatchService } from '../../services/dispatchService'
@@ -70,6 +71,7 @@ export default function SupplySurgePage() {
   const [quietStart, setQuietStart] = useState('23:00')
   const [quietEnd, setQuietEnd] = useState('05:00')
   const [quietAction, setQuietAction] = useState('cap_surge')
+  const canOverrideSurge = usePermission('dispatch.surge.override')
 
   useEffect(() => {
     settingsService.getSettings().then(s => {

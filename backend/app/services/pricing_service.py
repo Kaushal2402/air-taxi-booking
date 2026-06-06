@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.pricing import AirFareRule, PricingRule, TaxRule
 from app.models.catalog import ServiceZone, VehicleClass
 from app.core.currency import currency_symbol
-from app.services.settings_service import get_base_currency, get_settings
+from app.services.settings_service import get_base_currency, get_settings, is_kill_switch_active
 from app.schemas.pricing import (
     SimulateBreakdownItem,
     SimulateRequest,
@@ -437,6 +437,7 @@ def _compute_fare(
     platform_surge_ceiling: float = 2.0,
     platform_free_waiting_minutes: Optional[int] = None,
     platform_waiting_charge_per_min: Optional[float] = None,
+    surge_disabled: bool = False,
 ) -> SimulateRuleResult:
     """Compute fare for a single PricingRule given simulation inputs."""
     base_fare = float(rule.base_fare)
@@ -533,7 +534,7 @@ def _compute_fare(
 
     # Surge
     surge_amount = 0.0
-    if req.demand_supply_ratio > 1.0:
+    if not surge_disabled and req.demand_supply_ratio > 1.0:
         effective_multiplier = min(req.demand_supply_ratio, surge_cap)
         surge_amount = round(subtotal * (effective_multiplier - 1.0), 2)
         breakdown.append(SimulateBreakdownItem(
@@ -606,8 +607,9 @@ async def simulate_fare(db: AsyncSession, req: SimulateRequest) -> SimulateRespo
     ceiling = float(settings.surge_ceiling or 2.0)
     platform_free_wait = settings.free_waiting_minutes
     platform_wait_rate = settings.waiting_charge_per_min
+    surge_disabled = await is_kill_switch_active(db, "surge_pricing")
     results = [
-        _compute_fare(rule, req, sym, ceiling, platform_free_wait, platform_wait_rate)
+        _compute_fare(rule, req, sym, ceiling, platform_free_wait, platform_wait_rate, surge_disabled)
         for rule in rules_to_simulate
     ]
     return SimulateResponse(results=results)

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_admin_user
+from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.models.booking import RoadBooking
 from app.schemas.common import MessageResponse
@@ -36,7 +36,7 @@ router = APIRouter()
 @router.get("/templates", response_model=ReportTemplateListResponse)
 async def list_templates(
     include_inactive: bool = Query(False),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.list_templates(db, include_inactive)
@@ -45,7 +45,7 @@ async def list_templates(
 @router.post("/templates", response_model=ReportTemplateResponse, status_code=201)
 async def create_template(
     body: ReportTemplateCreate,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.create_template(db, body.model_dump(), current_user.id)
@@ -54,7 +54,7 @@ async def create_template(
 @router.get("/templates/{template_id}", response_model=ReportTemplateResponse)
 async def get_template(
     template_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.get_template(db, template_id)
@@ -64,7 +64,7 @@ async def get_template(
 async def update_template(
     template_id: str,
     body: ReportTemplateUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.update_template(db, template_id, body.model_dump(exclude_unset=True))
@@ -73,7 +73,7 @@ async def update_template(
 @router.delete("/templates/{template_id}", response_model=MessageResponse)
 async def delete_template(
     template_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     await reports_service.delete_template(db, template_id)
@@ -85,7 +85,7 @@ async def delete_template(
 @router.get("/schedules", response_model=List[ReportScheduleResponse])
 async def list_schedules(
     template_id: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.list_schedules(db, template_id)
@@ -95,7 +95,7 @@ async def list_schedules(
 async def create_schedule(
     template_id: str,
     body: ReportScheduleCreate,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.create_schedule(db, template_id, body.model_dump(), current_user.id)
@@ -105,7 +105,7 @@ async def create_schedule(
 async def update_schedule(
     schedule_id: str,
     body: ReportScheduleUpdate,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.update_schedule(db, schedule_id, body.model_dump(exclude_unset=True))
@@ -114,7 +114,7 @@ async def update_schedule(
 @router.delete("/schedules/{schedule_id}", response_model=MessageResponse)
 async def delete_schedule(
     schedule_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     await reports_service.delete_schedule(db, schedule_id)
@@ -128,7 +128,7 @@ async def list_exports(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     template_id: str | None = Query(None),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.list_exports(db, page, page_size, template_id)
@@ -138,7 +138,7 @@ async def list_exports(
 async def run_template_export(
     template_id: str,
     body: ReportExportRequest,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     tmpl = await reports_service.get_template(db, template_id)
@@ -150,7 +150,7 @@ async def run_template_export(
 @router.post("/exports", response_model=ReportExportResponse, status_code=201)
 async def create_export(
     body: ReportExportRequest,
-    current_user: AdminUser = Depends(get_current_admin_user),
+    current_user: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.request_export(db, None, body.model_dump(), current_user.id)
@@ -159,7 +159,7 @@ async def create_export(
 @router.get("/exports/{export_id}", response_model=ReportExportResponse)
 async def get_export(
     export_id: str,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db=Depends(get_db),
 ):
     return await reports_service.get_export(db, export_id)
@@ -170,7 +170,7 @@ async def get_export(
 @router.post("/builder/preview")
 async def builder_preview(
     body: ReportBuilderPreview,
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
 ):
     """Returns a stub preview for the report builder. Real implementation queries the warehouse."""
     return {
@@ -196,7 +196,7 @@ async def builder_preview(
 )
 async def authority_export(
     days: int = Query(30, ge=1, le=365, description="Number of days to include"),
-    _: AdminUser = Depends(get_current_admin_user),
+    _: AdminUser = Depends(require_permission("reports.view")),
     db: AsyncSession = Depends(get_db),
 ):
     platform = await get_settings(db)

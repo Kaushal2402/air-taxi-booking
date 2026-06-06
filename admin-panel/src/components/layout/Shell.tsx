@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import NavRail from './NavRail'
 import TopBar from './TopBar'
+import PermissionDeniedBanner from '../ui/PermissionDeniedBanner'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface ShellProps {
@@ -55,6 +56,7 @@ export default function Shell({ activeId, title, subtitle, breadcrumb, actions, 
           isMobile={isMobile}
           onMenuClick={() => setNavOpen(true)}
         />
+        <PermissionDeniedBanner />
         <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg)' }}>
           {children}
         </main>

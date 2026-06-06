@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -54,6 +55,8 @@ function fmtEta(s: number): string {
 }
 
 function initials(name: string | null | undefined): string {
+  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+
   if (!name) return '?'
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
@@ -84,6 +87,7 @@ export default function DispatchConsolePage() {
   const [assigning, setAssigning] = useState(false)
   const [expandingRadius, setExpandingRadius] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
   const [radiusStepKm, setRadiusStepKm] = useState(1.0)
   const [radiusMaxKm, setRadiusMaxKm] = useState(10.0)
 
@@ -95,6 +99,7 @@ export default function DispatchConsolePage() {
 
   // Filter state
   const [slaFilter, setSlaFilter] = useState<string>('all')
+  const canManualAssign = usePermission('dispatch.manual_assign')
   const [zoneFilter] = useState<string>('')
 
   const loadQueue = useCallback(async () => {
@@ -173,6 +178,7 @@ export default function DispatchConsolePage() {
       setEligibleData(null)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Assignment failed'
+      setIsForbidden(parseApiError(e).isForbidden)
       setError(msg)
     } finally {
       setAssigning(false)
@@ -212,6 +218,7 @@ export default function DispatchConsolePage() {
       await loadEligibleDrivers(selectedItem.id)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Expand radius failed'
+      setIsForbidden(parseApiError(e).isForbidden)
       setError(msg)
     } finally {
       setExpandingRadius(false)
