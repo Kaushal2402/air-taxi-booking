@@ -9,6 +9,7 @@ import { catalogService } from '../../services/catalogService'
 import type { ServiceZone } from '../../services/catalogService'
 import { WORLD_COUNTRIES, WORLD_CURRENCIES, FISCAL_MONTHS, getWorldTimezones } from '../../data/worldData'
 import { formatDateTime, currencySymbolFor } from '../../lib/utils'
+import { usePlatformStore } from '../../store/platformStore'
 
 // ── Toggle component ──────────────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ function SectionCard({
 export default function PlatformSettingsPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const syncPlatformStore = usePlatformStore((s) => s.sync)
 
   // World data memos — computed once
   const countryOptions = useMemo(() =>
@@ -519,6 +521,7 @@ export default function PlatformSettingsPage() {
         })
       }
       await loadData()
+      await syncPlatformStore()
       setNoticeMsg('Settings saved successfully.')
     } catch {
       setNoticeMsg('Failed to save settings. Please try again.')

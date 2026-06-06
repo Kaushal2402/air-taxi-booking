@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.core.currency import fmt_major, fmt_minor
 from app.services.settings_service import get_base_currency, get_toggle, get_settings, is_in_quiet_window
+from app.services import driver_suspension_service
 from app.models.settings import PlatformSettings
 from app.models.booking import (
     BookingAdminNote,
@@ -649,6 +650,8 @@ async def cancel_booking(
     if not refund_dest or refund_dest == "none":
         refund_dest = platform.refund_destination_default or "original"
 
+    driver_id_before_cancel = booking.driver_id
+
     booking.status = "Cancelled"
     timeline_detail = f"Reason: {data.reason}"
     if data.note:
@@ -660,6 +663,16 @@ async def cancel_booking(
     await _add_timeline_event(db, booking_id, "Booking cancelled", timeline_detail, "warn")
     await db.commit()
     await db.refresh(booking)
+
+    # ── Auto-suspension threshold enforcement ─────────────────────────────────
+    if driver_id_before_cancel:
+        try:
+            await driver_suspension_service.update_driver_metrics_on_cancellation(
+                db, driver_id_before_cancel
+            )
+            await driver_suspension_service.check_and_auto_suspend(db, driver_id_before_cancel)
+        except Exception:
+            pass
 
     # Reload relationships
     booking = await _load_booking(db, booking_id)
@@ -1091,5 +1104,23 @@ async def advance_status(
     )
 
     await db.commit()
+
+    # ── Auto-suspension threshold enforcement ─────────────────────────────────
+    # Re-load booking after commit so driver_id is available
+    _b = await _load_booking(db, booking_id)
+    if _b.driver_id:
+        try:
+            if new_status == "Completed":
+                await driver_suspension_service.update_driver_metrics_on_completion(
+                    db, _b.driver_id, driver_rating=None
+                )
+            elif new_status == "Cancelled":
+                await driver_suspension_service.update_driver_metrics_on_cancellation(
+                    db, _b.driver_id
+                )
+            await driver_suspension_service.check_and_auto_suspend(db, _b.driver_id)
+        except Exception:
+            pass  # never let metric update break the booking response
+
     booking = await _load_booking(db, booking_id)
     return _build_detail_dict(booking, None, None)

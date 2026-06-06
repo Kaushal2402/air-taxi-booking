@@ -21,7 +21,9 @@ from app.schemas.driver import (
     OnboardingQueueResponse,
     StubResponse,
 )
-from app.services import audit_service, driver_service
+from app.services import audit_service, driver_service, driver_suspension_service
+from app.models.driver import Driver
+from sqlalchemy import select
 
 router = APIRouter()
 
@@ -383,3 +385,84 @@ async def adjust_wallet(
     except Exception:
         pass
     return result
+
+
+# ── Auto-suspension threshold endpoints ───────────────────────────────────────
+
+@router.post("/{id}/check-thresholds", status_code=200)
+async def check_driver_thresholds(
+    id: str,
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    """
+    Manually trigger a threshold check for a single driver.
+    Updates rolling metrics then evaluates all four auto-suspension thresholds.
+    Returns suspension reason if driver was suspended, or a clear status.
+    """
+    await driver_suspension_service.update_driver_metrics_on_accept(db, id)
+    reason = await driver_suspension_service.check_and_auto_suspend(db, id)
+    if reason:
+        try:
+            await audit_service.log_event(
+                db,
+                actor_name=current_user.email,
+                actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+                action="driver.auto_suspended",
+                target=f"driver:{id}",
+                category="Safety",
+                severity="high",
+                source_ip=request.client.host if request.client else None,
+            )
+        except Exception:
+            pass
+        return {"suspended": True, "reason": reason}
+    return {"suspended": False, "reason": None}
+
+
+@router.post("/sweep-thresholds", status_code=200)
+async def sweep_all_driver_thresholds(
+    request: Request,
+    current_user: AdminUser = Depends(get_current_admin_user),
+    db=Depends(get_db),
+):
+    """
+    Bulk sweep: recompute metrics and check auto-suspension thresholds
+    for ALL active drivers. Returns counts of checked and suspended drivers.
+    """
+    result = await db.execute(
+        select(Driver).where(Driver.status == "active")
+    )
+    active_drivers = result.scalars().all()
+
+    suspended_ids: list[str] = []
+    for driver in active_drivers:
+        try:
+            await driver_suspension_service.update_driver_metrics_on_accept(db, driver.id)
+            reason = await driver_suspension_service.check_and_auto_suspend(db, driver.id)
+            if reason:
+                suspended_ids.append(driver.id)
+        except Exception:
+            pass
+
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="driver.threshold_sweep",
+            target="all_active_drivers",
+            category="Safety",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"checked": len(active_drivers), "suspended": len(suspended_ids)},
+        )
+    except Exception:
+        pass
+
+    return {
+        "drivers_checked": len(active_drivers),
+        "drivers_suspended": len(suspended_ids),
+        "suspended_ids": suspended_ids,
+    }

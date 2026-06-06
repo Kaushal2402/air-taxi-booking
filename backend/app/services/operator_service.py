@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import NotFoundException, ValidationException
 from app.models.operator import Aircraft, Operator, OperatorDocument, Pilot
 from app.services.settings_service import get_settings
 from app.schemas.operators import (
@@ -156,6 +156,15 @@ async def update_operator(db: AsyncSession, operator_id: str, data: dict) -> Ope
 
 async def approve_operator(db: AsyncSession, operator_id: str) -> Operator:
     operator = await get_operator(db, operator_id)
+    settings = await get_settings(db)
+
+    # Enforce site visit requirement if enabled in platform settings
+    if settings.operator_site_visit_required and operator.site_visit_status != "completed":
+        raise ValidationException(
+            "Operator cannot be approved: platform policy requires a completed site visit. "
+            f"Current site visit status: '{operator.site_visit_status or 'not set'}'."
+        )
+
     operator.status = "approved"
     operator.rejection_reason = None
     await db.commit()

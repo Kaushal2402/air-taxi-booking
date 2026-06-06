@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { dispatchService } from '../../services/dispatchService'
-import type { QueueItem, QueueStats, EligibleDriversResponse } from '../../services/dispatchService'
+import type { QueueItem, QueueStats, EligibleDriversResponse, SlaMonitorResponse } from '../../services/dispatchService'
 import { settingsService } from '../../services/settingsService'
 
 // Fix Leaflet default icon paths when bundled with Vite
@@ -58,10 +58,17 @@ function initials(name: string | null | undefined): string {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function slaColor(status: 'ok' | 'warn' | 'danger'): string {
+function slaColor(status: 'ok' | 'warn' | 'danger' | string): string {
   if (status === 'danger') return 'var(--danger, #d32f2f)'
   if (status === 'warn') return 'var(--warn, #e65100)'
   return ACCENT
+}
+
+/** Compute sla_status from age against a limit (in seconds), warning at 75% */
+function computeSlaStatus(ageSec: number, limitSec: number): 'ok' | 'warn' | 'danger' {
+  if (ageSec >= limitSec) return 'danger'
+  if (ageSec >= limitSec * 0.75) return 'warn'
+  return 'ok'
 }
 
 export default function DispatchConsolePage() {
@@ -80,6 +87,9 @@ export default function DispatchConsolePage() {
   const [radiusStepKm, setRadiusStepKm] = useState(1.0)
   const [radiusMaxKm, setRadiusMaxKm] = useState(10.0)
 
+  // SLA monitor (pickup + overrun)
+  const [slaMonitor, setSlaMonitor] = useState<SlaMonitorResponse | null>(null)
+
   // Mobile state: 'queue' | 'drivers'
   const [mobilePanel, setMobilePanel] = useState<'queue' | 'drivers'>('queue')
 
@@ -92,12 +102,14 @@ export default function DispatchConsolePage() {
       const params: Record<string, string> = {}
       if (slaFilter !== 'all') params.sla_filter = slaFilter
       if (zoneFilter) params.zone_id = zoneFilter
-      const [q, s] = await Promise.all([
+      const [q, s, sla] = await Promise.all([
         dispatchService.getQueue(params),
         dispatchService.getQueueStats(),
+        dispatchService.getSlaMonitor(),
       ])
       setQueue(q)
       setStats(s)
+      setSlaMonitor(sla)
     } catch {
       // silently fail on refresh
     }
@@ -278,10 +290,13 @@ export default function DispatchConsolePage() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              {/* Timer */}
+              {/* Timer — colour driven by live sla_dispatch_alert_min from settings */}
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: 11,
-                color: slaColor(item.sla_status), fontWeight: 600,
+                color: slaColor(stats
+                  ? computeSlaStatus(item.age_seconds, stats.sla_dispatch_alert_min * 60)
+                  : item.sla_status),
+                fontWeight: 600,
                 minWidth: 40,
               }}>
                 {fmtSeconds(item.age_seconds)}
@@ -342,7 +357,9 @@ export default function DispatchConsolePage() {
                 <div style={{ fontSize: 12 }}>
                   <strong>{item.booking_ref}</strong><br />
                   {item.pickup_address}<br />
-                  <span style={{ color: slaColor(item.sla_status) }}>{fmtSeconds(item.age_seconds)} · {item.sla_status}</span>
+                  <span style={{ color: slaColor(stats ? computeSlaStatus(item.age_seconds, stats.sla_dispatch_alert_min * 60) : item.sla_status) }}>
+                    {fmtSeconds(item.age_seconds)} · {stats ? computeSlaStatus(item.age_seconds, stats.sla_dispatch_alert_min * 60) : item.sla_status}
+                  </span>
                 </div>
               </Popup>
             </Marker>
@@ -387,13 +404,16 @@ export default function DispatchConsolePage() {
         }}>
           {[
             { label: 'Avg pickup ETA', value: fmtEta(stats.avg_pickup_eta_seconds) },
+            { label: `Dispatch SLA`, value: `${stats.sla_dispatch_alert_min}min`, highlight: (slaMonitor?.items.length ?? 0) > 0 },
+            { label: `Pickup SLA`, value: `${stats.sla_pickup_alert_min}min`, highlight: (slaMonitor?.pickup_breached ?? 0) > 0 },
+            { label: `Overrun SLA`, value: `${stats.sla_trip_overrun_alert_min}min`, highlight: (slaMonitor?.overrun_breached ?? 0) > 0 },
             { label: `Stuck >${stats.ping_ttl_sec}s`, value: String(stats.stuck_over_timeout) },
             { label: 'No-driver', value: String(stats.no_driver_count) },
             { label: 'Max retries', value: String(stats.max_dispatch_retries) },
-          ].map(({ label, value }) => (
+          ].map(({ label, value, highlight }) => (
             <div key={label} style={{ fontSize: 12 }}>
               <div className="t-meta">{label}</div>
-              <div style={{ fontWeight: 600 }}>{value}</div>
+              <div style={{ fontWeight: 600, color: highlight ? 'var(--danger)' : undefined }}>{value}</div>
             </div>
           ))}
           <div style={{ fontSize: 12 }}>
@@ -585,6 +605,65 @@ export default function DispatchConsolePage() {
         </button>
       }
     >
+      {/* ── SLA Monitor banner (pickup + overrun alerts) ──────────────────── */}
+      {slaMonitor && (slaMonitor.pickup_breached > 0 || slaMonitor.overrun_breached > 0 || slaMonitor.items.length > 0) && (
+        <div style={{
+          borderBottom: '1px solid var(--rule)',
+          background: 'var(--surface)',
+          flexShrink: 0,
+        }}>
+          {/* Summary row */}
+          <div style={{
+            display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
+            padding: '8px 20px',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>SLA Alerts</span>
+            {slaMonitor.pickup_breached > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>
+                🚨 {slaMonitor.pickup_breached} pickup{slaMonitor.pickup_breached > 1 ? 's' : ''} breached
+                {stats ? ` (limit: ${stats.sla_pickup_alert_min}min)` : ''}
+              </span>
+            )}
+            {slaMonitor.overrun_breached > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>
+                🚨 {slaMonitor.overrun_breached} trip{slaMonitor.overrun_breached > 1 ? 's' : ''} overrun
+                {stats ? ` (limit: ${stats.sla_trip_overrun_alert_min}min)` : ''}
+              </span>
+            )}
+            {slaMonitor.items.filter(i => i.sla_status === 'warn').length > 0 && (
+              <span style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 500 }}>
+                ⚠ {slaMonitor.items.filter(i => i.sla_status === 'warn').length} approaching SLA
+              </span>
+            )}
+          </div>
+          {/* Detail rows */}
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ display: 'flex', gap: 8, padding: '0 20px 10px', minWidth: 'max-content' }}>
+              {slaMonitor.items.map(item => (
+                <div key={item.id} style={{
+                  border: `1px solid ${slaColor(item.sla_status)}`,
+                  borderRadius: 6, padding: '6px 10px', fontSize: 11,
+                  background: item.sla_status === 'danger' ? 'color-mix(in oklab, var(--danger) 8%, var(--surface))' : 'color-mix(in oklab, var(--warn) 8%, var(--surface))',
+                  minWidth: 190,
+                }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 2 }}>
+                    <span style={{ fontWeight: 700, color: slaColor(item.sla_status) }}>
+                      {item.sla_type === 'pickup' ? '📍 Pickup' : '🔄 Overrun'}
+                    </span>
+                    <span className="t-label" style={{ fontSize: 10 }}>{item.booking_ref}</span>
+                  </div>
+                  <div style={{ color: 'var(--ink-2)', marginBottom: 2 }}>{item.customer_name ?? '—'}</div>
+                  {item.driver_name && <div className="t-meta">Driver: {item.driver_name}</div>}
+                  <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontWeight: 600, color: slaColor(item.sla_status) }}>
+                    {fmtSeconds(item.age_seconds)} / {fmtSeconds(item.sla_limit_seconds)} limit
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{
         display: 'flex',
         height: 'calc(100vh - 120px)',

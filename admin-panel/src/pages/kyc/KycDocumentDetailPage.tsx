@@ -5,7 +5,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { kycService } from '../../services/kycService'
 import type { KycQueueItem } from '../../services/kycService'
-import { formatDate as fmtDateUtil } from '../../lib/utils'
+import { formatDate } from '../../lib/utils'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -36,11 +36,6 @@ function statusBadge(s: string) {
   if (s === 'expired')
     return <span className="badge danger"><span className="dot danger" />Expired</span>
   return <span className="badge info"><span className="dot info" />Uploaded</span>
-}
-
-function formatDate(d: string | null): string {
-  if (!d) return '—'
-  try { return fmtDateUtil(d) } catch { return d }
 }
 
 // ── Striped placeholder ───────────────────────────────────────────────────────

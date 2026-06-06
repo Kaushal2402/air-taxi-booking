@@ -37,6 +37,30 @@ export interface QueueStats {
   auto_assign_enabled: boolean
   ping_ttl_sec: number
   max_dispatch_retries: number
+  // SLA thresholds from platform settings
+  sla_dispatch_alert_min: number
+  sla_pickup_alert_min: number
+  sla_trip_overrun_alert_min: number
+}
+
+export interface ActiveBookingSlaItem {
+  id: string
+  booking_ref: string
+  status: string
+  customer_name: string | null
+  driver_name: string | null
+  pickup_address: string
+  age_seconds: number
+  sla_type: 'pickup' | 'overrun'
+  sla_limit_seconds: number
+  sla_status: 'ok' | 'warn' | 'danger'
+  created_at: string
+}
+
+export interface SlaMonitorResponse {
+  pickup_breached: number
+  overrun_breached: number
+  items: ActiveBookingSlaItem[]
 }
 
 export interface EligibleDriver {
@@ -215,4 +239,7 @@ export const dispatchService = {
 
   getSurgeOverrides: (params?: { limit?: number; offset?: number }) =>
     api.get<SurgeOverride[]>('/dispatch/surge/overrides', { params }).then(r => r.data),
+
+  getSlaMonitor: () =>
+    api.get<SlaMonitorResponse>('/dispatch/sla-monitor').then(r => r.data),
 }

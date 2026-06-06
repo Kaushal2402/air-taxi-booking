@@ -8,6 +8,7 @@ import type { OperatorDetail, Aircraft, Pilot, OperatorDocument, OperatorPerform
 import { useFormatMoney } from '../../lib/utils'
 import { kycService } from '../../services/kycService'
 import type { DocTypeItem } from '../../services/kycService'
+import { settingsService } from '../../services/settingsService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,7 @@ export default function OperatorDetailPage() {
   const [pilotActionLoading, setPilotActionLoading] = useState(false)
   const [showGroundPilot, setShowGroundPilot]     = useState(false)
   const [groundPilotReason, setGroundPilotReason] = useState('')
+  const [siteVisitRequired, setSiteVisitRequired] = useState(false)
 
   const loadOperator = async () => {
     if (!id) return
@@ -159,7 +161,10 @@ export default function OperatorDetailPage() {
     } catch { /* silently fail */ }
   }
 
-  useEffect(() => { loadOperator() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadOperator()
+    settingsService.getSettings().then(s => setSiteVisitRequired(!!s.operator_site_visit_required)).catch(() => {})
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     kycService.getDocTypes().then(r => {
@@ -433,7 +438,21 @@ export default function OperatorDetailPage() {
       subtitle={`${operator.hq_city || '—'} · ${operator.cert_type || 'No cert'} · ${operator.fleet_count} aircraft · ${operator.pilot_count} crew`}
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {showApprove    && <button className="btn sm accent" onClick={handleApprove} disabled={actionLoading}>Approve</button>}
+          {showApprove    && (
+            <button
+              className="btn sm accent"
+              onClick={handleApprove}
+              disabled={actionLoading || (siteVisitRequired && operator.site_visit_status !== 'completed')}
+              title={siteVisitRequired && operator.site_visit_status !== 'completed' ? 'Site visit must be completed before approval' : undefined}
+            >
+              Approve
+            </button>
+          )}
+          {showApprove && siteVisitRequired && operator.site_visit_status !== 'completed' && (
+            <span style={{ fontSize: 12, color: 'var(--warn, #f59e0b)', alignSelf: 'center' }}>
+              Site visit required
+            </span>
+          )}
           {showActivate   && <button className="btn sm accent" onClick={handleReactivate} disabled={actionLoading}>Activate</button>}
           {showRejectBtn  && <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => setShowReject(true)}>Reject</button>}
           {showPauseBtn   && <button className="btn sm" onClick={() => setShowPause(true)}>Pause publishing</button>}

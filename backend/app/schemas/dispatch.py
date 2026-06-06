@@ -45,6 +45,32 @@ class QueueStatsResponse(BaseModel):
     auto_assign_enabled: bool
     ping_ttl_sec: int
     max_dispatch_retries: int
+    # SLA thresholds (from platform settings — exposed so frontend can colour without a second API call)
+    sla_dispatch_alert_min: int
+    sla_pickup_alert_min: int
+    sla_trip_overrun_alert_min: int
+
+
+# ── Active-booking SLA monitor ────────────────────────────────────────────────
+
+class ActiveBookingSlaItem(BaseModel):
+    id: str
+    booking_ref: str
+    status: str                      # Accepted | Arrived | InProgress
+    customer_name: str | None
+    driver_name: str | None
+    pickup_address: str
+    age_seconds: int                 # seconds since status last changed
+    sla_type: str                    # "pickup" | "overrun"
+    sla_limit_seconds: int           # the threshold in seconds
+    sla_status: str                  # "ok" | "warn" | "danger"
+    created_at: datetime
+
+
+class SlaMonitorResponse(BaseModel):
+    pickup_breached: int             # Accepted/Arrived bookings over pickup alert
+    overrun_breached: int            # InProgress bookings over trip overrun alert
+    items: list[ActiveBookingSlaItem]
 
 
 # ── Eligible Drivers ──────────────────────────────────────────────────────────

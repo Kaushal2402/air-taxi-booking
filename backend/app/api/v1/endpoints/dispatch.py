@@ -18,6 +18,7 @@ from app.schemas.dispatch import (
     QueueStatsResponse,
     ResolveExceptionRequest,
     ResolveExceptionResponse,
+    SlaMonitorResponse,
     SurgeOverrideListItem,
     SurgeOverrideRequest,
     SurgeOverrideResponse,
@@ -47,6 +48,20 @@ async def get_queue_stats(
     db: AsyncSession = Depends(get_db),
 ):
     return await dispatch_service.get_queue_stats(db)
+
+
+@router.get("/sla-monitor", response_model=SlaMonitorResponse)
+async def get_sla_monitor(
+    _: AdminUser = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns all live bookings (Accepted / Arrived / InProgress) that are
+    breaching or approaching the configured SLA alert timers:
+      - Pickup alert  (sla_pickup_alert_min)  → Accepted / Arrived bookings
+      - Overrun alert (sla_trip_overrun_alert_min) → InProgress bookings
+    """
+    return await dispatch_service.get_sla_monitor(db)
 
 
 # ── Eligible Drivers ──────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ import { catalogService } from '../../services/catalogService'
 import type { VehicleClass } from '../../services/catalogService'
 import { driverService } from '../../services/driverService'
 import type { Driver } from '../../services/driverService'
-import { formatDate as fmtDateUtil, useCurrencySymbol } from '../../lib/utils'
+import { formatDate, useCurrencySymbol } from '../../lib/utils'
 import { kycService } from '../../services/kycService'
 import type { DocTypeItem } from '../../services/kycService'
 
@@ -19,11 +19,6 @@ import type { DocTypeItem } from '../../services/kycService'
 const STATIC_BASE = import.meta.env.VITE_API_BASE_URL
   ? (import.meta.env.VITE_API_BASE_URL as string).replace('/api/v1', '')
   : 'http://localhost:8001'
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  return fmtDateUtil(iso)
-}
 
 function daysUntil(isoDate: string | null): number | null {
   if (!isoDate) return null

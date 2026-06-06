@@ -24,9 +24,18 @@ interface PlatformState {
   settlement_cycle: string
   driver_payout_day: string
   surge_ceiling: number
+  // Localization
+  date_format: string
+  time_format: string
+  week_starts_on: string
+  currency_symbol_position: string
+  decimal_separator: string
+  thousands_separator: string
   toggles: PlatformToggles
   loaded: boolean
   load: () => Promise<void>
+  /** Re-fetch settings from backend and update store (bypasses the loaded guard). */
+  sync: () => Promise<void>
 }
 
 export const usePlatformStore = create<PlatformState>((set, get) => ({
@@ -36,11 +45,21 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
   settlement_cycle: 'T+1',
   driver_payout_day: 'Monday',
   surge_ceiling: 2.0,
+  date_format: 'DD/MM/YYYY',
+  time_format: '24h',
+  week_starts_on: 'Monday',
+  currency_symbol_position: 'before',
+  decimal_separator: '.',
+  thousands_separator: ',',
   toggles: { ...DEFAULT_TOGGLES },
   loaded: false,
 
   load: async () => {
     if (get().loaded) return
+    await get().sync()
+  },
+
+  sync: async () => {
     try {
       const [s, rawToggles] = await Promise.all([
         settingsService.getSettings(),
@@ -59,11 +78,16 @@ export const usePlatformStore = create<PlatformState>((set, get) => ({
         settlement_cycle: s.settlement_cycle || 'T+1',
         driver_payout_day: s.driver_payout_day || 'Monday',
         surge_ceiling: s.surge_ceiling ?? 2.0,
+        date_format: s.date_format || 'DD/MM/YYYY',
+        time_format: s.time_format || '24h',
+        week_starts_on: s.week_starts_on || 'Monday',
+        currency_symbol_position: s.currency_symbol_position || 'before',
+        decimal_separator: s.decimal_separator || '.',
+        thousands_separator: s.thousands_separator || ',',
         toggles,
         loaded: true,
       })
     } catch {
-      // Keep defaults; use UTC so timestamps are deterministic on error
       set({ timezone: 'UTC', loaded: true })
     }
   },

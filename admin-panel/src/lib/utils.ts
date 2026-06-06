@@ -25,46 +25,84 @@ export function currencySymbolFor(code: string): string {
   return symbolFor(code);
 }
 
+// ── Number separator helpers ──────────────────────────────────────────────────
+
+/**
+ * Format a plain number using custom decimal/thousands separators.
+ * Uses en-US as the base locale (guaranteed: ',' = thousands, '.' = decimal),
+ * then substitutes the platform-configured separators.
+ */
+function applyCustomSeparators(s: string, decSep: string, thoSep: string): string {
+  return s.replace(/,/g, "\x01").replace(/\./g, decSep).replace(/\x01/g, thoSep);
+}
+
+function getNumberSeparators(): { dec: string; tho: string } {
+  const s = usePlatformStore.getState();
+  return { dec: s.decimal_separator || ".", tho: s.thousands_separator || "," };
+}
+
+function getCurrencyPosition(): string {
+  return usePlatformStore.getState().currency_symbol_position || "before";
+}
+
+function buildCurrencyString(sym: string, formatted: string, position: string): string {
+  return position === "before" ? `${sym}${formatted}` : `${formatted} ${sym}`;
+}
+
 // ── Core money formatters (accept explicit currency) ─────────────────────────
 
 /**
- * Format a minor-unit amount (paise / cents / fils) as a locale currency string.
- * Pass `currency` explicitly, or call `formatMoney()` to read from the platform store.
+ * Format a minor-unit amount (paise / cents / fils) using the platform's
+ * decimal/thousands separators and currency symbol position.
  */
 export function formatCurrency(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
+  const { dec, tho } = getNumberSeparators();
+  const position = getCurrencyPosition();
+  const sym = symbolFor(currency);
+  const base = new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amountMinor / 100);
+  return buildCurrencyString(sym, applyCustomSeparators(base, dec, tho), position);
 }
 
 /**
  * Compact formatter — abbreviates large INR values using Indian units (L / Cr).
- * All other currencies fall through to standard Intl formatting.
+ * All other currencies fall through to formatCurrency.
+ * Respects platform currency_symbol_position, decimal_separator, thousands_separator.
  */
 export function formatMoneyWith(amountMinor: number, currency: string): string {
   const value = amountMinor / 100;
+  const { dec, tho } = getNumberSeparators();
+  const position = getCurrencyPosition();
+
   if (currency === "INR") {
     const sym = "₹";
-    if (value >= 10_000_000) return `${sym}${(value / 10_000_000).toFixed(2)} Cr`;
-    if (value >= 100_000) return `${sym}${(value / 100_000).toFixed(2)} L`;
-    return `${sym}${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    if (value >= 10_000_000) {
+      const num = applyCustomSeparators((value / 10_000_000).toFixed(2), dec, tho);
+      return buildCurrencyString(sym, `${num} Cr`, position);
+    }
+    if (value >= 100_000) {
+      const num = applyCustomSeparators((value / 100_000).toFixed(2), dec, tho);
+      return buildCurrencyString(sym, `${num} L`, position);
+    }
+    const base = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
+    return buildCurrencyString(sym, applyCustomSeparators(base, dec, tho), position);
   }
   return formatCurrency(amountMinor, currency);
 }
 
-// ── React hooks (subscribe component, re-render on currency change) ───────────
+// ── React hooks (subscribe component, re-render on settings change) ───────────
 
 /**
- * Returns a `fmtMinor(amountMinor)` function bound to the platform currency.
- * Using this hook inside a component subscribes it to currency changes —
- * the component re-renders automatically when base_currency updates.
- *
- * Drop-in replacement for local `const fmtMinor = (v) => '₹' + ...` patterns.
+ * Returns a `fmtMinor(amountMinor)` function bound to the platform currency and
+ * localization settings. Re-renders when any money-formatting setting changes.
  */
 export function useFormatMoney(): (amountMinor: number) => string {
   const base_currency = usePlatformStore((s) => s.base_currency);
+  usePlatformStore((s) => s.currency_symbol_position); // subscribe for reactivity
+  usePlatformStore((s) => s.decimal_separator);
+  usePlatformStore((s) => s.thousands_separator);
   return (amountMinor: number) => formatMoneyWith(amountMinor, base_currency);
 }
 
@@ -119,92 +157,128 @@ function isValidDate(d: Date): boolean {
   return !isNaN(d.getTime());
 }
 
-/** "15 Jun 2024" */
+/**
+ * Map the platform date_format setting to a [locale, Intl.DateTimeFormatOptions] pair.
+ * - DD/MM/YYYY → en-GB  → "28/05/2026"
+ * - MM/DD/YYYY → en-US  → "05/28/2026"
+ * - YYYY-MM-DD → en-CA  → "2026-05-28"
+ * - D MMM YYYY → en-GB  → "28 May 2026"
+ */
+function resolveDateLocale(fmt: string): [string, Intl.DateTimeFormatOptions] {
+  switch (fmt) {
+    case "MM/DD/YYYY":
+      return ["en-US", { month: "2-digit", day: "2-digit", year: "numeric" }];
+    case "YYYY-MM-DD":
+      return ["en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }];
+    case "D MMM YYYY":
+      return ["en-GB", { day: "numeric", month: "short", year: "numeric" }];
+    default: // DD/MM/YYYY
+      return ["en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }];
+  }
+}
+
+function getDateFormat(): string {
+  return usePlatformStore.getState().date_format || "DD/MM/YYYY";
+}
+
+function getHour12(): boolean {
+  return (usePlatformStore.getState().time_format || "24h") === "12h";
+}
+
+/** Full date respecting the platform date_format setting. */
 export function formatDate(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    day: "2-digit", month: "short", year: "numeric",
-    timeZone: timezone,
-  }).format(d);
+  const [locale, opts] = resolveDateLocale(getDateFormat());
+  return new Intl.DateTimeFormat(locale, { ...opts, timeZone: timezone }).format(d);
 }
 
-/** "15 Jun 2024, 14:30" */
+/** Full date + time respecting date_format and time_format settings. */
 export function formatDateTime(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    day: "2-digit", month: "short", year: "numeric",
+  const [locale, dateOpts] = resolveDateLocale(getDateFormat());
+  return new Intl.DateTimeFormat(locale, {
+    ...dateOpts,
     hour: "2-digit", minute: "2-digit",
+    hour12: getHour12(),
     timeZone: timezone,
   }).format(d);
 }
 
-/** "15 Jun 2024, 14:30:05" */
+/** Full date + time + seconds respecting date_format and time_format settings. */
 export function formatDateTimeS(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    day: "2-digit", month: "short", year: "numeric",
+  const [locale, dateOpts] = resolveDateLocale(getDateFormat());
+  return new Intl.DateTimeFormat(locale, {
+    ...dateOpts,
     hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: getHour12(),
     timeZone: timezone,
   }).format(d);
 }
 
-/** "14:30:05" */
+/** Time-only respecting time_format (12h/24h). */
 export function formatTime(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: getHour12(),
     timeZone: timezone,
   }).format(d);
 }
 
-/** "14:30" */
+/** Time HH:MM respecting time_format (12h/24h). */
 export function formatTimeHM(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit", minute: "2-digit",
+    hour12: getHour12(),
     timeZone: timezone,
   }).format(d);
 }
 
-/** "15 Jun" (no year) */
+/** "15 Jun" partial date — no year, always short-month style for labels/chips. */
 export function formatDateShort(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit", month: "short",
     timeZone: timezone,
   }).format(d);
 }
 
-/** "Jun 2024" */
+/** "Jun 2024" — month+year label, always short-month style for charts/headers. */
 export function formatMonthYear(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en-GB", {
     month: "short", year: "numeric",
     timeZone: timezone,
   }).format(d);
 }
 
-/** "15 Jun · 14:30" (compact, no year, 24h) */
+/** "15 Jun · 14:30" compact label respecting time_format. */
 export function formatDateTimeCompact(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  const datePart = new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", timeZone: timezone }).format(d);
-  const timePart = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone }).format(d);
+  const datePart = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: timezone }).format(d);
+  const timePart = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit", minute: "2-digit",
+    hour12: getHour12(),
+    timeZone: timezone,
+  }).format(d);
   return `${datePart} · ${timePart}`;
 }
 
-/** "Friday, 15 June 2024" */
+/** "Friday, 15 June 2024" — verbose long form for headings. */
 export function formatDateLong(iso: string, timezone = getUserTimezone()): string {
   const d = parseUtc(iso);
   if (!isValidDate(d)) return "—";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
     timeZone: timezone,
   }).format(d);
@@ -225,30 +299,37 @@ export function formatNow(timezone = getUserTimezone()): string {
   return formatDateTime(new Date().toISOString(), timezone);
 }
 
-// ── Timezone-aware React hooks (re-render on timezone change) ─────────────────
+// ── Reactive hooks (re-render on timezone, date_format, or time_format change) ─
 
 export function useFormatDate(): (iso: string) => string {
   const tz = usePlatformStore((s) => s.timezone);
+  usePlatformStore((s) => s.date_format); // subscribe — formatDate reads getState() internally
   return (iso: string) => formatDate(iso, tz);
 }
 
 export function useFormatDateTime(): (iso: string) => string {
   const tz = usePlatformStore((s) => s.timezone);
+  usePlatformStore((s) => s.date_format);
+  usePlatformStore((s) => s.time_format);
   return (iso: string) => formatDateTime(iso, tz);
 }
 
 export function useFormatDateTimeS(): (iso: string) => string {
   const tz = usePlatformStore((s) => s.timezone);
+  usePlatformStore((s) => s.date_format);
+  usePlatformStore((s) => s.time_format);
   return (iso: string) => formatDateTimeS(iso, tz);
 }
 
 export function useFormatTime(): (iso: string) => string {
   const tz = usePlatformStore((s) => s.timezone);
+  usePlatformStore((s) => s.time_format);
   return (iso: string) => formatTime(iso, tz);
 }
 
 export function useFormatTimeHM(): (iso: string) => string {
   const tz = usePlatformStore((s) => s.timezone);
+  usePlatformStore((s) => s.time_format);
   return (iso: string) => formatTimeHM(iso, tz);
 }
 
@@ -264,6 +345,8 @@ export function useFormatMonthYear(): (iso: string) => string {
 
 export function useFormatDateTimeCompact(): (iso: string) => string {
   const tz = usePlatformStore((s) => s.timezone);
+  usePlatformStore((s) => s.date_format);
+  usePlatformStore((s) => s.time_format);
   return (iso: string) => formatDateTimeCompact(iso, tz);
 }
 

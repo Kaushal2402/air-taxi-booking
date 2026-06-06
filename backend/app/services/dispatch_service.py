@@ -16,7 +16,9 @@ from app.models.dispatch import DispatchException, SurgeOverride
 from app.models.driver import Driver
 from app.core.currency import fmt_minor
 from app.services.settings_service import get_base_currency, get_settings, is_in_quiet_window
+from app.services import driver_suspension_service
 from app.schemas.dispatch import (
+    ActiveBookingSlaItem,
     AssignDriverResponse,
     EligibleDriverItem,
     EligibleDriversResponse,
@@ -28,6 +30,7 @@ from app.schemas.dispatch import (
     QueueItemResponse,
     QueueStatsResponse,
     ResolveExceptionResponse,
+    SlaMonitorResponse,
     SurgeOverrideListItem,
     SurgeOverrideResponse,
     SupplyResponse,
@@ -51,10 +54,15 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.asin(math.sqrt(a))
 
 
-def _sla_status(age_seconds: int) -> str:
-    if age_seconds < 30:
+def _sla_status(age_seconds: int, warn_sec: int, danger_sec: int) -> str:
+    """
+    Compute ok / warn / danger from age vs two configurable thresholds.
+    warn_sec  = when to flip to warn  (e.g. 0.75 × limit)
+    danger_sec = when to flip to danger (= the configured SLA limit)
+    """
+    if age_seconds < warn_sec:
         return "ok"
-    if age_seconds < 60:
+    if age_seconds < danger_sec:
         return "warn"
     return "danger"
 
@@ -96,6 +104,10 @@ async def get_queue(
     max_retries: int = platform.max_dispatch_retries if platform.max_dispatch_retries is not None else 3
     ping_ttl_sec: int = platform.driver_acceptance_timeout_sec if platform.driver_acceptance_timeout_sec is not None else 60
 
+    # Dispatch SLA alert: configured in minutes, converted to seconds
+    dispatch_alert_sec: int = (platform.sla_dispatch_alert_min or 3) * 60
+    dispatch_warn_sec: int = int(dispatch_alert_sec * 0.75)   # warn at 75% of limit
+
     currency = await get_base_currency(db)
     now = _now()
     items: list[QueueItemResponse] = []
@@ -104,7 +116,8 @@ async def get_queue(
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
         age = int((now - created).total_seconds())
-        status = _sla_status(age)
+        # Use platform-configured dispatch SLA thresholds
+        status = _sla_status(age, warn_sec=dispatch_warn_sec, danger_sec=dispatch_alert_sec)
 
         if sla_filter and sla_filter != "all" and status != sla_filter:
             continue
@@ -116,7 +129,7 @@ async def get_queue(
         exception_type: str | None = None
         if b.dispatch_attempts >= max_retries:
             exception_type = "rejected"
-        elif age >= ping_ttl_sec:
+        elif age >= dispatch_alert_sec:
             exception_type = "sla-breach"
         elif eligible_count == 0:
             exception_type = "no-driver"
@@ -152,8 +165,18 @@ async def get_queue(
 
 
 async def _count_eligible_drivers(db: AsyncSession, booking: RoadBooking) -> int:
+    from datetime import date as _date
     no_location = booking.pickup_lat is None or booking.pickup_lng is None
-    filters = [Driver.online_status == "online", Driver.status == "active"]
+    today = _date.today()
+    # Allow drivers in active grace period alongside fully-approved drivers
+    filters = [
+        Driver.online_status == "online",
+        Driver.status == "active",
+        (
+            Driver.kyc_status.in_(["approved", "expiring", "grace_period"]) &
+            ((Driver.doc_grace_until == None) | (Driver.doc_grace_until >= today))  # noqa: E711
+        ),
+    ]
     if booking.vehicle_class:
         filters.append(Driver.vehicle_class == booking.vehicle_class)
     if not no_location:
@@ -226,6 +249,10 @@ async def get_queue_stats(db: AsyncSession) -> QueueStatsResponse:
     )
     exceptions_count = (await db.execute(exc_stmt)).scalar_one()
 
+    sla_dispatch_min: int = platform.sla_dispatch_alert_min or 3
+    sla_pickup_min: int = platform.sla_pickup_alert_min or 10
+    sla_overrun_min: int = platform.sla_trip_overrun_alert_min or 120
+
     return QueueStatsResponse(
         total_in_queue=total_in_queue,
         exceptions_count=exceptions_count,
@@ -237,6 +264,113 @@ async def get_queue_stats(db: AsyncSession) -> QueueStatsResponse:
         auto_assign_enabled=auto_assign,
         ping_ttl_sec=ping_ttl_sec,
         max_dispatch_retries=max_retries,
+        sla_dispatch_alert_min=sla_dispatch_min,
+        sla_pickup_alert_min=sla_pickup_min,
+        sla_trip_overrun_alert_min=sla_overrun_min,
+    )
+
+
+# ── SLA Monitor (pickup + trip-overrun) ──────────────────────────────────────
+
+async def get_sla_monitor(db: AsyncSession) -> SlaMonitorResponse:
+    """
+    Scan all live bookings (Accepted, Arrived, InProgress) and evaluate them
+    against the two remaining SLA timers:
+
+      sla_pickup_alert_min   — bookings in Accepted/Arrived that have been waiting
+                               longer than the configured pickup window
+      sla_trip_overrun_alert_min — bookings InProgress longer than the configured
+                                   maximum trip duration
+
+    The age is measured from `updated_at` (when the status last changed), not
+    `created_at`, so the clock restarts each time the booking advances.
+    """
+    platform = await get_settings(db)
+    pickup_limit_sec: int = (platform.sla_pickup_alert_min or 10) * 60
+    overrun_limit_sec: int = (platform.sla_trip_overrun_alert_min or 120) * 60
+    pickup_warn_sec: int = int(pickup_limit_sec * 0.75)
+    overrun_warn_sec: int = int(overrun_limit_sec * 0.75)
+
+    now = _now()
+
+    # Fetch all live bookings with customer + driver names
+    from app.models.driver import Driver as _Driver
+    stmt = (
+        select(RoadBooking, Customer.name)
+        .outerjoin(Customer, RoadBooking.customer_id == Customer.id)
+        .where(RoadBooking.status.in_(["Accepted", "Arrived", "InProgress"]))
+    )
+    rows = (await db.execute(stmt)).all()
+
+    # Pre-fetch driver names
+    driver_ids = [b.driver_id for b, _ in rows if b.driver_id]
+    driver_map: dict[str, str] = {}
+    if driver_ids:
+        dr = await db.execute(
+            select(_Driver.id, _Driver.name).where(_Driver.id.in_(driver_ids))
+        )
+        driver_map = {row[0]: row[1] for row in dr.all()}
+
+    items: list[ActiveBookingSlaItem] = []
+    pickup_breached = 0
+    overrun_breached = 0
+
+    for b, cust_name in rows:
+        # Use updated_at as the clock start — it's when status last changed
+        anchor = b.updated_at
+        if anchor is None:
+            anchor = b.created_at
+        if anchor.tzinfo is None:
+            anchor = anchor.replace(tzinfo=timezone.utc)
+        age = int((now - anchor).total_seconds())
+
+        if b.status in ("Accepted", "Arrived"):
+            # Pickup SLA
+            sla_status = _sla_status(age, warn_sec=pickup_warn_sec, danger_sec=pickup_limit_sec)
+            if sla_status == "ok":
+                continue  # only surface warn + danger
+            if sla_status == "danger":
+                pickup_breached += 1
+            items.append(ActiveBookingSlaItem(
+                id=b.id,
+                booking_ref=b.booking_ref,
+                status=b.status,
+                customer_name=cust_name,
+                driver_name=driver_map.get(b.driver_id) if b.driver_id else None,
+                pickup_address=b.pickup_address,
+                age_seconds=age,
+                sla_type="pickup",
+                sla_limit_seconds=pickup_limit_sec,
+                sla_status=sla_status,
+                created_at=b.created_at,
+            ))
+
+        elif b.status == "InProgress":
+            # Trip overrun SLA
+            sla_status = _sla_status(age, warn_sec=overrun_warn_sec, danger_sec=overrun_limit_sec)
+            if sla_status == "ok":
+                continue
+            if sla_status == "danger":
+                overrun_breached += 1
+            items.append(ActiveBookingSlaItem(
+                id=b.id,
+                booking_ref=b.booking_ref,
+                status=b.status,
+                customer_name=cust_name,
+                driver_name=driver_map.get(b.driver_id) if b.driver_id else None,
+                pickup_address=b.pickup_address,
+                age_seconds=age,
+                sla_type="overrun",
+                sla_limit_seconds=overrun_limit_sec,
+                sla_status=sla_status,
+                created_at=b.created_at,
+            ))
+
+    items.sort(key=lambda x: x.age_seconds, reverse=True)
+    return SlaMonitorResponse(
+        pickup_breached=pickup_breached,
+        overrun_breached=overrun_breached,
+        items=items,
     )
 
 
@@ -397,6 +531,13 @@ async def assign_driver(
 
     await db.commit()
     await db.refresh(booking)
+
+    # ── Update acceptance metric after driver accepts ─────────────────────────
+    try:
+        await driver_suspension_service.update_driver_metrics_on_accept(db, driver_id)
+        await driver_suspension_service.check_and_auto_suspend(db, driver_id)
+    except Exception:
+        pass
 
     return AssignDriverResponse(
         booking_id=booking.id,

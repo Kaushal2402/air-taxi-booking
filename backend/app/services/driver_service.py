@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.driver import Driver, DriverDocument, DriverWalletTransaction
+from app.services.settings_service import get_settings
 from app.schemas.driver import (
     DriverDocumentListResponse,
     DriverDocumentResponse,
@@ -322,7 +323,10 @@ async def update_driver(db: AsyncSession, driver_id: str, data: dict) -> Driver:
 # ── Status transitions ────────────────────────────────────────────────────────
 
 async def approve_driver(db: AsyncSession, driver_id: str) -> Driver:
+    from datetime import timedelta
+
     driver = await get_driver(db, driver_id)
+    settings = await get_settings(db)
 
     # Assign seq_id if not yet assigned
     if driver.seq_id is None:
@@ -331,8 +335,23 @@ async def approve_driver(db: AsyncSession, driver_id: str) -> Driver:
         driver.seq_id = max_seq + 1
 
     driver.status = "active"
-    driver.kyc_status = "approved"
     driver.stage = "approved"
+
+    # Fetch current documents to check for expired ones
+    doc_result = await db.execute(
+        select(DriverDocument).where(DriverDocument.driver_id == driver.id)
+    )
+    docs = list(doc_result.scalars().all())
+    has_expired_or_pending = any(d.status in ("expired", "pending") for d in docs)
+
+    if settings.driver_grace_period_enabled and has_expired_or_pending:
+        # Approve into grace period instead of full approval
+        grace_days = settings.driver_grace_period_days or 7
+        driver.kyc_status = "grace_period"
+        driver.doc_grace_until = (datetime.now(timezone.utc).date() + timedelta(days=grace_days))
+    else:
+        driver.kyc_status = "approved"
+        driver.doc_grace_until = None
 
     await db.commit()
     await db.refresh(driver)
@@ -430,7 +449,9 @@ async def create_document(db: AsyncSession, driver_id: str, data: dict) -> Drive
 
 
 async def _recompute_driver_kyc_status(db: AsyncSession, driver_id: str) -> None:
-    """Recompute driver kyc_status based on current document states."""
+    """Recompute driver kyc_status based on current document states, respecting grace period."""
+    from datetime import timedelta
+
     result = await db.execute(
         select(DriverDocument).where(DriverDocument.driver_id == driver_id)
     )
@@ -441,6 +462,23 @@ async def _recompute_driver_kyc_status(db: AsyncSession, driver_id: str) -> None
     if not driver:
         return
 
+    now = datetime.now(timezone.utc).date()
+
+    # If driver is inside an active grace window, don't downgrade to rejected
+    if driver.doc_grace_until and driver.doc_grace_until >= now:
+        # Still in grace — only clear if docs are now fully clean
+        all_ok = docs and all(d.status == "ok" for d in docs)
+        if all_ok:
+            driver.kyc_status = "approved"
+            driver.doc_grace_until = None
+        # else leave kyc_status as grace_period
+        await db.commit()
+        return
+
+    # Grace expired — clear it and recompute normally
+    if driver.doc_grace_until and driver.doc_grace_until < now:
+        driver.doc_grace_until = None
+
     if not docs:
         driver.kyc_status = "pending"
     elif any(d.status == "rejected" for d in docs):
@@ -450,18 +488,12 @@ async def _recompute_driver_kyc_status(db: AsyncSession, driver_id: str) -> None
     elif any(d.status == "pending" for d in docs):
         driver.kyc_status = "pending"
     else:
-        # Check for expiring docs (expiry within 30 days)
-        now = datetime.now(timezone.utc).date()
-        from datetime import timedelta
         expiry_threshold = now + timedelta(days=30)
         has_expiring = any(
             d.expiry_date is not None and d.expiry_date <= expiry_threshold
             for d in docs if d.status == "ok"
         )
-        if has_expiring:
-            driver.kyc_status = "expiring"
-        else:
-            driver.kyc_status = "approved"
+        driver.kyc_status = "expiring" if has_expiring else "approved"
 
     await db.commit()
 

@@ -48,6 +48,9 @@ class Driver(Base, UUIDPrimaryKeyMixin):
     # Flag
     flag_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Document grace period (set when approved despite expired/expiring docs)
+    doc_grace_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
     # Location (Module 06 — live dispatch)
     current_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     current_lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

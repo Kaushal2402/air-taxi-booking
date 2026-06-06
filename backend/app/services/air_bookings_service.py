@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.models.settings import PlatformSettings
 from app.core.currency import fmt_minor
 from app.services.settings_service import get_toggle, get_settings, is_in_quiet_window
+from app.services import driver_suspension_service
 from app.models.air_booking import (
     AirBooking,
     AirBookingNote,
@@ -671,6 +672,7 @@ async def advance_status(
             detail=f"Cannot advance from '{booking.status}' to '{req.status}'. Expected next: '{expected_next}'",
         )
 
+    driver_id_snapshot = getattr(booking, "driver_id", None)
     booking.status = req.status
     tone_map = {
         "Confirmed": "ok",
@@ -688,6 +690,22 @@ async def advance_status(
         tone_map.get(req.status, "info"),
     )
     await db.commit()
+
+    # ── Auto-suspension threshold enforcement ─────────────────────────────────
+    if driver_id_snapshot and req.status in ("Completed", "Cancelled"):
+        try:
+            if req.status == "Completed":
+                await driver_suspension_service.update_driver_metrics_on_completion(
+                    db, driver_id_snapshot, driver_rating=None
+                )
+            else:
+                await driver_suspension_service.update_driver_metrics_on_cancellation(
+                    db, driver_id_snapshot
+                )
+            await driver_suspension_service.check_and_auto_suspend(db, driver_id_snapshot)
+        except Exception:
+            pass
+
     return await get_air_booking(db, booking_id)
 
 

@@ -5,6 +5,8 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { driverService } from '../../services/driverService'
 import type { Driver, DriverStatus, KycStatus } from '../../services/driverService'
+import { settingsService } from '../../services/settingsService'
+import type { PlatformSettings } from '../../services/settingsService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,7 +103,8 @@ function RowMenu({ driver, onSuspend, onReactivate, onForceOffline }: RowMenuPro
 
 // ── Mobile card view ──────────────────────────────────────────────────────────
 
-function DriverCard({ driver, onClick }: { driver: Driver; onClick: () => void }) {
+function DriverCard({ driver, onClick, minRating }: { driver: Driver; onClick: () => void; minRating?: number }) {
+  const ratingAtRisk = driver.rating != null && driver.trips_count >= 5 && driver.rating < (minRating ?? 3.5)
   return (
     <div
       style={{
@@ -117,12 +120,13 @@ function DriverCard({ driver, onClick }: { driver: Driver; onClick: () => void }
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 13.5, color: 'var(--ink)' }}>{driver.name}</span>
           {driver.flag_reason && <Icon name="flag" size={11} stroke={1.6} style={{ color: 'var(--warn)' }} />}
+          {ratingAtRisk && <span style={{ fontSize: 10, color: 'var(--danger)', fontWeight: 700 }} title={`Rating below minimum ${minRating ?? 3.5}★`}>⚠ Rating</span>}
         </div>
         <div className="t-meta" style={{ marginTop: 2 }}>{driver.driver_code} · {driver.phone}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
           <DriverStatusBadge status={driver.status} />
           {driver.rating != null && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: driver.rating >= 4.7 ? 'var(--accent)' : driver.rating >= 4.5 ? 'var(--ink-2)' : 'var(--warn)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: ratingAtRisk ? 'var(--danger)' : driver.rating >= 4.5 ? 'var(--accent)' : 'var(--ink-2)' }}>
               {driver.rating.toFixed(2)} ★
             </span>
           )}
@@ -187,6 +191,7 @@ export default function DriverDirectoryPage() {
   const [page, setPage]               = useState(1)
 
   const [suspendPending, setSuspendPending] = useState<SuspendPending | null>(null)
+  const [thresholds, setThresholds] = useState<Pick<PlatformSettings, 'driver_min_rating' | 'driver_max_cancellation_rate_pct' | 'driver_min_acceptance_rate_pct'> | null>(null)
   const [sortField, setSortField]   = useState<'trips' | 'rating' | 'acceptance' | 'cancellation' | 'name'>('trips')
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc')
   const [showSortMenu, setShowSortMenu] = useState(false)
@@ -226,7 +231,14 @@ export default function DriverDirectoryPage() {
     }
   }
 
-  useEffect(() => { loadDrivers() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadDrivers()
+    settingsService.getSettings().then(s => setThresholds({
+      driver_min_rating: s.driver_min_rating,
+      driver_max_cancellation_rate_pct: s.driver_max_cancellation_rate_pct,
+      driver_min_acceptance_rate_pct: s.driver_min_acceptance_rate_pct,
+    })).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = setTimeout(() => loadDrivers({ q: search, p: 1 }), 350)
@@ -511,7 +523,7 @@ export default function DriverDirectoryPage() {
                   {search || statusFilter ? 'No drivers match your filter.' : 'No drivers yet.'}
                 </div>
               ) : sortedDrivers.map(d => (
-                <DriverCard key={d.id} driver={d} onClick={() => navigate(`/drivers/${d.id}`)} />
+                <DriverCard key={d.id} driver={d} onClick={() => navigate(`/drivers/${d.id}`)} minRating={thresholds?.driver_min_rating} />
               ))}
             </div>
           )}
@@ -585,24 +597,46 @@ export default function DriverDirectoryPage() {
                       </td>
                       <td className="num">{d.trips_count.toLocaleString()}</td>
                       <td>
-                        {d.rating != null ? (
-                          <>
-                            <span style={{ fontFamily: 'var(--font-mono)', color: d.rating >= 4.7 ? 'var(--accent)' : d.rating >= 4.5 ? 'var(--ink-2)' : 'var(--warn)' }}>
-                              {d.rating.toFixed(2)}
-                            </span>
-                            <span style={{ color: 'var(--ink-4)', marginLeft: 3 }}>★</span>
-                          </>
-                        ) : (
+                        {d.rating != null ? (() => {
+                          const minRating = thresholds?.driver_min_rating ?? 3.5
+                          const atRisk = d.trips_count >= 5 && d.rating < minRating
+                          return (
+                            <>
+                              <span style={{ fontFamily: 'var(--font-mono)', color: atRisk ? 'var(--danger)' : d.rating >= 4.5 ? 'var(--accent)' : 'var(--ink-2)' }}
+                                title={atRisk ? `Below minimum ${minRating}★ threshold` : undefined}>
+                                {d.rating.toFixed(2)}
+                              </span>
+                              <span style={{ color: 'var(--ink-4)', marginLeft: 3 }}>★</span>
+                              {atRisk && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--danger)', fontWeight: 600 }}>▼</span>}
+                            </>
+                          )
+                        })() : (
                           <span style={{ color: 'var(--ink-4)' }}>—</span>
                         )}
                       </td>
                       <td className="num">
-                        {d.acceptance_rate != null ? `${d.acceptance_rate.toFixed(0)}%` : '—'}
+                        {d.acceptance_rate != null ? (() => {
+                          const minAccept = thresholds?.driver_min_acceptance_rate_pct ?? 60
+                          const atRisk = d.acceptance_rate < minAccept
+                          return (
+                            <span style={{ fontFamily: 'var(--font-mono)', color: atRisk ? 'var(--danger)' : 'var(--ink-2)' }}
+                              title={atRisk ? `Below minimum ${minAccept}% acceptance threshold` : undefined}>
+                              {d.acceptance_rate.toFixed(0)}%{atRisk && ' ▼'}
+                            </span>
+                          )
+                        })() : '—'}
                       </td>
                       <td>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: d.cancellation_rate >= 5 ? 'var(--warn)' : 'var(--ink-2)' }}>
-                          {d.cancellation_rate.toFixed(1)}%
-                        </span>
+                        {(() => {
+                          const maxCancel = thresholds?.driver_max_cancellation_rate_pct ?? 30
+                          const atRisk = d.cancellation_rate > maxCancel
+                          return (
+                          <span style={{ fontFamily: 'var(--font-mono)', color: atRisk ? 'var(--danger)' : d.cancellation_rate >= 10 ? 'var(--warn)' : 'var(--ink-2)' }}
+                            title={atRisk ? `Exceeds max ${maxCancel}% cancellation threshold` : undefined}>
+                            {d.cancellation_rate.toFixed(1)}%{atRisk && ' ▲'}
+                          </span>
+                          )
+                        })()}
                       </td>
                       <td><KycBadge status={d.kyc_status} /></td>
                       <td><DriverStatusBadge status={d.status} /></td>

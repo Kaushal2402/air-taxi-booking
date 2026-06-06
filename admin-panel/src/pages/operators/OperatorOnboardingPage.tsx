@@ -4,6 +4,7 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { operatorService } from '../../services/operatorService'
 import type { Operator, OperatorDocument, CreateOperatorBody } from '../../services/operatorService'
+import { settingsService } from '../../services/settingsService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ export default function OperatorOnboardingPage() {
   const [operators, setOperators]       = useState<Operator[]>([])
   const [loading, setLoading]           = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
+  const [siteVisitRequired, setSiteVisitRequired] = useState(false)
   const [review, setReview]             = useState<ReviewState | null>(null)
   const [showMobileReview, setShowMobileReview] = useState(false)
 
@@ -66,7 +68,10 @@ export default function OperatorOnboardingPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    settingsService.getSettings().then(s => setSiteVisitRequired(!!s.operator_site_visit_required)).catch(() => {})
+  }, [])
 
   const filtered = operators.filter(o => {
     if (statusFilter === 'all') return true
@@ -280,11 +285,17 @@ export default function OperatorOnboardingPage() {
         </div>
 
         {/* Overall actions */}
+        {siteVisitRequired && op.site_visit_status !== 'completed' && (
+          <div style={{ margin: '0 20px 0', padding: '8px 12px', background: 'var(--warn-bg, #fff8e1)', border: '1px solid var(--warn, #f59e0b)', borderRadius: 6, fontSize: 12, color: 'var(--warn-text, #92400e)' }}>
+            Platform policy requires a completed site visit before approval. Current status: <strong>{op.site_visit_status || 'not set'}</strong>.
+          </div>
+        )}
         <div style={{ padding: '16px 20px', borderTop: '1px solid var(--rule)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             className="btn accent sm"
             onClick={handleApproveOperator}
-            disabled={actionLoading}
+            disabled={actionLoading || (siteVisitRequired && op.site_visit_status !== 'completed')}
+            title={siteVisitRequired && op.site_visit_status !== 'completed' ? 'Site visit must be completed before approval' : undefined}
           >
             {actionLoading ? 'Processing…' : 'Approve operator'}
           </button>
