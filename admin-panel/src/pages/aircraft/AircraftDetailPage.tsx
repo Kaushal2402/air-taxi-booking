@@ -51,6 +51,7 @@ export default function AircraftDetailPage() {
   const [operatorName, setOperatorName]   = useState<string | null>(null)
   const [loading, setLoading]             = useState(true)
   const [apiError, setApiError]           = useState('')
+  const [isForbidden, setIsForbidden]     = useState(false)
   const [activeTab, setActiveTab]         = useState<TabId>('overview')
 
   // Edit specs
@@ -114,8 +115,10 @@ export default function AircraftDetailPage() {
       } catch {
         setOperatorName(null)
       }
-    } catch {
-      setApiError('Failed to load aircraft')
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 403) setIsForbidden(true)
+      else setApiError('Failed to load aircraft')
     } finally {
       setLoading(false)
     }

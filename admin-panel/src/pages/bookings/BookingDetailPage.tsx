@@ -63,8 +63,6 @@ function bStatusBadge(s: string) {
 }
 
 function initials(name: string | null | undefined): string {
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (!name) return '?'
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
@@ -1022,6 +1020,7 @@ export default function BookingDetailPage() {
   const [booking, setBooking] = useState<RoadBookingDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
   const [activeTab, setActiveTab] = useState<TabName>('overview')
 
   // Modal state
@@ -1048,8 +1047,10 @@ export default function BookingDetailPage() {
     try {
       const b = await bookingsService.getBooking(id)
       setBooking(b)
-    } catch {
-      setError('Booking not found')
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 403) setIsForbidden(true)
+      else setError('Booking not found')
     } finally {
       setLoading(false)
     }
@@ -1141,6 +1142,8 @@ export default function BookingDetailPage() {
     } catch { /* ignore */ }
     finally { setFlagging(false) }
   }
+
+  if (isForbidden) return <AccessDeniedPage message="You don't have permission to access this page." />
 
   if (loading) {
     return (

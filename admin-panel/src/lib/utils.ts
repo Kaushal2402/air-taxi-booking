@@ -302,49 +302,49 @@ export function formatNow(timezone = getUserTimezone()): string {
 // ── Reactive hooks (re-render on timezone, date_format, or time_format change) ─
 
 export function useFormatDate(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   usePlatformStore((s) => s.date_format); // subscribe — formatDate reads getState() internally
   return (iso: string) => formatDate(iso, tz);
 }
 
 export function useFormatDateTime(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   usePlatformStore((s) => s.date_format);
   usePlatformStore((s) => s.time_format);
   return (iso: string) => formatDateTime(iso, tz);
 }
 
 export function useFormatDateTimeS(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   usePlatformStore((s) => s.date_format);
   usePlatformStore((s) => s.time_format);
   return (iso: string) => formatDateTimeS(iso, tz);
 }
 
 export function useFormatTime(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   usePlatformStore((s) => s.time_format);
   return (iso: string) => formatTime(iso, tz);
 }
 
 export function useFormatTimeHM(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   usePlatformStore((s) => s.time_format);
   return (iso: string) => formatTimeHM(iso, tz);
 }
 
 export function useFormatDateShort(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   return (iso: string) => formatDateShort(iso, tz);
 }
 
 export function useFormatMonthYear(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   return (iso: string) => formatMonthYear(iso, tz);
 }
 
 export function useFormatDateTimeCompact(): (iso: string) => string {
-  const tz = usePlatformStore((s) => s.timezone);
+  const tz = usePlatformStore((s) => s.timezone) || 'UTC';
   usePlatformStore((s) => s.date_format);
   usePlatformStore((s) => s.time_format);
   return (iso: string) => formatDateTimeCompact(iso, tz);

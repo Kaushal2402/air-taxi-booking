@@ -310,8 +310,8 @@ export default function PrivacyRequestsPage() {
                         </button>
                       )}
                       {(r.status === 'completed' || r.status === 'rejected') && r.resolution_note && (
-                        <span className="t-meta" title={r.resolution_note} style={{ cursor: 'help' }}>
-                          📝 Note
+                        <span className="t-meta" style={{ display: 'block', marginTop: 4, color: 'var(--ink-2)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.resolution_note}>
+                          {r.resolution_note}
                         </span>
                       )}
                     </td>

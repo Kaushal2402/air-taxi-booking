@@ -69,6 +69,7 @@ export default function OperatorDetailPage() {
   const [loading, setLoading]         = useState(true)
   const [activeTab, setActiveTab]     = useState<TabId>('company')
   const [apiError, setApiError]       = useState('')
+  const [isForbidden, setIsForbidden] = useState(false)
 
   // Fleet & Crew
   const [aircraft, setAircraft]       = useState<Aircraft[]>([])
@@ -136,8 +137,10 @@ export default function OperatorDetailPage() {
       setOperator(detail)
       setDocs(detail.docs)
       setDraft({ ...detail })
-    } catch {
-      setApiError('Failed to load operator')
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 403) setIsForbidden(true)
+      else setApiError('Failed to load operator')
     } finally {
       setLoading(false)
     }
