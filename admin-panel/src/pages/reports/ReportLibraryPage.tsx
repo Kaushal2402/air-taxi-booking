@@ -91,9 +91,9 @@ export default function ReportLibraryPage() {
         </div>
       )}
       <div style={{ padding: isMobile ? '16px' : '24px 32px 28px', display: 'grid', gridTemplateColumns: isMobile || isTablet ? '1fr' : '1.5fr 1fr', gap: 24 }}>
-        {/* Standard reports */}
+        {/* Left column: standard reports + authority card */}
         <div>
-          {/* Gap 15: Authority export card — visible only when data_share_authorities is on */}
+          {/* Authority export card — visible only when data_share_authorities is on */}
           {dataShareAllowed && (
             <div style={{
               marginBottom: 14, background: 'var(--surface)',
@@ -122,7 +122,6 @@ export default function ReportLibraryPage() {
               </a>
             </div>
           )}
-        </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 16 }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.014em' }}>Standard reports</h3>
             <div style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
