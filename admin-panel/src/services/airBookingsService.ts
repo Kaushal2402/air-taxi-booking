@@ -330,24 +330,4 @@ export const airBookingsService = {
 
   flagBooking: (id: string, req: FlagBookingRequest) =>
     api.patch<AirBookingDetail>(`/bookings/air/${id}/flag`, req).then(r => r.data),
-
-  createAirBooking: (req: CreateAirBookingRequest) =>
-    api.post<AirBookingDetail>('/bookings/air', req).then(r => r.data),
-}
-
-export interface CreateAirBookingRequest {
-  customer_id?: string
-  customer_name?: string
-  customer_phone?: string
-  service_subtype: string
-  route_from: string
-  route_to: string
-  pax_count: number
-  etd: string
-  fare_estimate_minor?: number
-  payment_method?: string
-  operator_id?: string
-  aircraft_id?: string
-  internal_reason?: string
-  notes?: string
 }

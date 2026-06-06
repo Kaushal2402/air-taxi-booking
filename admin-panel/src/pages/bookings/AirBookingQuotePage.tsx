@@ -1,27 +1,21 @@
 import { useState, useEffect } from 'react'
-import { parseApiError } from '../../hooks/useApiError'
-import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { airBookingsService } from '../../services/airBookingsService'
 import type { CharterQuote, AirBookingDetail } from '../../services/airBookingsService'
-import { operatorService } from '../../services/operatorService'
-import type { Operator, Aircraft } from '../../services/operatorService'
-import { settingsService } from '../../services/settingsService'
-import { useFormatMoney, formatTimeHM } from '../../lib/utils'
 
-function toDatetimeLocal(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const fmtL = (minor: number) => '₹' + (minor / 10000000).toFixed(2) + ' L'
+const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 function fmtTime(iso: string | null): string {
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (!iso) return '—'
-  try { return formatTimeHM(iso) } catch { return iso }
+  try {
+    return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  } catch { return iso }
 }
 
 // ── Add Quote Form ────────────────────────────────────────────────────────────
@@ -36,6 +30,10 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
   const [form, setForm] = useState({
     operator_id: '',
     aircraft_id: '',
+    aircraft_registration: '',
+    aircraft_model: '',
+    pax_capacity: '',
+    range_nm: '',
     depart_icao: '',
     arrive_icao: '',
     etd: '',
@@ -52,63 +50,15 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isForbidden, setIsForbidden] = useState(false)
-
-  const [operators, setOperators] = useState<Operator[]>([])
-  const [aircraft, setAircraft] = useState<Aircraft[]>([])
-  const [loadingOps, setLoadingOps] = useState(true)
-  const [loadingAc, setLoadingAc] = useState(false)
-
-  // Advance booking bounds from platform settings
-  const [minEtd, setMinEtd] = useState('')
-  const [maxEtd, setMaxEtd] = useState('')
-
-  useEffect(() => {
-    settingsService.getSettings().then(s => {
-      const minHours = s.air_min_advance_hours ?? 2
-      const maxDays = s.max_advance_days ?? 7
-      const now = new Date()
-      setMinEtd(toDatetimeLocal(new Date(now.getTime() + minHours * 60 * 60 * 1000)))
-      setMaxEtd(toDatetimeLocal(new Date(now.getTime() + maxDays * 24 * 60 * 60 * 1000)))
-    }).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    operatorService.listOperators({ page_size: 100 })
-      .then(r => setOperators(r.items))
-      .catch(() => {})
-      .finally(() => setLoadingOps(false))
-  }, [])
-
-  useEffect(() => {
-    if (!form.operator_id) { setAircraft([]); setForm(f => ({ ...f, aircraft_id: '' })); return }
-    setLoadingAc(true)
-    operatorService.listAircraft({ operator_id: form.operator_id, page_size: 100 })
-      .then(r => setAircraft(r.items))
-      .catch(() => setAircraft([]))
-      .finally(() => setLoadingAc(false))
-  }, [form.operator_id])
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
   const num = (v: string) => v ? parseInt(v, 10) : 0
   const numOpt = (v: string) => v ? parseFloat(v) : undefined
 
-  const selectedAircraft = aircraft.find(a => a.id === form.aircraft_id) ?? null
-
   async function handleSubmit() {
     if (!form.operator_id || !form.aircraft_id || !form.base_fare_minor) {
-      setError('Operator, Aircraft, and Base fare are required.')
+      setError('Operator ID, Aircraft ID, and Base fare are required.')
       return
-    }
-    if (form.etd) {
-      if (minEtd && form.etd < minEtd) {
-        setError('ETD is too soon — must meet minimum advance notice for air bookings.')
-        return
-      }
-      if (maxEtd && form.etd > maxEtd) {
-        setError('ETD is too far ahead — exceeds maximum advance booking window.')
-        return
-      }
     }
     setSubmitting(true)
     setError(null)
@@ -116,9 +66,10 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
       await airBookingsService.addQuote(bookingId, {
         operator_id: form.operator_id,
         aircraft_id: form.aircraft_id,
-        aircraft_registration: selectedAircraft?.registration_mark || undefined,
-        pax_capacity: selectedAircraft?.seat_capacity || undefined,
-        range_nm: selectedAircraft?.range_nm || undefined,
+        aircraft_registration: form.aircraft_registration || undefined,
+        aircraft_model: form.aircraft_model || undefined,
+        pax_capacity: form.pax_capacity ? parseInt(form.pax_capacity, 10) : undefined,
+        range_nm: form.range_nm ? parseFloat(form.range_nm) : undefined,
         depart_icao: form.depart_icao || undefined,
         arrive_icao: form.arrive_icao || undefined,
         etd: form.etd || undefined,
@@ -155,52 +106,18 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
     </div>
   )
 
-  const selStyle = { flex: 1, border: 'none', outline: 'none', background: 'transparent', height: 36, fontSize: 12.5, cursor: 'pointer' }
-
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>Add Quote</div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Operator dropdown */}
-        <div className="field">
-          <label className="field-label">Operator *</label>
-          <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
-            <select value={form.operator_id} onChange={e => set('operator_id', e.target.value)} style={selStyle} disabled={loadingOps}>
-              <option value="">{loadingOps ? 'Loading…' : 'Select operator…'}</option>
-              {operators.map(o => (
-                <option key={o.id} value={o.id}>{o.name}{o.hq_city ? ` · ${o.hq_city}` : ''}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {/* Aircraft dropdown */}
-        <div className="field">
-          <label className="field-label">Aircraft *</label>
-          <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
-            <select value={form.aircraft_id} onChange={e => set('aircraft_id', e.target.value)} style={selStyle} disabled={!form.operator_id || loadingAc}>
-              <option value="">{!form.operator_id ? 'Select operator first' : loadingAc ? 'Loading…' : aircraft.length === 0 ? 'No aircraft' : 'Select aircraft…'}</option>
-              {aircraft.map(a => (
-                <option key={a.id} value={a.id}>{a.registration_mark} · {a.seat_capacity} seats{a.range_nm ? ` · ${a.range_nm} nm` : ''}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
+        {field('Operator ID (UUID)', 'operator_id', 'text', 'Operator UUID…')}
+        {field('Aircraft ID (UUID)', 'aircraft_id', 'text', 'Aircraft UUID…')}
+        {field('Aircraft registration', 'aircraft_registration', 'text', 'VT-XXX')}
+        {field('Aircraft model', 'aircraft_model', 'text', 'Embraer Phenom 300')}
         {field('Depart ICAO', 'depart_icao', 'text', 'VOBG')}
         {field('Arrive ICAO', 'arrive_icao', 'text', 'VIIJ')}
-        <div className="field">
-          <label className="field-label">ETD</label>
-          <div className="input">
-            <input
-              type="datetime-local"
-              value={form.etd}
-              min={minEtd || undefined}
-              max={maxEtd || undefined}
-              onChange={e => set('etd', e.target.value)}
-            />
-          </div>
-        </div>
+        {field('ETD', 'etd', 'datetime-local', '')}
         {field('ETA', 'eta', 'datetime-local', '')}
         {field('Base fare (minor/paise)', 'base_fare_minor', 'number', '108000000')}
         {field('Positioning (minor)', 'positioning_minor', 'number', '0')}
@@ -211,7 +128,7 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
         {field('OTP 30d (%)', 'otp_30d_pct', 'number', '95.0')}
         {field('Score (0–100)', 'score', 'number', '80')}
       </div>
-      <div className="field">
+      <div className="field" style={{ gridColumn: '1/-1' }}>
         <label className="field-label">Conditions</label>
         <div className="input"><input value={form.conditions} onChange={e => set('conditions', e.target.value)} placeholder="No fuel-stop · 30 kg pax baggage" /></div>
       </div>
@@ -237,7 +154,6 @@ interface QuoteCardProps {
 function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
   const [pushing, setPushing] = useState(false)
   const [declining, setDeclining] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
 
   const breakdown = [
     ['Base · hourly', quote.base_fare_minor],
@@ -250,17 +166,13 @@ function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
 
   async function handlePush() {
     setPushing(true)
-    setActionError(null)
-    try { await airBookingsService.pushQuote(bookingId, quote.id); onAction() }
-    catch { setActionError('Failed to push quote to customer. Please try again.') }
+    try { await airBookingsService.pushQuote(bookingId, quote.id); onAction() } catch { /* ignore */ }
     setPushing(false)
   }
 
   async function handleDecline() {
     setDeclining(true)
-    setActionError(null)
-    try { await airBookingsService.declineQuote(bookingId, quote.id); onAction() }
-    catch { setActionError('Failed to decline quote. Please try again.') }
+    try { await airBookingsService.declineQuote(bookingId, quote.id); onAction() } catch { /* ignore */ }
     setDeclining(false)
   }
 
@@ -353,11 +265,6 @@ function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
         </div>
       )}
 
-      {actionError && (
-        <div style={{ padding: '8px 22px', background: 'var(--danger-soft)', borderTop: '1px solid var(--danger-muted)', fontSize: 12, color: 'var(--danger)' }}>
-          {actionError}
-        </div>
-      )}
       {!isDeclined && (
         <div style={{ padding: '14px 22px', borderTop: '1px solid var(--rule)', display: 'flex', gap: 8 }}>
           <button className="btn sm" style={{ flex: 1 }} disabled={declining} onClick={handleDecline}>
@@ -380,8 +287,6 @@ function QuoteCard({ quote, bookingId, onAction }: QuoteCardProps) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AirBookingQuotePage() {
-  const fmtMinor = useFormatMoney()
-  const fmtL = (minor: number) => fmtMinor(minor / 100)  // minor→major then format as compact
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()

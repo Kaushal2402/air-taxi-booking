@@ -1,98 +1,58 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { airBookingsService } from '../../services/airBookingsService'
 import type { AirBookingListItem, AirBookingStats, AirBookingStatus } from '../../services/airBookingsService'
-import { useFormatMoney, formatTimeHM, formatDateShort, isSameDayInTz, getUserTimezone } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
-function fmtFare(finalMinor: number | null, estimateMinor: number, fmt: (v: number) => string): string {
-  return fmt(finalMinor ?? estimateMinor)
+function fmtFare(finalMinor: number | null, estimateMinor: number): string {
+  const val = finalMinor ?? estimateMinor
+  return fmtMinor(val)
 }
 
 function fmtEtd(etd: string): string {
   try {
-    const tz = getUserTimezone()
-    const now = new Date().toISOString()
-    const time = formatTimeHM(etd, tz)
-    if (isSameDayInTz(etd, now, tz)) return `Today ${time}`
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
-    if (isSameDayInTz(etd, tomorrow.toISOString(), tz)) return `Tomorrow ${time}`
-    return formatDateShort(etd, tz) + ' · ' + time
+    const d = new Date(etd)
+    const now = new Date()
+    const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const isToday = d.toDateString() === now.toDateString()
+    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1)
+    const isTomorrow = d.toDateString() === tomorrow.toDateString()
+    if (isToday) return `Today ${time}`
+    if (isTomorrow) return `Tomorrow ${time}`
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' · ' + time
   } catch { return etd }
 }
 
 function statusBadge(s: AirBookingStatus) {
   const map: Record<string, string> = {
-    'Confirmed': 'ok', 'Boarding': 'info', 'Departed': 'ok',
-    'Arrived': 'pending', 'Completed': 'pending', 'Quote shared': 'warn',
-    'Manifest locked': 'info', 'Requested': 'warn', 'Cancelled': 'danger',
-    'Refunded': 'info', 'Rescheduled': 'info',
+    'Confirmed': 'ok',
+    'Boarding': 'info',
+    'Departed': 'ok',
+    'Arrived': 'pending',
+    'Completed': 'pending',
+    'Quote shared': 'warn',
+    'Manifest locked': 'info',
+    'Requested': 'warn',
+    'Cancelled': 'danger',
+    'Refunded': 'info',
+    'Rescheduled': 'info',
   }
   const tone = map[s] || 'pending'
   return (
     <span className={`badge ${tone}`}>
-      <span className={`dot ${tone}`} />{s}
+      <span className={`dot ${tone}`} />
+      {s}
     </span>
   )
 }
 
-// ── CSV export ────────────────────────────────────────────────────────────────
-
-function exportCsv(rows: AirBookingListItem[]) {
-  const header = ['Ref', 'Customer', 'Service', 'Route From', 'Route To', 'Pax', 'ETD', 'Status', 'Fare', 'Payment', 'Operator', 'Flagged']
-  const lines = rows.map(b => [
-    b.booking_ref,
-    b.customer_name ?? '',
-    b.service_label,
-    b.route_from,
-    b.route_to,
-    b.pax_count,
-    b.etd,
-    b.status,
-    ((b.fare_final_minor ?? b.fare_estimate_minor) / 100).toFixed(2),
-    b.payment_method ?? '',
-    b.operator_name ?? '',
-    b.flagged ? 'Yes' : 'No',
-  ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-  const csv = [header.join(','), ...lines].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `air-bookings-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-// ── Saved views (localStorage) ────────────────────────────────────────────────
-
-const STORAGE_KEY = 'air_bookings_saved_views'
-
-interface SavedView {
-  name: string
-  filters: {
-    tab: TabKey
-    search: string
-    subtypeFilter: string
-    flaggedFilter: string
-    dateFrom: string
-    dateTo: string
-  }
-}
-
-function loadSavedViews(): SavedView[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') } catch { return [] }
-}
-function persistSavedViews(views: SavedView[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(views))
-}
-
-// ── Tab strip ─────────────────────────────────────────────────────────────────
+// ── Tab strip config ──────────────────────────────────────────────────────────
 
 type TabKey = 'all' | 'in_air' | 'quote_pending' | 'manifest_open' | 'cancelled' | 'refund'
 
@@ -115,7 +75,6 @@ const TABS: TabConfig[] = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AirBookingsPage() {
-  const fmtMinor = useFormatMoney()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   useIsTablet()
@@ -134,64 +93,14 @@ export default function AirBookingsPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
-  // Saved views
-  const [savedViews, setSavedViews] = useState<SavedView[]>(loadSavedViews)
-  const [showViewsMenu, setShowViewsMenu] = useState(false)
-  const [showSavePrompt, setShowSavePrompt] = useState(false)
-  const [newViewName, setNewViewName] = useState('')
-  const viewsMenuRef = useRef<HTMLDivElement>(null)
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!showViewsMenu) return
-    const handler = (e: MouseEvent) => {
-      if (viewsMenuRef.current && !viewsMenuRef.current.contains(e.target as Node)) {
-        setShowViewsMenu(false)
-        setShowSavePrompt(false)
-        setNewViewName('')
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showViewsMenu])
-
-  const applyView = (v: SavedView) => {
-    setActiveTab(v.filters.tab)
-    setSearch(v.filters.search)
-    setSubtypeFilter(v.filters.subtypeFilter)
-    setFlaggedFilter(v.filters.flaggedFilter)
-    setDateFrom(v.filters.dateFrom)
-    setDateTo(v.filters.dateTo)
-    setShowViewsMenu(false)
-    setShowSavePrompt(false)
-  }
-
-  const saveCurrentView = () => {
-    const name = newViewName.trim()
-    if (!name) return
-    const view: SavedView = {
-      name,
-      filters: { tab: activeTab, search, subtypeFilter, flaggedFilter, dateFrom, dateTo },
-    }
-    const updated = [...savedViews.filter(v => v.name !== name), view]
-    setSavedViews(updated)
-    persistSavedViews(updated)
-    setShowSavePrompt(false)
-    setNewViewName('')
-    setShowViewsMenu(false)
-  }
-
-  const deleteView = (name: string) => {
-    const updated = savedViews.filter(v => v.name !== name)
-    setSavedViews(updated)
-    persistSavedViews(updated)
-  }
-
   const loadData = useCallback(async (p = 1) => {
     setLoading(true)
     try {
       const tab = TABS.find(t => t.key === activeTab)
-      const params: Record<string, string | number | boolean | undefined> = { page: p, page_size: 50 }
+      const params: Record<string, string | number | boolean | undefined> = {
+        page: p,
+        page_size: 50,
+      }
       if (search.trim()) params.search = search.trim()
       if (tab?.statusFilter && activeTab !== 'all') params.status = tab.statusFilter
       if (subtypeFilter) params.service_subtype = subtypeFilter
@@ -213,7 +122,9 @@ export default function AirBookingsPage() {
     }
   }, [activeTab, search, subtypeFilter, flaggedFilter, dateFrom, dateTo])
 
-  useEffect(() => { loadData(1) }, [loadData])
+  useEffect(() => {
+    loadData(1)
+  }, [loadData])
 
   const tabCounts: Record<TabKey, number> = {
     all:           total,
@@ -237,16 +148,6 @@ export default function AirBookingsPage() {
 
   const grossRevFmt = stats ? fmtMinor(stats.gross_revenue_minor) : ''
 
-  // Active view name (if current filters match a saved view)
-  const activeViewName = savedViews.find(v =>
-    v.filters.tab === activeTab &&
-    v.filters.search === search &&
-    v.filters.subtypeFilter === subtypeFilter &&
-    v.filters.flaggedFilter === flaggedFilter &&
-    v.filters.dateFrom === dateFrom &&
-    v.filters.dateTo === dateTo
-  )?.name
-
   return (
     <Shell
       activeId="bookings-a"
@@ -255,7 +156,7 @@ export default function AirBookingsPage() {
       subtitle={stats ? `${total.toLocaleString('en-IN')} bookings · ${stats.in_air_count} in air · ${grossRevFmt} gross` : undefined}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm" onClick={() => exportCsv(items)}>
+          <button className="btn sm">
             <Icon name="download" size={13} />Export
           </button>
           <button className="btn sm accent" onClick={() => navigate('/bookings/air/new')}>
@@ -279,6 +180,7 @@ export default function AirBookingsPage() {
             const count = tabCounts[tab.key]
             const isLastInRow = isMobile ? (i % 2 === 1) : (i === TABS.length - 1)
             const isLastRow = isMobile ? i >= TABS.length - 2 : true
+
             return (
               <div
                 key={tab.key}
@@ -295,14 +197,23 @@ export default function AirBookingsPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12.5, color: isActive ? 'var(--ink)' : 'var(--ink-2)', fontWeight: isActive ? 500 : 400 }}>
-                    {tab.label}
-                  </span>
-                  {tab.tone && !isActive && <span className="dot" style={{ background: tab.tone, width: 6, height: 6 }} />}
+                  <span style={{
+                    fontSize: 12.5,
+                    color: isActive ? 'var(--ink)' : 'var(--ink-2)',
+                    fontWeight: isActive ? 500 : 400,
+                  }}>{tab.label}</span>
+                  {tab.tone && !isActive && (
+                    <span className="dot" style={{ background: tab.tone, width: 6, height: 6 }} />
+                  )}
                 </div>
-                <div style={{ marginTop: 4, fontFamily: 'var(--font-serif)', fontSize: isMobile ? 18 : 22, fontWeight: 400, letterSpacing: '-0.018em', color: 'var(--ink)' }}>
-                  {count.toLocaleString('en-IN')}
-                </div>
+                <div style={{
+                  marginTop: 4,
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: isMobile ? 18 : 22,
+                  fontWeight: 400,
+                  letterSpacing: '-0.018em',
+                  color: 'var(--ink)',
+                }}>{count.toLocaleString('en-IN')}</div>
               </div>
             )
           })}
@@ -358,14 +269,18 @@ export default function AirBookingsPage() {
             <>
               <div className="input" style={{ height: 32, padding: 0, paddingLeft: 10 }}>
                 <input
-                  type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
                   style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 12.5, width: 130 }}
                   title="Date from"
                 />
               </div>
               <div className="input" style={{ height: 32, padding: 0, paddingLeft: 10 }}>
                 <input
-                  type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
                   style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 12.5, width: 130 }}
                   title="Date to"
                 />
@@ -375,79 +290,10 @@ export default function AirBookingsPage() {
 
           <div style={{ flex: 1 }} />
 
-          {/* Saved views dropdown */}
-          <div ref={viewsMenuRef} style={{ position: 'relative' }}>
-            <button
-              className="btn sm ghost"
-              onClick={() => { setShowViewsMenu(v => !v); setShowSavePrompt(false); setNewViewName('') }}
-              style={activeViewName ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
-            >
-              <Icon name="filter" size={13} />
-              {activeViewName ?? 'Saved view'} <Icon name="chevDown" size={11} />
-            </button>
-
-            {showViewsMenu && (
-              <div style={{
-                position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 200,
-                background: 'var(--surface)', border: '1px solid var(--rule)',
-                borderRadius: 4, minWidth: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-              }}>
-                {savedViews.length === 0 && !showSavePrompt && (
-                  <div style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--ink-3)' }}>No saved views yet.</div>
-                )}
-                {savedViews.map(v => (
-                  <div
-                    key={v.name}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '9px 14px', cursor: 'pointer',
-                      background: v.name === activeViewName ? 'var(--accent-soft-2)' : 'transparent',
-                    }}
-                  >
-                    <span
-                      style={{ flex: 1, fontSize: 12.5, color: 'var(--ink)' }}
-                      onClick={() => applyView(v)}
-                    >
-                      {v.name}
-                    </span>
-                    <button
-                      className="btn ghost icon sm"
-                      onClick={e => { e.stopPropagation(); deleteView(v.name) }}
-                      title="Delete view"
-                      style={{ padding: '2px 4px' }}
-                    >
-                      <Icon name="close" size={11} />
-                    </button>
-                  </div>
-                ))}
-
-                <div style={{ borderTop: savedViews.length > 0 ? '1px solid var(--rule)' : 'none', padding: '9px 14px' }}>
-                  {!showSavePrompt ? (
-                    <button
-                      className="btn ghost sm"
-                      style={{ width: '100%', justifyContent: 'flex-start', fontSize: 12.5 }}
-                      onClick={() => setShowSavePrompt(true)}
-                    >
-                      <Icon name="plus" size={12} /> Save current filters…
-                    </button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        className="input"
-                        placeholder="View name"
-                        value={newViewName}
-                        onChange={e => setNewViewName(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveCurrentView(); if (e.key === 'Escape') { setShowSavePrompt(false); setNewViewName('') } }}
-                        autoFocus
-                        style={{ flex: 1, height: 28, padding: '0 8px', fontSize: 12.5 }}
-                      />
-                      <button className="btn sm accent" onClick={saveCurrentView} disabled={!newViewName.trim()}>Save</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <button className="btn sm ghost">
+            <Icon name="filter" size={13} />
+            Saved view <Icon name="chevDown" size={11} />
+          </button>
         </div>
 
         {/* Table */}
@@ -479,10 +325,16 @@ export default function AirBookingsPage() {
                       </td>
                     </tr>
                   ) : items.map(b => (
-                    <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/bookings/air/${b.id}`)}>
+                    <tr
+                      key={b.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/bookings/air/${b.id}`)}
+                    >
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{b.booking_ref}</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
+                            {b.booking_ref}
+                          </span>
                           {b.flagged && (
                             <span title={b.flag_reason ?? 'Flagged'}>
                               <Icon name="flag" size={12} stroke={1.6} style={{ color: 'var(--danger)' }} />
@@ -503,18 +355,31 @@ export default function AirBookingsPage() {
                           <span style={{ color: 'var(--ink-2)' }}>{b.route_to}</span>
                         </div>
                       </td>
-                      {!isMobile && <td style={{ fontSize: 13, color: 'var(--ink-2)' }}>{b.operator_name ?? '—'}</td>}
+                      {!isMobile && (
+                        <td style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+                          {b.operator_name ?? '—'}
+                        </td>
+                      )}
                       <td className="num">{b.pax_count}</td>
                       <td>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink)' }}>{fmtEtd(b.etd)}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink)' }}>
+                          {fmtEtd(b.etd)}
+                        </div>
                       </td>
                       <td>{statusBadge(b.status)}</td>
                       <td className="num" style={{ textAlign: 'right', color: 'var(--ink)', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>
-                        {fmtFare(b.fare_final_minor, b.fare_estimate_minor, fmtMinor)}
+                        {fmtFare(b.fare_final_minor, b.fare_estimate_minor)}
                       </td>
-                      {!isMobile && <td className="t-meta" style={{ color: 'var(--ink-2)' }}>{b.payment_method ?? '—'}</td>}
+                      {!isMobile && (
+                        <td className="t-meta" style={{ color: 'var(--ink-2)' }}>
+                          {b.payment_method ?? '—'}
+                        </td>
+                      )}
                       <td onClick={e => e.stopPropagation()}>
-                        <button className="btn ghost icon sm" onClick={() => navigate(`/bookings/air/${b.id}`)}>
+                        <button
+                          className="btn ghost icon sm"
+                          onClick={() => navigate(`/bookings/air/${b.id}`)}
+                        >
                           <Icon name="moreVert" size={14} />
                         </button>
                       </td>
@@ -528,35 +393,58 @@ export default function AirBookingsPage() {
           {/* Footer + pagination */}
           <div style={{
             padding: '12px 16px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            borderTop: '1px solid var(--rule)', background: 'var(--surface-2)',
-            flexWrap: 'wrap', gap: 8,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderTop: '1px solid var(--rule)',
+            background: 'var(--surface-2)',
+            flexWrap: 'wrap',
+            gap: 8,
           }}>
             <div className="t-meta">
               Showing{' '}
-              <span style={{ color: 'var(--ink-2)' }}>{items.length === 0 ? 0 : (page - 1) * 50 + 1}–{Math.min(page * 50, total)}</span>
-              {' '}of{' '}
+              <span style={{ color: 'var(--ink-2)' }}>
+                {items.length === 0 ? 0 : (page - 1) * 50 + 1}–{Math.min(page * 50, total)}
+              </span>{' '}
+              of{' '}
               <span style={{ color: 'var(--ink-2)' }}>{total.toLocaleString('en-IN')}</span>
-              {' '}bookings
+              {' '}bookings · All air bookings respect operator pause state · audit-logged
             </div>
             {pages > 1 && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button className="btn ghost sm" disabled={page <= 1} onClick={() => loadData(page - 1)} style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                <button
+                  className="btn ghost sm"
+                  disabled={page <= 1}
+                  onClick={() => loadData(page - 1)}
+                  style={{ opacity: page <= 1 ? 0.4 : 1 }}
+                >
                   <Icon name="chevLeft" size={13} />
                 </button>
                 {pageNumbers.map((p, i) => (
                   p === '...'
                     ? <span key={`ellipsis-${i}`} style={{ width: 28, textAlign: 'center', fontSize: 12, color: 'var(--ink-3)' }}>…</span>
                     : (
-                      <span key={p} onClick={() => loadData(p)} style={{
-                        width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        borderRadius: 3, background: p === page ? 'var(--ink)' : 'transparent',
-                        color: p === page ? 'var(--surface)' : 'var(--ink-3)',
-                        fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer',
-                      }}>{p}</span>
+                      <span
+                        key={p}
+                        onClick={() => loadData(p)}
+                        style={{
+                          width: 28, height: 28,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          borderRadius: 3,
+                          background: p === page ? 'var(--ink)' : 'transparent',
+                          color: p === page ? 'var(--surface)' : 'var(--ink-3)',
+                          fontFamily: 'var(--font-mono)', fontSize: 12,
+                          cursor: 'pointer',
+                        }}
+                      >{p}</span>
                     )
                 ))}
-                <button className="btn ghost sm" disabled={page >= pages} onClick={() => loadData(page + 1)} style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                <button
+                  className="btn ghost sm"
+                  disabled={page >= pages}
+                  onClick={() => loadData(page + 1)}
+                  style={{ opacity: page >= pages ? 0.4 : 1 }}
+                >
                   <Icon name="chevRight" size={13} />
                 </button>
               </div>

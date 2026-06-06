@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react'
-import { parseApiError } from '../../hooks/useApiError'
-import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
@@ -12,13 +10,10 @@ import type {
   CancelPreviewResponse,
   ManifestResponse,
 } from '../../services/airBookingsService'
-import { operatorService } from '../../services/operatorService'
-import type { Operator, Aircraft } from '../../services/operatorService'
-import { settingsService } from '../../services/settingsService'
-import { useFormatMoney, formatDateTimeCompact } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const fmtMinor = (v: number) => `₹${(v / 100).toLocaleString('en-IN')}`
 
 function statusBadge(s: AirBookingStatus) {
   const map: Record<string, string> = {
@@ -44,17 +39,16 @@ function statusBadge(s: AirBookingStatus) {
 }
 
 function fmtDateTime(iso: string | null): string {
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (!iso) return '—'
-  try { return formatDateTimeCompact(iso) } catch { return iso }
+  try {
+    return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
+  } catch { return iso }
 }
 
 // ── Status advance config ─────────────────────────────────────────────────────
 
 const STATUS_TRANSITIONS: Record<string, string> = {
   'Requested': 'Confirmed',
-  'Quote shared': 'Confirmed',
   'Confirmed': 'Manifest locked',
   'Manifest locked': 'Boarding',
   'Boarding': 'Departed',
@@ -82,28 +76,14 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isForbidden, setIsForbidden] = useState(false)
-  const [noShowWaitMin, setNoShowWaitMin] = useState(5)
-  const [baseCancelFeePct, setBaseCancelFeePct] = useState(10)
 
-  useEffect(() => {
-    settingsService.getSettings().then(s => {
-      const dest = s.refund_destination_default as 'original' | 'wallet' | 'wire'
-      if (dest === 'original' || dest === 'wallet' || dest === 'wire') setRefundDest(dest)
-      setNoShowWaitMin(s.no_show_wait_minutes ?? 5)
-      setBaseCancelFeePct(s.cancellation_fee_pct ?? 10)
-    }).catch(() => {})
-  }, [])
-
-  // Tiers are derived from the platform base cancellation fee pct (same formula as backend)
   const CANCEL_TIERS = [
-    { l: '> 48h before',           pct: 0 },
-    { l: '24–48h before',          pct: Math.round(baseCancelFeePct * 0.25) },
-    { l: '4–24h before',           pct: Math.round(baseCancelFeePct * 0.5)  },
-    { l: '< 4h before / no-show',  pct: Math.round(baseCancelFeePct)        },
+    { l: '> 48h before', pct: 0 },
+    { l: '24–48h before', pct: 25 },
+    { l: '4–24h before', pct: 50 },
+    { l: '< 4h before / no-show', pct: 100 },
   ]
 
-  const isNoShow = reason.toLowerCase().includes('no-show')
   const currentTierPct = preview?.fee_pct ?? null
 
   async function handleSubmit() {
@@ -253,19 +233,6 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
                   </div>
                 </div>
 
-                {/* No-show policy banner */}
-                {isNoShow && (
-                  <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--warn-soft)', border: '1px solid color-mix(in oklab, var(--warn) 30%, var(--rule-strong))', borderRadius: 3, fontSize: 12.5 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--warn)', fontWeight: 500, marginBottom: 3 }}>
-                      <Icon name="clock" size={13} /> No-show policy
-                    </div>
-                    <div style={{ color: 'var(--ink-2)', lineHeight: 1.5 }}>
-                      Driver must wait <strong>{noShowWaitMin} min</strong> before marking no-show.
-                      A <strong>{Math.round(baseCancelFeePct)}%</strong> fee applies.
-                    </div>
-                  </div>
-                )}
-
                 <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 3 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     <Icon name="shield" size={14} style={{ color: 'var(--accent)', marginTop: 2 }} />
@@ -396,44 +363,8 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [operators, setOperators] = useState<Operator[]>([])
-  const [aircraft, setAircraft] = useState<Aircraft[]>([])
-  const [loadingOps, setLoadingOps] = useState(true)
-  const [loadingAc, setLoadingAc] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoadError(null)
-    operatorService.listOperators({ page_size: 100 })
-      .then(r => setOperators(r.items ?? []))
-      .catch((e: unknown) => {
-        const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-        let msg = 'Failed to load operators'
-        if (typeof detail === 'string') {
-          msg = detail
-        } else if (Array.isArray(detail) && detail.length > 0) {
-          msg = (detail as Array<{ msg?: string; loc?: unknown[] }>)
-            .map(d => d.msg ?? JSON.stringify(d))
-            .join(', ')
-        } else if ((e as { message?: string })?.message) {
-          msg = (e as { message: string }).message
-        }
-        setLoadError(msg)
-      })
-      .finally(() => setLoadingOps(false))
-  }, [])
-
-  useEffect(() => {
-    if (!operatorId) { setAircraft([]); setAircraftId(''); return }
-    setLoadingAc(true)
-    operatorService.listAircraft({ operator_id: operatorId, page_size: 100 })
-      .then(r => setAircraft(r.items ?? []))
-      .catch(() => setAircraft([]))
-      .finally(() => setLoadingAc(false))
-  }, [operatorId])
-
   async function handleSubmit() {
-    if (!operatorId || !aircraftId) { setError('Operator and Aircraft are required'); return }
+    if (!operatorId || !aircraftId) { setError('Operator ID and Aircraft ID are required'); return }
     setSubmitting(true)
     setError(null)
     try {
@@ -446,8 +377,6 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
     }
   }
 
-  const selStyle = { flex: 1, border: 'none', outline: 'none', background: 'transparent', height: 36, fontSize: 12.5, cursor: 'pointer' }
-
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(15,13,10,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--rule-strong)', width: '100%', maxWidth: 480 }}>
@@ -456,34 +385,13 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
           <button className="btn ghost icon sm" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {loadError && (
-            <div style={{ padding: '8px 12px', background: 'var(--danger-soft)', border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))', borderRadius: 3, fontSize: 12.5, color: 'var(--danger)' }}>
-              {loadError}
-            </div>
-          )}
           <div className="field">
-            <label className="field-label">Operator *</label>
-            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
-              <select value={operatorId} onChange={e => { setOperatorId(e.target.value); setAircraftId('') }} style={selStyle} disabled={loadingOps}>
-                <option value="">
-                  {loadingOps ? 'Loading operators…' : operators.length === 0 ? 'No operators found' : 'Select operator…'}
-                </option>
-                {operators.map(o => (
-                  <option key={o.id} value={o.id}>{o.name}{o.hq_city ? ` · ${o.hq_city}` : ''} · {o.status}</option>
-                ))}
-              </select>
-            </div>
+            <label className="field-label">Operator ID (UUID)</label>
+            <div className="input"><input value={operatorId} onChange={e => setOperatorId(e.target.value)} placeholder="Operator UUID…" /></div>
           </div>
           <div className="field">
-            <label className="field-label">Aircraft *</label>
-            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
-              <select value={aircraftId} onChange={e => setAircraftId(e.target.value)} style={selStyle} disabled={!operatorId || loadingAc}>
-                <option value="">{!operatorId ? 'Select operator first' : loadingAc ? 'Loading aircraft…' : aircraft.length === 0 ? 'No ready aircraft' : 'Select aircraft…'}</option>
-                {aircraft.map(a => (
-                  <option key={a.id} value={a.id}>{a.registration_mark} · {a.seat_capacity} seats{a.range_nm ? ` · ${a.range_nm} nm` : ''}</option>
-                ))}
-              </select>
-            </div>
+            <label className="field-label">Aircraft ID (UUID)</label>
+            <div className="input"><input value={aircraftId} onChange={e => setAircraftId(e.target.value)} placeholder="Aircraft UUID…" /></div>
           </div>
           <div className="field">
             <label className="field-label">Note (optional)</label>
@@ -493,7 +401,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--rule)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn accent" disabled={submitting || !operatorId || !aircraftId} onClick={handleSubmit}>
+          <button className="btn accent" disabled={submitting} onClick={handleSubmit}>
             {submitting ? 'Assigning…' : 'Assign Operator'}
           </button>
         </div>
@@ -507,7 +415,6 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
 type ActiveTab = 'overview' | 'manifest' | 'notes' | 'timeline'
 
 export default function AirBookingDetailPage() {
-  const fmtMinor = useFormatMoney()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -528,12 +435,6 @@ export default function AirBookingDetailPage() {
 
   const [advancingStatus, setAdvancingStatus] = useState(false)
   const [togglingFlag, setTogglingFlag] = useState(false)
-
-  const [showPassengerForm, setShowPassengerForm] = useState(false)
-  const [savingManifest, setSavingManifest] = useState(false)
-  type PaxDraft = { id?: string; name: string; age: string; id_number: string; body_weight_kg: string; baggage_weight_kg: string; special_notes: string; is_minor: boolean }
-  const emptyPax = (): PaxDraft => ({ name: '', age: '', id_number: '', body_weight_kg: '', baggage_weight_kg: '', special_notes: '', is_minor: false })
-  const [paxDrafts, setPaxDrafts] = useState<PaxDraft[]>([])
 
   const bookingId = id ?? ''
 
@@ -614,43 +515,6 @@ export default function AirBookingDetailPage() {
       setManifest(m)
       await loadBooking()
     } catch { /* ignore */ }
-  }
-
-  const openPassengerForm = () => {
-    const existing = (manifest?.passengers ?? []).map(p => ({
-      id: p.id,
-      name: p.name,
-      age: p.age != null ? String(p.age) : '',
-      id_number: p.id_number ?? '',
-      body_weight_kg: String(p.body_weight_kg),
-      baggage_weight_kg: String(p.baggage_weight_kg),
-      special_notes: p.special_notes ?? '',
-      is_minor: p.is_minor,
-    }))
-    setPaxDrafts(existing.length > 0 ? existing : [emptyPax()])
-    setShowPassengerForm(true)
-  }
-
-  const handleSaveManifest = async () => {
-    setSavingManifest(true)
-    try {
-      const passengers = paxDrafts
-        .filter(p => p.name.trim())
-        .map(p => ({
-          id: p.id || undefined,
-          name: p.name.trim(),
-          age: p.age ? parseInt(p.age) : undefined,
-          id_number: p.id_number.trim() || undefined,
-          body_weight_kg: parseFloat(p.body_weight_kg) || 0,
-          baggage_weight_kg: parseFloat(p.baggage_weight_kg) || 0,
-          special_notes: p.special_notes.trim() || undefined,
-          is_minor: p.is_minor,
-        }))
-      const m = await airBookingsService.updateManifest(bookingId, { passengers })
-      setManifest(m)
-      setShowPassengerForm(false)
-    } catch { /* ignore */ }
-    setSavingManifest(false)
   }
 
   if (loading) {
@@ -751,7 +615,6 @@ export default function AirBookingDetailPage() {
 
         {activeTab === 'manifest' && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
-            {/* Header */}
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div className="t-label">{manifest?.is_locked ? 'Manifest · locked' : 'Manifest · open'}</div>
@@ -760,107 +623,46 @@ export default function AirBookingDetailPage() {
                 </h3>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                {!manifest?.is_locked && !showPassengerForm && (
-                  <button className="btn sm" onClick={openPassengerForm}>
-                    <Icon name="plus" size={13} /> {(manifest?.passengers.length ?? 0) > 0 ? 'Edit passengers' : 'Add passengers'}
-                  </button>
-                )}
-                {!manifest?.is_locked && (manifest?.passengers.length ?? 0) > 0 && (
+                {!manifest?.is_locked && (
                   <button className="btn sm accent" onClick={handleLockManifest}>Lock manifest</button>
                 )}
               </div>
             </div>
 
-            {/* Weight & balance bar */}
-            {manifest && (manifest.passengers.length > 0 || manifest.mtow_kg) && (
+            {/* Weight bar */}
+            {manifest && (
               <div style={{ padding: '16px 18px 14px', borderBottom: '1px solid var(--rule)', background: 'var(--surface-2)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
                   <span className="t-label" style={{ padding: 0 }}>Weight & balance · MTOW</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
-                    {booking.aircraft_model ?? '—'} · {booking.aircraft_registration ?? '—'} · max gross {manifest.mtow_kg?.toLocaleString() ?? '—'} kg
+                    {booking.aircraft_model ?? '—'} · {booking.aircraft_registration ?? '—'} · max gross {manifest.mtow_kg.toLocaleString()} kg
                   </span>
                   <span style={{ fontFamily: 'var(--font-serif)', fontSize: 22, color: 'var(--ink)' }}>
-                    {manifest.total_weight_kg?.toLocaleString() ?? '—'} / {manifest.mtow_kg?.toLocaleString() ?? '—'} kg
+                    {manifest.total_weight_kg.toLocaleString()} / {manifest.mtow_kg.toLocaleString()} kg
                   </span>
-                  {manifest.is_within_limits === true && (
-                    <span className="badge ok"><span className="dot ok" />{manifest.utilization_pct?.toFixed(1) ?? '—'}% · within limits</span>
-                  )}
-                  {manifest.is_within_limits === false && (
-                    <span className="badge danger"><span className="dot danger" />{manifest.utilization_pct?.toFixed(1) ?? '—'}% · OVER LIMIT</span>
-                  )}
-                  {manifest.is_within_limits === null && manifest.passengers.length > 0 && (
-                    <span className="badge info"><span className="dot info" />no MTOW data</span>
-                  )}
+                  <span className={`badge ${manifest.is_within_limits ? 'ok' : 'danger'}`}>
+                    <span className={`dot ${manifest.is_within_limits ? 'ok' : 'danger'}`} />
+                    {manifest.utilization_pct.toFixed(1)}% · {manifest.is_within_limits ? 'within limits' : 'OVER LIMIT'}
+                  </span>
                 </div>
-                {manifest.mtow_kg && (
-                  <div style={{ display: 'flex', height: 18, borderRadius: 2, overflow: 'hidden', border: '1px solid var(--rule-strong)' }}>
-                    {[
-                      { l: 'Empty', v: manifest.aircraft_empty_weight_kg ?? 0, c: 'var(--ink-2)' },
-                      { l: 'Fuel', v: manifest.fuel_weight_kg ?? 0, c: 'var(--info)' },
-                      { l: 'Pax', v: manifest.total_pax_weight_kg ?? 0, c: 'var(--accent)' },
-                      { l: 'Bags', v: manifest.total_baggage_weight_kg ?? 0, c: 'var(--warn)' },
-                      { l: 'Margin', v: Math.max(0, (manifest.mtow_kg ?? 0) - (manifest.total_weight_kg ?? 0)), c: 'var(--surface-sunk)' },
-                    ].map((s, idx) => (
-                      <div
-                        key={s.l}
-                        style={{ width: (s.v / manifest.mtow_kg!) * 100 + '%', background: s.c, borderRight: idx < 4 ? '1px solid var(--surface)' : 'none' }}
-                        title={`${s.l}: ${s.v} kg`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Passenger edit form */}
-            {showPassengerForm && !manifest?.is_locked && (
-              <div style={{ padding: '18px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div className="t-label">Edit passengers</div>
-                {paxDrafts.map((p, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '2fr 1fr 1.5fr 1fr 1fr 1.5fr auto', gap: 8, alignItems: 'end', padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--rule)' }}>
-                    <div className="field" style={{ margin: 0 }}>
-                      <label className="field-label">Name *</label>
-                      <input className="input" value={p.name} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], name: e.target.value }; setPaxDrafts(d) }} placeholder="Full name" />
-                    </div>
-                    <div className="field" style={{ margin: 0 }}>
-                      <label className="field-label">Age</label>
-                      <input className="input" type="number" value={p.age} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], age: e.target.value }; setPaxDrafts(d) }} placeholder="—" />
-                    </div>
-                    <div className="field" style={{ margin: 0 }}>
-                      <label className="field-label">ID / Passport</label>
-                      <input className="input" value={p.id_number} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], id_number: e.target.value }; setPaxDrafts(d) }} placeholder="—" />
-                    </div>
-                    <div className="field" style={{ margin: 0 }}>
-                      <label className="field-label">Body wt (kg) *</label>
-                      <input className="input" type="number" value={p.body_weight_kg} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], body_weight_kg: e.target.value }; setPaxDrafts(d) }} placeholder="70" />
-                    </div>
-                    <div className="field" style={{ margin: 0 }}>
-                      <label className="field-label">Baggage (kg)</label>
-                      <input className="input" type="number" value={p.baggage_weight_kg} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], baggage_weight_kg: e.target.value }; setPaxDrafts(d) }} placeholder="0" />
-                    </div>
-                    <div className="field" style={{ margin: 0 }}>
-                      <label className="field-label">Notes</label>
-                      <input className="input" value={p.special_notes} onChange={e => { const d = [...paxDrafts]; d[i] = { ...d[i], special_notes: e.target.value }; setPaxDrafts(d) }} placeholder="—" />
-                    </div>
-                    <button className="btn sm ghost" style={{ alignSelf: 'flex-end' }} onClick={() => setPaxDrafts(paxDrafts.filter((_, j) => j !== i))}>
-                      <Icon name="close" size={12} />
-                    </button>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn sm ghost" onClick={() => setPaxDrafts([...paxDrafts, emptyPax()])}>
-                    <Icon name="plus" size={13} /> Add row
-                  </button>
-                  <span style={{ flex: 1 }} />
-                  <button className="btn sm" onClick={() => setShowPassengerForm(false)}>Cancel</button>
-                  <button className="btn sm accent" disabled={savingManifest || paxDrafts.filter(p => p.name.trim()).length === 0} onClick={handleSaveManifest}>
-                    {savingManifest ? 'Saving…' : 'Save manifest'}
-                  </button>
+                <div style={{ display: 'flex', height: 18, borderRadius: 2, overflow: 'hidden', border: '1px solid var(--rule-strong)' }}>
+                  {[
+                    { l: 'Empty', v: manifest.aircraft_empty_weight_kg, c: 'var(--ink-2)' },
+                    { l: 'Fuel', v: manifest.fuel_weight_kg, c: 'var(--info)' },
+                    { l: 'Pax', v: manifest.total_pax_weight_kg, c: 'var(--accent)' },
+                    { l: 'Bags', v: manifest.total_baggage_weight_kg, c: 'var(--warn)' },
+                    { l: 'Margin', v: Math.max(0, manifest.mtow_kg - manifest.total_weight_kg), c: 'var(--surface-sunk)' },
+                  ].map((s, idx) => (
+                    <div
+                      key={s.l}
+                      style={{ width: (s.v / manifest.mtow_kg) * 100 + '%', background: s.c, borderRight: idx < 4 ? '1px solid var(--surface)' : 'none' }}
+                      title={`${s.l}: ${s.v} kg`}
+                    />
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Passenger table */}
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="tbl">
                 <thead>
@@ -894,18 +696,9 @@ export default function AirBookingDetailPage() {
                       <td className="t-meta" style={{ color: 'var(--ink-2)' }}>{p.special_notes ?? '—'}</td>
                     </tr>
                   ))}
-                  {(manifest?.passengers.length ?? 0) === 0 && !showPassengerForm && (
+                  {(manifest?.passengers.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={7}>
-                        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ink-3)' }}>
-                          <div style={{ fontSize: 13, marginBottom: 10 }}>No passengers in manifest yet.</div>
-                          {!manifest?.is_locked && (
-                            <button className="btn sm" onClick={openPassengerForm}>
-                              <Icon name="plus" size={13} /> Add passengers
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--ink-3)', padding: '24px 0' }}>No passengers in manifest.</td>
                     </tr>
                   )}
                 </tbody>
