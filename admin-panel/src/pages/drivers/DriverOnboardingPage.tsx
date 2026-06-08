@@ -10,23 +10,16 @@ import SearchableSelect from '../../components/ui/SearchableSelect'
 import type { SelectOption } from '../../components/ui/SearchableSelect'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { driverService } from '../../services/driverService'
-import type { OnboardingDriverItem, DocType } from '../../services/driverService'
+import type { OnboardingDriverItem } from '../../services/driverService'
 import { catalogService } from '../../services/catalogService'
+import { kycService } from '../../services/kycService'
+import type { DocTypeItem } from '../../services/kycService'
 import { formatDateTimeCompact } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getInitials(name: string): string {
   return name.split(' ').map(p => p[0] ?? '').join('').slice(0, 2).toUpperCase()
-}
-
-const DOC_LABELS: Record<DocType, string> = {
-  pan: 'PAN',
-  license: 'LIC',
-  rc: 'RC',
-  insurance: 'INS',
-  permit: 'PER',
-  photo: 'PHO',
 }
 
 const STAGES: string[] = ['signup', 'docs', 'review', 'background', 'approved']
@@ -82,12 +75,16 @@ interface QueueCardProps {
   item: OnboardingDriverItem
   index: number
   isMobile: boolean
+  docTypes: DocTypeItem[]
+  docShortMap: Record<string, string>
+  canReviewKyc: boolean
+  canApproveDriver: boolean
   onReview: (item: OnboardingDriverItem) => void
   onReject: (item: OnboardingDriverItem) => void
   onReupload: (item: OnboardingDriverItem) => void
 }
 
-function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: QueueCardProps) {
+function QueueCard({ item, index, isMobile, docTypes, docShortMap, canReviewKyc, canApproveDriver, onReview, onReject, onReupload }: QueueCardProps) {
   const navigate = useNavigate()
   const curIdx = STAGES.indexOf(item.stage)
 
@@ -110,7 +107,8 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
     return 'danger'
   }
 
-  const docMap: Record<DocType, string> = { pan: 'pending', license: 'pending', rc: 'pending', insurance: 'pending', permit: 'pending', photo: 'pending' }
+  const docMap: Record<string, string> = {}
+  docTypes.forEach(t => { docMap[t.key] = 'pending' })
   item.documents.forEach(d => { docMap[d.doc_type] = d.status })
 
   const slaBadgeClass = item.sla_status === 'danger' ? 'danger' : item.sla_status === 'warn' ? 'warn' : 'ok'
@@ -144,7 +142,7 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
           </span>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {(Object.keys(docMap) as DocType[]).map(k => (
+          {Object.keys(docMap).map(k => (
             <span
               key={k}
               style={{
@@ -158,14 +156,14 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
               }}
             >
               <span className={`dot ${docDot(docMap[k])}`} style={{ width: 5, height: 5, boxShadow: 'none' }} />
-              {DOC_LABELS[k]}
+              {docShortMap[k] ?? k.toUpperCase().slice(0, 3)}
             </span>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn accent sm" style={{ flex: 1 }} onClick={() => onReview(item)} style={{ display: canReviewKyc ? undefined : 'none' }}>Review →</button>
+          <button className="btn accent sm" style={{ flex: 1, display: canReviewKyc ? undefined : 'none' }} onClick={() => onReview(item)}>Review →</button>
           <button className="btn sm" style={{ flex: 1 }} onClick={() => onReupload(item)}>Re-upload</button>
-          <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => onReject(item)} style={{ display: canApproveDriver ? undefined : 'none' }}>Reject</button>
+          <button className="btn sm ghost" style={{ color: 'var(--danger)', display: canApproveDriver ? undefined : 'none' }} onClick={() => onReject(item)}>Reject</button>
         </div>
       </div>
     )
@@ -207,7 +205,7 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
       <div>
         <div className="t-label" style={{ padding: 0, marginBottom: 8 }}>Documents · {item.doc_progress}%</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {(Object.keys(docMap) as DocType[]).map(k => (
+          {Object.keys(docMap).map(k => (
             <span
               key={k}
               style={{
@@ -221,7 +219,7 @@ function QueueCard({ item, index, isMobile, onReview, onReject, onReupload }: Qu
               }}
             >
               <span className={`dot ${docDot(docMap[k])}`} style={{ width: 5, height: 5, boxShadow: 'none' }} />
-              {DOC_LABELS[k]}
+              {docShortMap[k] ?? k.toUpperCase().slice(0, 3)}
             </span>
           ))}
         </div>
@@ -307,6 +305,8 @@ export default function DriverOnboardingPage() {
 
   const [pendingReject, setPendingReject] = useState<PendingReject | null>(null)
   const [reuploadConfirm, setReuploadConfirm] = useState<OnboardingDriverItem | null>(null)
+  const [docTypes, setDocTypes]         = useState<DocTypeItem[]>([])
+  const [docShortMap, setDocShortMap]   = useState<Record<string, string>>({})
 
   // ── Manual onboard modal ──
   const [showOnboardModal, setShowOnboardModal] = useState(false)
@@ -368,7 +368,15 @@ export default function DriverOnboardingPage() {
     }
   }
 
-  useEffect(() => { loadQueue() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadQueue()
+    kycService.getDocTypes().then(types => {
+      setDocTypes(types.driver)
+      const shortMap: Record<string, string> = {}
+      types.driver.forEach(t => { shortMap[t.key] = t.key.toUpperCase().slice(0, 3) })
+      setDocShortMap(shortMap)
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = setTimeout(() => loadQueue(), 350)
@@ -537,6 +545,10 @@ export default function DriverOnboardingPage() {
               item={item}
               index={i}
               isMobile={isMobile}
+              docTypes={docTypes}
+              docShortMap={docShortMap}
+              canReviewKyc={canReviewKyc}
+              canApproveDriver={canApproveDriver}
               onReview={handleReview}
               onReject={itm => setPendingReject({ item: itm })}
               onReupload={itm => setReuploadConfirm(itm)}

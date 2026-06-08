@@ -73,7 +73,7 @@ export default function OperatorDirectoryPage() {
   const handleSearch = (e: React.FormEvent) => { e.preventDefault(); load() }
 
   const activeCount = operators.filter(o => o.status === 'active').length
-  const totalFleet  = 0 // would need fleet_count summed from details
+  const totalFleet  = operators.reduce((sum, o) => sum + (o.fleet_count ?? 0), 0)
 
   const handleCreate = async () => {
     if (!form.name.trim()) { setCreateError('Name is required'); return }
@@ -149,7 +149,7 @@ export default function OperatorDirectoryPage() {
             { l: 'Active',           v: String(activeCount),                             tone: 'var(--accent)' },
             { l: 'Paused',           v: String(operators.filter(o => o.status === 'paused').length),       tone: 'var(--warn)' },
             { l: 'Pending / Review', v: String(operators.filter(o => o.status === 'pending' || o.status === 'review').length), tone: 'var(--info)' },
-            { l: 'Fleet size',       v: String(totalFleet || '—'),                       tone: 'var(--ink-2)' },
+            { l: 'Fleet size',       v: totalFleet > 0 ? String(totalFleet) : '—',       tone: 'var(--ink-2)' },
           ].map((s, i) => (
             <div key={s.l} style={{
               padding: isMobile ? '12px 14px' : '16px 20px',

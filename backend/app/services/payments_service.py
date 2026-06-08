@@ -71,6 +71,7 @@ async def list_transactions(
     service: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    customer_id: str | None = None,
 ) -> PaymentListResponse:
     q = select(Payment)
 
@@ -111,6 +112,8 @@ async def list_transactions(
             q = q.where(Payment.created_at <= datetime.fromisoformat(date_to))
         except ValueError:
             pass
+    if customer_id:
+        q = q.where(Payment.customer_id == customer_id)
 
     # total count (filtered)
     count_q = select(func.count()).select_from(q.subquery())

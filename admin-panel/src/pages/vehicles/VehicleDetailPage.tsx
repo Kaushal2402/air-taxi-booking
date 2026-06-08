@@ -12,6 +12,8 @@ import { catalogService } from '../../services/catalogService'
 import type { VehicleClass } from '../../services/catalogService'
 import { driverService } from '../../services/driverService'
 import type { Driver } from '../../services/driverService'
+import { auditService } from '../../services/auditService'
+import type { AuditEventSummary } from '../../services/auditService'
 import { formatDate, useCurrencySymbol } from '../../lib/utils'
 import { kycService } from '../../services/kycService'
 import type { DocTypeItem } from '../../services/kycService'
@@ -23,8 +25,6 @@ const STATIC_BASE = import.meta.env.VITE_API_BASE_URL
   : 'http://localhost:8001'
 
 function daysUntil(isoDate: string | null): number | null {
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (!isoDate) return null
   const diff = new Date(isoDate).getTime() - Date.now()
   return Math.ceil(diff / (24 * 3600 * 1000))
@@ -990,9 +990,16 @@ export default function VehicleDetailPage() {
   const isTablet  = useIsTablet()
   const sym = useCurrencySymbol()
 
-  const [vehicle, setVehicle]   = useState<VehicleDetail | null>(null)
-  const [loading, setLoading]   = useState(true)
+  const [vehicle, setVehicle]     = useState<VehicleDetail | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [isForbidden, setIsForbidden] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>('documents')
+  const handleTabChange = (key: TabKey) => {
+    setActiveTab(key)
+    if ((key === 'driver_history' || key === 'audit') && vehicle) {
+      loadAuditEvents(vehicle.id)
+    }
+  }
 
   const [vehicleClasses, setVehicleClasses] = useState<VehicleClass[]>([])
   const [apiError, setApiError]   = useState('')
@@ -1013,13 +1020,32 @@ export default function VehicleDetailPage() {
   const vehicleImgRef = useRef<HTMLInputElement | null>(null)
   const [uploadingVehicleImg, setUploadingVehicleImg] = useState(false)
 
+  // Audit / history tabs
+  const [auditEvents, setAuditEvents]         = useState<AuditEventSummary[]>([])
+  const [auditLoading, setAuditLoading]       = useState(false)
+  const [auditLoaded, setAuditLoaded]         = useState(false)
+
+  const loadAuditEvents = async (vehicleId: string) => {
+    if (auditLoaded) return
+    setAuditLoading(true)
+    try {
+      const res = await auditService.listEvents({ target: `vehicle:${vehicleId}`, per_page: 100, time_window: 'all' })
+      setAuditEvents(res.items)
+      setAuditLoaded(true)
+    } catch { /* ignore — audit may not be accessible */ }
+    finally { setAuditLoading(false) }
+  }
+
   const loadVehicle = async () => {
     if (!id) return
     setLoading(true)
     try {
       const data = await vehicleService.getVehicle(id)
       setVehicle(data)
-    } catch { /* ignore */ }
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number } }
+      if (err?.response?.status === 403) setIsForbidden(true)
+    }
     finally { setLoading(false) }
   }
 
@@ -1175,6 +1201,8 @@ export default function VehicleDetailPage() {
     }
     setUploadingVehicleImg(false)
   }
+
+  if (isForbidden) return <AccessDeniedPage message="You don't have permission to access this page." />
 
   if (loading) {
     return (
@@ -1371,8 +1399,8 @@ export default function VehicleDetailPage() {
           }}>
             {[
               { k: 'Odometer',      v: vehicle.odometer_km.toLocaleString('en-IN') + ' km', m: 'Total distance',        c: 'var(--ink)' },
-              { k: 'Trips logged',  v: '0',                                                   m: 'Stub — trips module',  c: 'var(--ink-2)' },
-              { k: 'Gross fare',    v: `${sym}0`,                                              m: 'Stub — trips module',  c: 'var(--accent)' },
+              { k: 'Trips logged',  v: '0',      m: 'Links once Bookings module ships', c: 'var(--ink-2)' },
+              { k: 'Gross fare',    v: `${sym}0`, m: 'Links once Payouts module ships',  c: 'var(--accent)' },
               { k: 'Last service',  v: lastService ? formatDate(lastService.completed_at) : '—', m: lastService?.service_center ?? 'No record', c: 'var(--ink-2)' },
               { k: 'Next service',  v: pendingMaintenances[0]?.milestone_label ?? '—',        m: pendingMaintenances[0]?.service_center ?? (pendingMaintenances[0]?.scheduled_date ? formatDate(pendingMaintenances[0].scheduled_date) : '—'), c: 'var(--ink-2)' },
             ].map(({ k, v, m, c }, i) => (
@@ -1403,7 +1431,7 @@ export default function VehicleDetailPage() {
             return (
               <div
                 key={key}
-                onClick={() => setActiveTab(key)}
+                onClick={() => handleTabChange(key as TabKey)}
                 style={{
                   padding: isMobile ? '12px 14px' : '14px 18px',
                   fontSize: 13,
@@ -1672,11 +1700,196 @@ export default function VehicleDetailPage() {
           </div>
         )}
 
-        {(activeTab === 'driver_history' || activeTab === 'trips' || activeTab === 'audit') && (
-          <div style={{ padding: '24px 32px' }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '32px 24px', textAlign: 'center' }}>
-              <Icon name="clock" size={28} style={{ color: 'var(--ink-4)', display: 'block', margin: '0 auto 12px' }} />
-              <div style={{ fontSize: 14, color: 'var(--ink-2)' }}>This section will be available in a future module.</div>
+        {/* ── Driver history tab ── */}
+        {activeTab === 'driver_history' && (
+          <div style={{ padding: isMobile ? '16px' : '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Current driver card */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)' }}>
+                <span className="t-label">Current linked driver</span>
+              </div>
+              <div style={{ padding: '16px 20px' }}>
+                {vehicle.linked_driver_id ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      background: 'var(--accent-soft)', color: 'var(--accent)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 13, fontWeight: 600, flexShrink: 0,
+                    }}>
+                      {(vehicle.linked_driver_name ?? 'D').split(' ').map((x: string) => x[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>
+                        {vehicle.linked_driver_name ?? vehicle.linked_driver_code ?? vehicle.linked_driver_id}
+                      </div>
+                      {vehicle.linked_driver_code && (
+                        <div className="t-meta" style={{ fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+                          {vehicle.linked_driver_code}
+                        </div>
+                      )}
+                      {vehicle.linked_since && (
+                        <div className="t-meta" style={{ marginTop: 2 }}>
+                          Linked since {formatDate(vehicle.linked_since)}
+                        </div>
+                      )}
+                    </div>
+                    <span className="badge ok" style={{ marginLeft: 'auto' }}><span className="dot ok" />Active link</span>
+                  </div>
+                ) : (
+                  <div style={{ color: 'var(--ink-3)', fontSize: 13 }}>No driver currently linked to this vehicle.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Link/unlink audit trail */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)' }}>
+                <span className="t-label">Link / unlink history</span>
+              </div>
+              {auditLoading ? (
+                <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
+              ) : (() => {
+                const driverEvents = auditEvents.filter(e =>
+                  e.action === 'vehicle.link_driver' || e.action === 'vehicle.unlink_driver'
+                )
+                if (driverEvents.length === 0) {
+                  return (
+                    <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>
+                      No driver link/unlink events recorded yet.
+                    </div>
+                  )
+                }
+                return (
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>Event</th>
+                          <th>Actor</th>
+                          <th>When</th>
+                          <th>IP</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {driverEvents.map(ev => (
+                          <tr key={ev.id}>
+                            <td>
+                              <span style={{
+                                fontFamily: 'var(--font-mono)', fontSize: 11,
+                                padding: '2px 7px', borderRadius: 2,
+                                background: ev.action === 'vehicle.link_driver' ? 'var(--accent-soft)' : 'color-mix(in oklab, var(--warn) 12%, var(--surface))',
+                                color: ev.action === 'vehicle.link_driver' ? 'var(--accent)' : 'var(--warn)',
+                                border: `1px solid ${ev.action === 'vehicle.link_driver' ? 'color-mix(in oklab, var(--accent) 28%, var(--rule))' : 'color-mix(in oklab, var(--warn) 28%, var(--rule))'}`,
+                              }}>
+                                {ev.action === 'vehicle.link_driver' ? 'Linked' : 'Unlinked'}
+                              </span>
+                              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--ink-3)' }}>{ev.target}</span>
+                            </td>
+                            <td style={{ fontSize: 13 }}>{ev.actor_name}</td>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
+                              {new Date(ev.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </td>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                              {ev.source_ip ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── Trips tab ── */}
+        {activeTab === 'trips' && (
+          <div style={{ padding: isMobile ? '16px' : '24px 32px' }}>
+            <div style={{
+              background: 'var(--surface)', border: '1px solid var(--rule)',
+              padding: '40px 24px', textAlign: 'center',
+            }}>
+              <Icon name="route" size={28} style={{ color: 'var(--ink-4)', display: 'block', margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 14, color: 'var(--ink-2)', fontWeight: 500 }}>Trip history</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6 }}>
+                Trip records will appear here once the Bookings module links completed rides to this vehicle.
+              </div>
+              <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <div style={{
+                  padding: '12px 20px', background: 'var(--surface-2)', border: '1px solid var(--rule)',
+                  borderRadius: 4, textAlign: 'center', minWidth: 100,
+                }}>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: 24, fontWeight: 400 }}>0</div>
+                  <div className="t-label" style={{ marginTop: 4 }}>Trips</div>
+                </div>
+                <div style={{
+                  padding: '12px 20px', background: 'var(--surface-2)', border: '1px solid var(--rule)',
+                  borderRadius: 4, textAlign: 'center', minWidth: 100,
+                }}>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontSize: 24, fontWeight: 400 }}>{vehicle.odometer_km.toLocaleString('en-IN')}</div>
+                  <div className="t-label" style={{ marginTop: 4 }}>Odometer km</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Audit tab ── */}
+        {activeTab === 'audit' && (
+          <div style={{ padding: isMobile ? '16px' : '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="t-label">All admin actions on this vehicle</span>
+                {auditEvents.length > 0 && (
+                  <span className="badge info">{auditEvents.length} events</span>
+                )}
+              </div>
+              {auditLoading ? (
+                <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>Loading audit events…</div>
+              ) : auditEvents.length === 0 ? (
+                <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>
+                  No audit events recorded for this vehicle yet.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  <table className="tbl" style={{ minWidth: 600 }}>
+                    <thead>
+                      <tr>
+                        <th>Action</th>
+                        <th>Actor</th>
+                        <th>Severity</th>
+                        <th>When</th>
+                        <th>IP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditEvents.map(ev => (
+                        <tr key={ev.id}>
+                          <td>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)' }}>
+                              {ev.action}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 13 }}>{ev.actor_name}</td>
+                          <td>
+                            {ev.severity === 'high' && <span className="badge danger"><span className="dot danger" />High</span>}
+                            {ev.severity === 'med'  && <span className="badge warn"><span className="dot warn" />Med</span>}
+                            {ev.severity === 'low'  && <span className="badge"><span className="dot" />Low</span>}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
+                            {new Date(ev.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>
+                            {ev.source_ip ?? '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

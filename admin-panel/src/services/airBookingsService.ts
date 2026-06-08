@@ -188,6 +188,7 @@ export interface ListAirBookingsParams {
   date_from?: string
   date_to?: string
   flagged?: boolean
+  customer_id?: string
 }
 
 export interface AssignOperatorRequest {

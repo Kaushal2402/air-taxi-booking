@@ -37,6 +37,7 @@ async def list_transactions(
     service: str | None = Query(None),
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
+    customer_id: str | None = Query(None),
     _: AdminUser = Depends(require_permission("payments.view")),
     db=Depends(get_db),
 ):
@@ -51,6 +52,7 @@ async def list_transactions(
         service=service,
         date_from=date_from,
         date_to=date_to,
+        customer_id=customer_id,
     )
 
 

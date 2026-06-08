@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.models.settings import PlatformSettings
 from app.core.currency import fmt_minor
 from app.services.settings_service import get_toggle, get_settings, is_in_quiet_window, is_kill_switch_active, get_active_maintenance_window
-from app.services import driver_suspension_service
+from app.services import driver_suspension_service, customer_service
 from app.models.air_booking import (
     AirBooking,
     AirBookingNote,
@@ -215,6 +215,7 @@ async def list_air_bookings(
     date_from: str | None,
     date_to: str | None,
     flagged: bool | None,
+    customer_id: str | None = None,
 ) -> AirBookingListResponse:
     filters: list[Any] = []
 
@@ -241,6 +242,8 @@ async def list_air_bookings(
         filters.append(AirBooking.etd <= datetime.fromisoformat(date_to))
     if flagged is not None:
         filters.append(AirBooking.flagged == flagged)
+    if customer_id:
+        filters.append(AirBooking.customer_id == customer_id)
 
     where_clause = and_(*filters) if filters else true()
 
@@ -315,9 +318,59 @@ async def assign_operator(
     db: AsyncSession, booking_id: str, req: AssignOperatorRequest
 ) -> AirBookingDetail:
     booking = await _load_booking(db, booking_id)
-    booking.operator_id = req.operator_id
+
     if req.aircraft_id:
+        # Validate aircraft exists and is eligible
+        from app.models.operator import Aircraft
+        ac_row = await db.execute(
+            select(Aircraft).where(Aircraft.id == req.aircraft_id)
+        )
+        aircraft = ac_row.scalar_one_or_none()
+        if not aircraft:
+            raise HTTPException(status_code=404, detail="Aircraft not found")
+
+        if aircraft.status not in ("ready",):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Aircraft is not ready for assignment (status: '{aircraft.status}'). "
+                       "Only 'ready' aircraft can be assigned to bookings.",
+            )
+
+        if aircraft.airworthiness_status == "expired":
+            raise HTTPException(
+                status_code=422,
+                detail="Aircraft airworthiness certificate has expired. Renew before assigning.",
+            )
+
+        # Check maintenance window conflict with booking ETD
+        etd = booking.etd
+        if etd and aircraft.maintenance_windows:
+            if etd.tzinfo is None:
+                etd = etd.replace(tzinfo=timezone.utc)
+            for window in aircraft.maintenance_windows:
+                try:
+                    w_start = datetime.fromisoformat(window["starts_at"])
+                    w_end = datetime.fromisoformat(window["ends_at"])
+                    if w_start.tzinfo is None:
+                        w_start = w_start.replace(tzinfo=timezone.utc)
+                    if w_end.tzinfo is None:
+                        w_end = w_end.replace(tzinfo=timezone.utc)
+                    if w_start <= etd <= w_end:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=(
+                                f"Aircraft is scheduled for maintenance from "
+                                f"{w_start.strftime('%Y-%m-%d %H:%M')} to "
+                                f"{w_end.strftime('%Y-%m-%d %H:%M')} UTC. "
+                                "Booking ETD falls within this window."
+                            ),
+                        )
+                except (KeyError, ValueError):
+                    continue  # malformed window entry — skip
+
         booking.aircraft_id = req.aircraft_id
+
+    booking.operator_id = req.operator_id
     _add_timeline(db, booking, "Operator assigned", req.note, "info")
     await db.commit()
     await db.refresh(booking)
@@ -703,6 +756,35 @@ async def advance_status(
                     db, driver_id_snapshot
                 )
             await driver_suspension_service.check_and_auto_suspend(db, driver_id_snapshot)
+        except Exception:
+            pass
+
+    # ── Customer metrics ──────────────────────────────────────────────────────
+    _b = await _load_booking(db, booking_id)
+    if _b.customer_id:
+        try:
+            if req.status == "Completed":
+                fare = _b.fare_final_minor or _b.fare_estimate_minor or 0
+                await customer_service.update_customer_metrics_on_completion(
+                    db, _b.customer_id, fare_minor=fare
+                )
+            elif req.status == "Cancelled":
+                total_res = await db.execute(
+                    select(func.count(AirBooking.id)).where(
+                        AirBooking.customer_id == _b.customer_id
+                    )
+                )
+                canc_res = await db.execute(
+                    select(func.count(AirBooking.id)).where(
+                        AirBooking.customer_id == _b.customer_id,
+                        AirBooking.status == "Cancelled",
+                    )
+                )
+                await customer_service.update_customer_metrics_on_cancellation(
+                    db, _b.customer_id,
+                    total_bookings=total_res.scalar_one() or 1,
+                    total_cancellations=canc_res.scalar_one() or 0,
+                )
         except Exception:
             pass
 

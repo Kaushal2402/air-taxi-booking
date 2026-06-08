@@ -147,12 +147,16 @@ async def list_events(
     category: Optional[str] = None,
     severity: Optional[str] = None,
     actor_name: Optional[str] = None,
+    target: Optional[str] = None,
     time_window: str = "24h",
     page: int = 1,
     per_page: int = 25,
 ) -> AuditEventsResponse:
     cutoff = _window_cutoff(time_window)
-    q = select(AuditLog).where(AuditLog.timestamp >= cutoff)
+    q = select(AuditLog)
+    # When filtering by a specific target, don't restrict by time window
+    if not target:
+        q = q.where(AuditLog.timestamp >= cutoff)
 
     if search:
         like = f"%{search}%"
@@ -165,6 +169,8 @@ async def list_events(
                 AuditLog.source_ip.ilike(like),
             )
         )
+    if target:
+        q = q.where(AuditLog.target.ilike(f"%{target}%"))
     if category:
         q = q.where(AuditLog.category == category)
     if severity:

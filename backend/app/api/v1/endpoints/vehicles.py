@@ -30,6 +30,15 @@ vendors_router = APIRouter()
 
 # ── Vehicles ──────────────────────────────────────────────────────────────────
 
+@vehicles_router.get("/compliance")
+async def vehicles_compliance_summary(
+    _: AdminUser = Depends(require_permission("vehicles.view")),
+    db=Depends(get_db),
+):
+    """Compliance summary: vehicles grouped by doc_status with expiry breakdowns."""
+    return await vehicle_service.get_vehicles_compliance_summary(db)
+
+
 @vehicles_router.get("")
 async def list_vehicles(
     search: str | None = Query(None),

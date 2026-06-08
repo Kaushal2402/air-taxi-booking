@@ -4,6 +4,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException, ValidationException
@@ -87,6 +88,29 @@ async def deactivate_vehicle_class(db: AsyncSession, id: str):
     obj = await repo.get_vehicle_class(id)
     if not obj:
         raise NotFoundException("VehicleClass")
+
+    # Guard: reject if active vehicles still reference this class
+    from app.models.vehicle import Vehicle
+    active_count = (await db.execute(
+        select(func.count()).where(
+            Vehicle.vehicle_class_id == id,
+            Vehicle.status != "retired",
+        )
+    )).scalar_one()
+    if active_count:
+        raise ValidationException(
+            f"Cannot deactivate: {active_count} vehicle(s) still use this class. "
+            "Reassign or retire them first."
+        )
+
+    # Guard: reject if any active service zones reference this class code
+    zone_refs = await repo.count_zone_refs_for_class(obj.code)
+    if zone_refs:
+        raise ValidationException(
+            f"Cannot deactivate: {zone_refs} active service zone(s) list this class code "
+            f"'{obj.code}' in their service codes. Remove it from those zones first."
+        )
+
     await repo.update_vehicle_class(id, {"is_active": False})
 
 
@@ -124,6 +148,29 @@ async def deactivate_aircraft_type(db: AsyncSession, id: str):
     obj = await repo.get_aircraft_type(id)
     if not obj:
         raise NotFoundException("AircraftType")
+
+    # Guard: reject if active aircraft still reference this type
+    from app.models.operator import Aircraft
+    aircraft_count = (await db.execute(
+        select(func.count()).where(
+            Aircraft.aircraft_type_id == id,
+            Aircraft.status != "deactivated",
+        )
+    )).scalar_one()
+    if aircraft_count:
+        raise ValidationException(
+            f"Cannot deactivate: {aircraft_count} aircraft still use this type. "
+            "Reassign or retire them first."
+        )
+
+    # Guard: reject if active air routes reference this type code
+    route_refs = await repo.count_route_refs_for_type(obj.code)
+    if route_refs:
+        raise ValidationException(
+            f"Cannot deactivate: {route_refs} active air route(s) list this type code "
+            f"'{obj.code}' as eligible. Remove it from those routes first."
+        )
+
     await repo.update_aircraft_type(id, {"is_active": False})
 
 
@@ -168,6 +215,18 @@ async def publish_service_zone(db: AsyncSession, id: str):
     obj = await repo.get_service_zone(id)
     if not obj:
         raise NotFoundException("ServiceZone")
+
+    # Validate that every active_service_code maps to an active vehicle class
+    if obj.active_service_codes:
+        active_classes = await repo.list_vehicle_classes(include_inactive=False)
+        active_codes = {vc.code for vc in active_classes}
+        invalid = [c for c in obj.active_service_codes if c not in active_codes]
+        if invalid:
+            raise ValidationException(
+                f"Service zone references unknown or inactive vehicle class codes: "
+                f"{', '.join(invalid)}. Add or activate them in the catalog first."
+            )
+
     await repo.publish_service_zone(id)
     await db.commit()
     await db.refresh(obj)

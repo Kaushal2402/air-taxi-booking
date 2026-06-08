@@ -313,6 +313,15 @@ async def update_operator_document(
 
 # ── Aircraft ──────────────────────────────────────────────────────────────────
 
+@aircraft_router.get("/compliance")
+async def aircraft_compliance_summary(
+    _: AdminUser = Depends(require_permission("aircraft.view")),
+    db=Depends(get_db),
+):
+    """Airworthiness compliance summary: counts by status + lists of expiring/expired aircraft."""
+    return await operator_service.get_aircraft_compliance_summary(db)
+
+
 @aircraft_router.get("", response_model=AircraftListResponse)
 async def list_aircraft(
     operator_id: str | None = Query(None),
@@ -489,6 +498,15 @@ async def set_maintenance(
 
 
 # ── Pilots ────────────────────────────────────────────────────────────────────
+
+@pilots_router.get("/compliance")
+async def pilots_compliance_summary(
+    _: AdminUser = Depends(require_permission("aircraft.view")),
+    db=Depends(get_db),
+):
+    """Medical compliance summary: pilots grouped by medical expiry status."""
+    return await operator_service.get_pilots_compliance_summary(db)
+
 
 @pilots_router.get("", response_model=PilotListResponse)
 async def list_pilots(

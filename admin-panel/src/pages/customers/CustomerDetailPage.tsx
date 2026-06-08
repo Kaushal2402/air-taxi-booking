@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
 import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
@@ -11,6 +10,16 @@ import { customerService } from '../../services/customerService'
 import type { Customer, CustomerSegment, WalletTransaction } from '../../services/customerService'
 import { privacyService } from '../../services/privacyService'
 import type { PrivacyRequest } from '../../services/privacyService'
+import { bookingsService } from '../../services/bookingsService'
+import type { RoadBookingListItem } from '../../services/bookingsService'
+import { airBookingsService } from '../../services/airBookingsService'
+import type { AirBookingListItem } from '../../services/airBookingsService'
+import { paymentsService } from '../../services/paymentsService'
+import type { PaymentListItem } from '../../services/paymentsService'
+import { supportService } from '../../services/supportService'
+import type { Ticket } from '../../services/supportService'
+import { auditService } from '../../services/auditService'
+import type { AuditEventSummary } from '../../services/auditService'
 import { formatMoney, currencySymbol, formatDate, useFormatMoney } from '../../lib/utils'
 
 function getInitials(name: string): string {
@@ -29,14 +38,347 @@ function segmentLabel(seg: CustomerSegment): string {
 }
 
 
-// ── Tab stub ──────────────────────────────────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
-function TabStub({ title, module: mod }: { title: string; module: string }) {
+function statusBadge(status: string) {
+  const s = status.toLowerCase()
+  if (['completed', 'success', 'paid', 'resolved', 'closed'].includes(s))
+    return <span className="badge ok">{status}</span>
+  if (['cancelled', 'failed', 'refunded', 'banned'].includes(s))
+    return <span className="badge danger">{status}</span>
+  if (['pending', 'processing', 'in_progress', 'open'].includes(s))
+    return <span className="badge info">{status}</span>
+  if (['flagged', 'disputed', 'sla_breached'].includes(s))
+    return <span className="badge warn">{status}</span>
+  return <span className="badge">{status}</span>
+}
+
+function TabEmpty({ message }: { message: string }) {
   return (
-    <div style={{ padding: '40px 32px', textAlign: 'center', color: 'var(--ink-3)' }}>
-      <div style={{ fontSize: 14, marginBottom: 8 }}>{title}</div>
+    <div style={{ padding: '48px 32px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+      {message}
+    </div>
+  )
+}
+
+// ── Trips tab ─────────────────────────────────────────────────────────────────
+
+function TripsTab({ customerId, onCountLoaded }: { customerId: string; onCountLoaded?: (n: number) => void }) {
+  const [roadBookings, setRoadBookings] = useState<RoadBookingListItem[]>([])
+  const [airBookings, setAirBookings]   = useState<AirBookingListItem[]>([])
+  const [loading, setLoading]           = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      bookingsService.listBookings({ customer_id: customerId, page: 1, page_size: 50 }).catch(() => ({ items: [] })),
+      airBookingsService.listAirBookings({ customer_id: customerId, page: 1, page_size: 50 }).catch(() => ({ items: [] })),
+    ]).then(([road, air]) => {
+      const roadItems = (road as { items: RoadBookingListItem[] }).items ?? []
+      const airItems  = (air  as { items: AirBookingListItem[]  }).items ?? []
+      setRoadBookings(roadItems)
+      setAirBookings(airItems)
+      onCountLoaded?.(roadItems.length + airItems.length)
+    }).finally(() => setLoading(false))
+  }, [customerId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return <TabEmpty message="Loading trips…" />
+
+  const totalCount = roadBookings.length + airBookings.length
+  if (totalCount === 0) return <TabEmpty message="No bookings found for this customer." />
+
+  type UnifiedTrip = {
+    id: string; ref: string; type: 'Road' | 'Air'; route: string
+    status: string; fare: number; created_at: string
+  }
+
+  const unified: UnifiedTrip[] = [
+    ...roadBookings.map(b => ({
+      id: b.id, ref: b.booking_ref, type: 'Road' as const,
+      route: b.pickup_address,
+      status: b.status, fare: b.fare_final_minor ?? b.fare_estimate_minor,
+      created_at: b.created_at,
+    })),
+    ...airBookings.map(b => ({
+      id: b.id, ref: b.booking_ref, type: 'Air' as const,
+      route: `${b.route_from} → ${b.route_to}`,
+      status: b.status, fare: b.fare_final_minor ?? b.fare_estimate_minor,
+      created_at: b.created_at,
+    })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  return (
+    <div>
+      <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--rule)', fontSize: 12.5, color: 'var(--ink-3)' }}>
+        {totalCount} booking{totalCount !== 1 ? 's' : ''} · {roadBookings.length} road · {airBookings.length} air
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Type</th>
+              <th>Route / Pickup</th>
+              <th>Status</th>
+              <th>Fare</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {unified.map(t => (
+              <tr key={t.id}>
+                <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{t.ref}</span></td>
+                <td><span className="badge">{t.type}</span></td>
+                <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.route}</td>
+                <td>{statusBadge(t.status)}</td>
+                <td>{formatMoney(t.fare)}</td>
+                <td className="t-meta">{formatDate(t.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Payments tab ──────────────────────────────────────────────────────────────
+
+function PaymentsTab({ customerId }: { customerId: string }) {
+  const [payments, setPayments] = useState<PaymentListItem[]>([])
+  const [total, setTotal]       = useState(0)
+  const [loading, setLoading]   = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    paymentsService.listTransactions({ customer_id: customerId, page: 1, page_size: 50 })
+      .then(data => { setPayments(data.items); setTotal(data.total) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [customerId])
+
+  if (loading) return <TabEmpty message="Loading payments…" />
+  if (payments.length === 0) return <TabEmpty message="No payments found for this customer." />
+
+  return (
+    <div>
+      <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--rule)', fontSize: 12.5, color: 'var(--ink-3)' }}>
+        {total} transaction{total !== 1 ? 's' : ''}
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Booking ref</th>
+              <th>Service</th>
+              <th>Method</th>
+              <th>Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payments.map(p => (
+              <tr key={p.id}>
+                <td className="t-meta">{formatDate(p.created_at)}</td>
+                <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{p.booking_ref}</span></td>
+                <td>{p.service}</td>
+                <td>{p.method}</td>
+                <td>{formatMoney(p.gross_amount)}</td>
+                <td>{statusBadge(p.status)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Addresses tab ─────────────────────────────────────────────────────────────
+
+function AddressesTab() {
+  return (
+    <div style={{ padding: '40px 32px' }}>
+      <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 6 }}>Saved addresses</div>
       <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>
-        {mod} — will appear here automatically when available
+        Address storage is managed by the customer app. Saved places will sync here once the address module is active.
+      </div>
+    </div>
+  )
+}
+
+// ── Support tickets tab ───────────────────────────────────────────────────────
+
+function TicketsTab({ customerId }: { customerId: string }) {
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [total, setTotal]     = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    supportService.listTickets({ requester_id: customerId, page: 1, page_size: 50 })
+      .then(data => { setTickets(data.items); setTotal(data.total) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [customerId])
+
+  if (loading) return <TabEmpty message="Loading tickets…" />
+  if (tickets.length === 0) return <TabEmpty message="No support tickets raised by this customer." />
+
+  return (
+    <div>
+      <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--rule)', fontSize: 12.5, color: 'var(--ink-3)' }}>
+        {total} ticket{total !== 1 ? 's' : ''}
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Subject</th>
+              <th>Category</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>SLA</th>
+              <th>Opened</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.map(t => (
+              <tr key={t.id}>
+                <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{t.ticket_ref}</span></td>
+                <td style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</td>
+                <td className="t-meta">{t.category}</td>
+                <td>{statusBadge(t.priority)}</td>
+                <td>{statusBadge(t.status)}</td>
+                <td>
+                  {t.sla_breached
+                    ? <span className="badge danger">Breached</span>
+                    : t.sla_due_at
+                      ? <span className="t-meta">{formatDate(t.sla_due_at)}</span>
+                      : <span className="t-meta">—</span>}
+                </td>
+                <td className="t-meta">{formatDate(t.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Risk tab ──────────────────────────────────────────────────────────────────
+
+function RiskTab({ customer }: { customer: Customer }) {
+  const cancRate = customer.cancellation_rate * 100
+  const riskScore = Math.min(100, Math.round(
+    (cancRate > 20 ? 40 : cancRate > 10 ? 20 : 0) +
+    (customer.status === 'flagged' ? 30 : customer.status === 'suspended' ? 50 : customer.status === 'banned' ? 100 : 0) +
+    (customer.rating != null && customer.rating < 3 ? 20 : 0) +
+    (customer.trips_count === 0 ? 10 : 0)
+  ))
+  const riskLevel = riskScore >= 60 ? 'High' : riskScore >= 30 ? 'Medium' : 'Low'
+  const riskColor = riskScore >= 60 ? 'var(--danger)' : riskScore >= 30 ? 'var(--warn)' : 'var(--ok)'
+
+  const signals: { label: string; value: string; flag: boolean }[] = [
+    { label: 'Account status',      value: customer.status,                                     flag: customer.status !== 'active' },
+    { label: 'Cancellation rate',   value: `${cancRate.toFixed(1)}%`,                          flag: cancRate > 10 },
+    { label: 'Customer rating',     value: customer.rating != null ? `${customer.rating.toFixed(2)} ★` : 'No ratings', flag: customer.rating != null && customer.rating < 3 },
+    { label: 'Trips completed',     value: String(customer.trips_count),                        flag: customer.trips_count === 0 },
+    { label: 'Segment',             value: customer.segment,                                    flag: false },
+    { label: 'Flag reason',         value: customer.flag_reason ?? '—',                         flag: !!customer.flag_reason },
+  ]
+
+  return (
+    <div style={{ padding: '28px 32px', maxWidth: 640 }}>
+      {/* Score */}
+      <div className="card" style={{ padding: '20px 24px', marginBottom: 24 }}>
+        <div className="t-label" style={{ marginBottom: 10 }}>Risk score</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: 36, color: riskColor }}>{riskScore}</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 500, color: riskColor }}>{riskLevel} risk</div>
+            <div className="t-meta">Computed from account signals</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, height: 6, borderRadius: 3, background: 'var(--rule)', overflow: 'hidden' }}>
+          <div style={{ width: `${riskScore}%`, height: '100%', background: riskColor, borderRadius: 3, transition: 'width 0.4s' }} />
+        </div>
+      </div>
+
+      {/* Signals */}
+      <div className="card" style={{ padding: 0 }}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--rule)' }}>
+          <div className="t-label">Signal breakdown</div>
+        </div>
+        {signals.map(s => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 18px', borderBottom: '1px solid var(--rule-soft)' }}>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)' }}>{s.label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {s.flag && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} />}
+              <span style={{ fontSize: 13, fontWeight: s.flag ? 500 : 400, color: s.flag ? 'var(--danger)' : 'var(--ink)' }}>{s.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Audit tab ─────────────────────────────────────────────────────────────────
+
+function AuditTab({ customerId }: { customerId: string }) {
+  const [events, setEvents] = useState<AuditEventSummary[]>([])
+  const [total, setTotal]   = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    auditService.listEvents({ target: `customer:${customerId}`, per_page: 50 })
+      .then(data => { setEvents(data.items); setTotal(data.total) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [customerId])
+
+  if (loading) return <TabEmpty message="Loading audit events…" />
+  if (events.length === 0) return <TabEmpty message="No audit events recorded for this customer yet." />
+
+  return (
+    <div>
+      <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--rule)', fontSize: 12.5, color: 'var(--ink-3)' }}>
+        {total} event{total !== 1 ? 's' : ''}
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Action</th>
+              <th>Actor</th>
+              <th>Category</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.map(e => (
+              <tr key={e.id}>
+                <td className="t-meta" style={{ whiteSpace: 'nowrap' }}>{formatDate(e.timestamp)}</td>
+                <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{e.action}</span></td>
+                <td className="t-meta">{e.actor_name}</td>
+                <td className="t-meta">{e.category}</td>
+                <td>
+                  {e.severity === 'high'
+                    ? <span className="badge danger">High</span>
+                    : e.severity === 'med'
+                      ? <span className="badge warn">Med</span>
+                      : <span className="badge">Low</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -426,6 +768,7 @@ function FlagReasonModal({ title, placeholder, confirmLabel = 'Confirm', variant
 // ── Wallet & Ledger tab ───────────────────────────────────────────────────────
 
 function WalletTab({ customerId }: { customerId: string }) {
+  const canViewWallet = usePermission('customers.wallet.view')
   const [transactions, setTransactions] = useState<WalletTransaction[]>([])
   const [total, setTotal]               = useState(0)
   const [loading, setLoading]           = useState(true)
@@ -438,7 +781,7 @@ function WalletTab({ customerId }: { customerId: string }) {
       .finally(() => setLoading(false))
   }, [customerId])
 
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
+  if (!canViewWallet) return <AccessDeniedPage message="You don't have permission to view wallet transactions." />
 
   if (loading) {
     return <div style={{ padding: 32, color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
@@ -601,10 +944,12 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer]           = useState<Customer | null>(null)
   const [loading, setLoading]             = useState(true)
   const [activeTab, setActiveTab]         = useState<Tab>('overview')
+  const [liveTripsCount, setLiveTripsCount] = useState<number | null>(null)
 
   const [showWalletModal, setShowWalletModal]         = useState(false)
   const [walletDirection, setWalletDirection]         = useState<'credit' | 'debit'>('credit')
   const [showSuspendDialog, setShowSuspendDialog]     = useState(false)
+  const [showBanModal, setShowBanModal]               = useState(false)
   const [showFlagModal, setShowFlagModal]             = useState(false)
   const [showReactivateDialog, setShowReactivateDialog] = useState(false)
   const [showUnflagDialog, setShowUnflagDialog]       = useState(false)
@@ -721,6 +1066,19 @@ export default function CustomerDetailPage() {
     setShowUnflagDialog(false)
   }
 
+  const handleBan = async (reason: string) => {
+    if (!customer) return
+    setApiError('')
+    try {
+      const updated = await customerService.banCustomer(customer.id, reason)
+      setCustomer(updated)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string; message?: string } } }
+      setApiError(err?.response?.data?.detail || err?.response?.data?.message || 'Failed to ban customer')
+    }
+    setShowBanModal(false)
+  }
+
   const openGoodwillCredit = () => {
     setWalletDirection('credit')
     setShowWalletModal(true)
@@ -746,11 +1104,12 @@ export default function CustomerDetailPage() {
   }
 
   const canSuspend    = customer.status === 'active' || customer.status === 'flagged'
+  const canBan        = customer.status === 'active' || customer.status === 'suspended' || customer.status === 'flagged'
   const canReactivate = customer.status === 'suspended' || customer.status === 'banned'
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'overview',  label: 'Overview' },
-    { key: 'trips',     label: `Trips · ${customer.trips_count}` },
+    { key: 'trips',     label: `Trips · ${liveTripsCount ?? customer.trips_count}` },
     { key: 'payments',  label: 'Payments' },
     { key: 'wallet',    label: 'Wallet & ledger' },
     { key: 'addresses', label: 'Addresses' },
@@ -769,7 +1128,8 @@ export default function CustomerDetailPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             className="btn sm"
-            onClick={() => alert('Messaging coming soon')}
+            disabled
+            title="Messaging available when Notifications module is active"
           >
             <Icon name="envelope" size={13} />Message
           </button>
@@ -810,6 +1170,11 @@ export default function CustomerDetailPage() {
           {canSuspend && (
             <button className="btn sm danger" style={{ background: 'var(--danger)', color: '#fff', borderColor: 'var(--danger)' }} onClick={() => setShowSuspendDialog(true)}>
               Suspend
+            </button>
+          )}
+          {canBan && !canReactivate && (
+            <button className="btn sm ghost" style={{ color: 'var(--danger)', borderColor: 'color-mix(in oklab, var(--danger) 40%, var(--rule))' }} onClick={() => setShowBanModal(true)}>
+              Ban
             </button>
           )}
           {canReactivate && (
@@ -956,13 +1321,13 @@ export default function CustomerDetailPage() {
 
         {/* Tab content */}
         {activeTab === 'overview'  && <OverviewTab customer={customer} isMobile={isMobile} />}
-        {activeTab === 'trips'     && <TabStub title="Trip History"     module="Bookings Module" />}
-        {activeTab === 'payments'  && <TabStub title="Payment History"  module="Payments Module" />}
+        {activeTab === 'trips'     && <TripsTab customerId={customer.id} onCountLoaded={setLiveTripsCount} />}
+        {activeTab === 'payments'  && <PaymentsTab customerId={customer.id} />}
         {activeTab === 'wallet'    && <WalletTab customerId={customer.id} />}
-        {activeTab === 'addresses' && <TabStub title="Saved Addresses"  module="Coming soon" />}
-        {activeTab === 'tickets'   && <TabStub title="Support Tickets"  module="Support Module" />}
-        {activeTab === 'risk'      && <TabStub title="Risk Assessment"  module="Risk Module" />}
-        {activeTab === 'audit'     && <TabStub title="Audit Log"        module="Audit Module" />}
+        {activeTab === 'addresses' && <AddressesTab />}
+        {activeTab === 'tickets'   && <TicketsTab customerId={customer.id} />}
+        {activeTab === 'risk'      && <RiskTab customer={customer} />}
+        {activeTab === 'audit'     && <AuditTab customerId={customer.id} />}
       </div>
 
       {/* Wallet Adjust Modal */}
@@ -994,6 +1359,18 @@ export default function CustomerDetailPage() {
           placeholder="Reason for flagging…"
           onConfirm={handleFlag}
           onCancel={() => setShowFlagModal(false)}
+        />
+      )}
+
+      {/* Ban modal */}
+      {showBanModal && (
+        <FlagReasonModal
+          title={`Ban ${customer.name}`}
+          placeholder="Reason for ban (required)…"
+          confirmLabel="Ban customer"
+          variant="danger"
+          onConfirm={handleBan}
+          onCancel={() => setShowBanModal(false)}
         />
       )}
 

@@ -114,6 +114,9 @@ export const customerService = {
   unflagCustomer: (id: string) =>
     api.post<Customer>(`/customers/${id}/unflag`, {}).then(r => r.data),
 
+  banCustomer: (id: string, reason: string) =>
+    api.post<Customer>(`/customers/${id}/ban`, { reason }).then(r => r.data),
+
   adjustWallet: (
     id: string,
     body: {

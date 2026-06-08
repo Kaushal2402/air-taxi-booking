@@ -14,6 +14,10 @@ import type { Driver, DriverDocument, DriverWalletTransaction, DocType } from '.
 import { catalogService } from '../../services/catalogService'
 import { kycService } from '../../services/kycService'
 import type { DocTypeItem } from '../../services/kycService'
+import { vehicleService } from '../../services/vehicleService'
+import type { Vehicle } from '../../services/vehicleService'
+import { auditService } from '../../services/auditService'
+import type { AuditEventSummary } from '../../services/auditService'
 import { formatMoney, currencySymbol, formatDate } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -77,45 +81,6 @@ function ReasonModal({ title, placeholder, confirmLabel = 'Confirm', variant = '
   )
 }
 
-// ── Performance chart ─────────────────────────────────────────────────────────
-
-function PerformanceChart() {
-  const weeks  = 8
-  const rating = [4.78, 4.82, 4.85, 4.88, 4.89, 4.90, 4.91, 4.92]
-  const accept = [88, 89, 90, 91, 93, 94, 94, 94]
-  const w = 720, h = 180, padL = 36, padR = 36, padT = 16, padB = 26
-  const x  = (i: number) => padL + (i / (weeks - 1)) * (w - padL - padR)
-  const yR = (v: number) => padT + (1 - (v - 4.7) / 0.3) * (h - padT - padB)
-  const yA = (v: number) => padT + (1 - (v - 80) / 20) * (h - padT - padB)
-  const pR = rating.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yR(v).toFixed(1)).join(' ')
-  const pA = accept.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yA(v).toFixed(1)).join(' ')
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-      {[0, 1, 2, 3, 4].map(i => (
-        <line key={i} x1={padL} x2={w - padR} y1={padT + i * (h - padT - padB) / 4} y2={padT + i * (h - padT - padB) / 4} stroke="var(--rule-soft)" />
-      ))}
-      {rating.map((_, i) => (
-        <text key={i} x={x(i)} y={h - 10} textAnchor="middle" fill="var(--ink-3)" style={{ font: '10px IBM Plex Mono' }}>
-          W{i + 1}
-        </text>
-      ))}
-      {[4.7, 4.8, 4.9, 5.0].map(l => (
-        <text key={l} x={padL - 6} y={yR(l) + 3} textAnchor="end" fill="var(--ink-3)" style={{ font: '10px IBM Plex Mono' }}>
-          {l.toFixed(1)}
-        </text>
-      ))}
-      {[80, 90, 100].map(l => (
-        <text key={l} x={w - padR + 6} y={yA(l) + 3} textAnchor="start" fill="var(--accent)" style={{ font: '10px IBM Plex Mono' }}>
-          {l}%
-        </text>
-      ))}
-      <path d={pR} fill="none" stroke="var(--ink)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={pA} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={x(weeks - 1)} cy={yR(rating[weeks - 1])} r="4" fill="var(--surface)" stroke="var(--ink)" strokeWidth="1.6" />
-      <circle cx={x(weeks - 1)} cy={yA(accept[weeks - 1])} r="4" fill="var(--accent)" stroke="var(--surface)" strokeWidth="1.6" />
-    </svg>
-  )
-}
 
 // ── Documents tab ─────────────────────────────────────────────────────────────
 
@@ -125,6 +90,7 @@ interface DocActionState {
 }
 
 function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: ReturnType<typeof useNavigate> }) {
+  const canReviewKyc = usePermission('drivers.kyc.review')
   const [docs, setDocs]           = useState<DriverDocument[]>([])
   const [loading, setLoading]     = useState(true)
   const [pending, setPending]     = useState<DocActionState | null>(null)
@@ -206,8 +172,6 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
     if (s === 'expired') return <span className="badge danger"><span className="dot danger" />Expired</span>
     return <span className="badge">{s}</span>
   }
-
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
 
   if (loading) return <div style={{ padding: 32, color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
 
@@ -302,7 +266,7 @@ function DocumentsTab({ driverId, navigate }: { driverId: string; navigate: Retu
                 <>
                   <button className="btn sm accent" onClick={() => setPending({ doc, action: 'approve' })} style={{ display: canReviewKyc ? undefined : 'none' }}>Approve</button>
                   <button className="btn sm" onClick={() => setPending({ doc, action: 'reupload' })} style={{ display: canReviewKyc ? undefined : 'none' }}>Re-upload</button>
-                  <button className="btn sm ghost" style={{ color: 'var(--danger)' }} onClick={() => setPending({ doc, action: 'reject' })} style={{ display: canReviewKyc ? undefined : 'none' }}>Reject</button>
+                  <button className="btn sm ghost" style={{ color: 'var(--danger)', display: canReviewKyc ? undefined : 'none' }} onClick={() => setPending({ doc, action: 'reject' })}>Reject</button>
                 </>
               )}
             </div>
@@ -451,6 +415,7 @@ function WalletAdjustModal({ driverId, driverBalance, onClose, onSuccess }: Wall
 }
 
 function WalletTab({ driver, onDriverUpdate }: { driver: Driver; onDriverUpdate: (d: Driver) => void }) {
+  const navigate = useNavigate()
   const [transactions, setTransactions] = useState<DriverWalletTransaction[]>([])
   const [total, setTotal]               = useState(0)
   const [loading, setLoading]           = useState(true)
@@ -483,7 +448,7 @@ function WalletTab({ driver, onDriverUpdate }: { driver: Driver; onDriverUpdate:
         </div>
         <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
           <button className="btn sm" onClick={() => setShowAdjust(true)}>Adjust wallet</button>
-          <button className="btn sm ghost">Payout history</button>
+          <button className="btn sm ghost" onClick={() => navigate(`/payouts/payees/${driver.id}`)}>Payout history</button>
         </div>
       </div>
 
@@ -575,22 +540,17 @@ function OverviewTab({ driver, isMobile, onAdjustWallet }: { driver: Driver; isM
       <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         {/* Performance chart */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div className="t-label">Performance</div>
-              <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>Rating & acceptance · last 8 weeks</h3>
-            </div>
-            <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 12, height: 2, background: 'var(--ink)' }} />Rating
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 12, height: 2, background: 'var(--accent)' }} />Acceptance
-              </span>
-            </div>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
+            <div className="t-label">Performance</div>
+            <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>Rating & acceptance · last 8 weeks</h3>
           </div>
-          <div style={{ height: 200, padding: '14px 18px' }}>
-            <PerformanceChart />
+          <div style={{ height: 200, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--ink-2)', fontWeight: 500 }}>No data yet</div>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 6 }}>
+                Weekly rating & acceptance chart will appear once the Bookings module is connected.
+              </div>
+            </div>
           </div>
         </div>
 
@@ -702,7 +662,7 @@ function OverviewTab({ driver, isMobile, onAdjustWallet }: { driver: Driver; isM
           </div>
           <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
             <button className="btn sm" onClick={onAdjustWallet}>Adjust wallet</button>
-            <button className="btn sm ghost">Payout history</button>
+            <button className="btn sm ghost" onClick={() => navigate(`/payouts/payees/${driver.id}`)}>Payout history</button>
           </div>
         </div>
       </div>
@@ -710,43 +670,291 @@ function OverviewTab({ driver, isMobile, onAdjustWallet }: { driver: Driver; isM
   )
 }
 
-// ── Tab stub ──────────────────────────────────────────────────────────────────
+// ── Vehicle tab ───────────────────────────────────────────────────────────────
 
-function TabStub() {
-  return (
-    <div className="t-meta" style={{ padding: 24 }}>This section will be available in a future module.</div>
-  )
-}
+function VehicleTab({ driver, navigate }: { driver: Driver; navigate: (p: string) => void }) {
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null)
+  const [loading, setLoading] = useState(false)
 
-function TripsTab({ driverId }: { driverId: string }) {
-  const [message, setMessage] = useState('')
   useEffect(() => {
-    driverService.getTrips(driverId)
-      .then(data => setMessage(data.message))
-      .catch(() => setMessage('Trips will be available after the bookings module is integrated.'))
-  }, [driverId])
+    if (!driver.vehicle_plate) return
+    setLoading(true)
+    vehicleService.listVehicles({ search: driver.vehicle_plate, per_page: 5 })
+      .then(res => setVehicle(res.items.find((v: Vehicle) => v.plate_no === driver.vehicle_plate) ?? null))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [driver.vehicle_plate])
+
+  if (!driver.vehicle_plate && !driver.vehicle_class) {
+    return (
+      <div style={{ padding: '24px 32px' }}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '32px 24px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+          No vehicle linked to this driver.
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ padding: '24px 32px' }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '32px 24px', textAlign: 'center' }}>
-        <Icon name="clock" size={28} style={{ color: 'var(--ink-4)', marginBottom: 12, display: 'block', margin: '0 auto 12px' }} />
-        <div style={{ fontSize: 14, color: 'var(--ink-2)' }}>{message || 'Loading…'}</div>
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="t-label">Linked vehicle</span>
+          {vehicle && (
+            <button className="btn sm ghost" onClick={() => navigate(`/vehicles/${vehicle.id}`)}>
+              <Icon name="external" size={11} /> Open vehicle file
+            </button>
+          )}
+        </div>
+        <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
+          {([
+            { label: 'Plate number',   value: driver.vehicle_plate ?? '—', mono: true },
+            { label: 'Vehicle class',  value: driver.vehicle_class ?? '—', mono: false },
+            { label: 'Make / model',   value: vehicle ? `${vehicle.make} ${vehicle.model}` : (loading ? 'Loading…' : '—'), mono: false },
+            { label: 'Year',           value: vehicle ? String(vehicle.year) : '—', mono: false },
+            { label: 'Color',          value: vehicle?.color ?? '—', mono: false },
+            { label: 'Vehicle status', value: vehicle?.status ?? '—', mono: false },
+            { label: 'Doc status',     value: vehicle?.doc_status ?? '—', mono: false },
+            { label: 'Odometer',       value: vehicle ? `${vehicle.odometer_km.toLocaleString('en-IN')} km` : '—', mono: false },
+          ] as { label: string; value: string; mono: boolean }[]).map(({ label, value, mono }) => (
+            <div key={label}>
+              <div className="t-label" style={{ padding: 0 }}>{label}</div>
+              <div style={{ marginTop: 4, fontSize: 13, color: 'var(--ink)', fontFamily: mono ? 'var(--font-mono)' : undefined }}>{value}</div>
+            </div>
+          ))}
+        </div>
+        {vehicle && (
+          <div style={{ padding: '0 20px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {vehicle.status === 'active'    && <span className="badge ok"><span className="dot ok" />Active</span>}
+            {vehicle.status === 'suspended' && <span className="badge danger"><span className="dot danger" />Grounded</span>}
+            {vehicle.status === 'pending'   && <span className="badge info"><span className="dot info" />Pending</span>}
+            {vehicle.doc_status === 'ok'       && <span className="badge ok"><span className="dot ok" />Docs valid</span>}
+            {vehicle.doc_status === 'expiring' && <span className="badge warn"><span className="dot warn" />Docs expiring</span>}
+            {vehicle.doc_status === 'expired'  && <span className="badge danger"><span className="dot danger" />Docs expired</span>}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function EarningsTab({ driverId }: { driverId: string }) {
-  const [message, setMessage] = useState('')
+// ── Performance tab ───────────────────────────────────────────────────────────
+
+function PerformanceTab({ driver }: { driver: Driver }) {
+  const metrics = [
+    { label: 'Total trips',       value: driver.trips_count.toLocaleString('en-IN'), sub: 'all time', color: 'var(--ink)' },
+    { label: 'Rating',            value: driver.rating != null ? driver.rating.toFixed(2) : '—', sub: 'avg passenger rating', color: driver.rating != null && driver.rating >= 4.5 ? 'var(--accent)' : driver.rating != null && driver.rating < 4.0 ? 'var(--danger)' : 'var(--ink)' },
+    { label: 'Acceptance rate',   value: driver.acceptance_rate != null ? `${(driver.acceptance_rate * 100).toFixed(1)}%` : '—', sub: 'requests accepted', color: driver.acceptance_rate != null && driver.acceptance_rate < 0.7 ? 'var(--danger)' : 'var(--ink-2)' },
+    { label: 'Cancellation rate', value: `${(driver.cancellation_rate * 100).toFixed(1)}%`, sub: 'cancelled after accept', color: driver.cancellation_rate > 0.1 ? 'var(--danger)' : 'var(--ink-2)' },
+  ]
+
+  return (
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+        {metrics.map((m, i) => (
+          <div key={m.label} style={{ padding: '20px 24px', borderRight: i < metrics.length - 1 ? '1px solid var(--rule)' : 'none' }}>
+            <div className="t-label" style={{ padding: 0 }}>{m.label}</div>
+            <div style={{ marginTop: 8, fontFamily: 'var(--font-serif)', fontSize: 28, fontWeight: 400, color: m.color }}>{m.value}</div>
+            <div className="t-meta" style={{ marginTop: 4 }}>{m.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)' }}>
+          <span className="t-label">Auto-suspension threshold check</span>
+        </div>
+        <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+          {([
+            { label: 'Cancellation rate', value: `${(driver.cancellation_rate * 100).toFixed(1)}%`, bad: driver.cancellation_rate > 0.1, note: '>10% triggers review' },
+            { label: 'Acceptance rate',   value: driver.acceptance_rate != null ? `${(driver.acceptance_rate * 100).toFixed(1)}%` : '—', bad: driver.acceptance_rate != null && driver.acceptance_rate < 0.7, note: '<70% triggers review' },
+            { label: 'Rating',            value: driver.rating != null ? driver.rating.toFixed(2) : '—', bad: driver.rating != null && driver.rating < 4.0, note: '<4.0 triggers review' },
+          ] as { label: string; value: string; bad: boolean; note: string }[]).map(({ label, value, bad, note }) => (
+            <div key={label} style={{
+              padding: '12px 16px', borderRadius: 3,
+              background: bad ? 'color-mix(in oklab, var(--danger) 6%, var(--surface))' : 'var(--surface-2)',
+              border: `1px solid ${bad ? 'color-mix(in oklab, var(--danger) 30%, var(--rule))' : 'var(--rule)'}`,
+            }}>
+              <div className="t-label" style={{ padding: 0 }}>{label}</div>
+              <div style={{ marginTop: 6, fontSize: 20, fontFamily: 'var(--font-serif)', color: bad ? 'var(--danger)' : 'var(--ink)' }}>{value}</div>
+              <div style={{ marginTop: 4, fontSize: 11.5, color: bad ? 'var(--danger)' : 'var(--ink-3)' }}>
+                {bad ? `⚠ Below threshold — ${note}` : note}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Trips tab ─────────────────────────────────────────────────────────────────
+
+function TripsTab({ driver }: { driver: Driver }) {
+  return (
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+        {[
+          { label: 'Total trips', value: driver.trips_count.toLocaleString('en-IN'), sub: 'all time' },
+          { label: 'Rating',      value: driver.rating != null ? driver.rating.toFixed(2) : '—', sub: 'avg passenger rating' },
+        ].map((m, i) => (
+          <div key={m.label} style={{ padding: '20px 24px', borderRight: i === 0 ? '1px solid var(--rule)' : 'none' }}>
+            <div className="t-label" style={{ padding: 0 }}>{m.label}</div>
+            <div style={{ marginTop: 8, fontFamily: 'var(--font-serif)', fontSize: 28, fontWeight: 400 }}>{m.value}</div>
+            <div className="t-meta" style={{ marginTop: 4 }}>{m.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '32px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 14, color: 'var(--ink-2)', fontWeight: 500 }}>Detailed trip history</div>
+        <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6 }}>
+          Per-trip records will appear here once the Bookings module links completed rides to this driver.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Earnings tab ──────────────────────────────────────────────────────────────
+
+function EarningsTab({ driver }: { driver: Driver }) {
+  return (
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+        {[
+          { label: 'Wallet balance', value: formatMoney(driver.wallet_balance_minor), sub: 'current balance', color: 'var(--accent)' },
+          { label: 'Total trips',    value: driver.trips_count.toLocaleString('en-IN'), sub: 'completed rides', color: 'var(--ink)' },
+        ].map((m, i) => (
+          <div key={m.label} style={{ padding: '20px 24px', borderRight: i === 0 ? '1px solid var(--rule)' : 'none' }}>
+            <div className="t-label" style={{ padding: 0 }}>{m.label}</div>
+            <div style={{ marginTop: 8, fontFamily: 'var(--font-serif)', fontSize: 28, fontWeight: 400, color: m.color }}>{m.value}</div>
+            <div className="t-meta" style={{ marginTop: 4 }}>{m.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '28px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 14, color: 'var(--ink-2)', fontWeight: 500 }}>Earnings breakdown</div>
+        <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6 }}>
+          Per-trip earnings and payout history will appear here once the Payouts module is connected.
+          Use the Wallet tab to view manual wallet adjustments.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Disciplinary tab ──────────────────────────────────────────────────────────
+
+function DisciplinaryTab({ driverId, driver }: { driverId: string; driver: Driver }) {
+  const [events, setEvents]   = useState<AuditEventSummary[]>([])
+  const [loading, setLoading] = useState(true)
+
   useEffect(() => {
-    driverService.getEarnings(driverId)
-      .then(data => setMessage(data.message))
-      .catch(() => setMessage('Earnings will be available after the payouts module is integrated.'))
+    auditService.listEvents({ target: `driver:${driverId}`, per_page: 100, time_window: 'all' })
+      .then(res => setEvents(
+        res.items.filter((e: AuditEventSummary) =>
+          e.action.includes('suspend') || e.action.includes('deactivate') ||
+          e.action.includes('reject')  || e.action.includes('reactivate') ||
+          e.action.includes('force_offline')
+        )
+      ))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [driverId])
+
+  return (
+    <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {driver.flag_reason && (
+        <div style={{ padding: '12px 16px', background: 'color-mix(in oklab, var(--danger) 7%, var(--surface))', border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))', borderRadius: 3, fontSize: 13, color: 'var(--danger)' }}>
+          <strong>Current flag reason:</strong> {driver.flag_reason}
+        </div>
+      )}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="t-label">Suspension &amp; action history</span>
+          {!loading && <span className="badge info">{events.length} events</span>}
+        </div>
+        {loading ? (
+          <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
+        ) : events.length === 0 ? (
+          <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>No disciplinary actions recorded for this driver.</div>
+        ) : (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table className="tbl">
+              <thead><tr><th>Action</th><th>By</th><th>When</th><th>IP</th></tr></thead>
+              <tbody>
+                {events.map(ev => (
+                  <tr key={ev.id}>
+                    <td>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 7px', borderRadius: 2,
+                        background: ev.action.includes('suspend') || ev.action.includes('deactivate') || ev.action.includes('reject') ? 'color-mix(in oklab, var(--danger) 10%, var(--surface))' : 'var(--accent-soft)',
+                        color: ev.action.includes('suspend') || ev.action.includes('deactivate') || ev.action.includes('reject') ? 'var(--danger)' : 'var(--accent)',
+                        border: `1px solid ${ev.action.includes('suspend') || ev.action.includes('deactivate') || ev.action.includes('reject') ? 'color-mix(in oklab, var(--danger) 28%, var(--rule))' : 'color-mix(in oklab, var(--accent) 28%, var(--rule))'}`,
+                      }}>{ev.action}</span>
+                    </td>
+                    <td style={{ fontSize: 13 }}>{ev.actor_name}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
+                      {new Date(ev.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{ev.source_ip ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Audit tab ─────────────────────────────────────────────────────────────────
+
+function AuditTab({ driverId }: { driverId: string }) {
+  const [events, setEvents]   = useState<AuditEventSummary[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    auditService.listEvents({ target: `driver:${driverId}`, per_page: 100, time_window: 'all' })
+      .then(res => setEvents(res.items))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [driverId])
+
   return (
     <div style={{ padding: '24px 32px' }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '32px 24px', textAlign: 'center' }}>
-        <Icon name="clock" size={28} style={{ color: 'var(--ink-4)', marginBottom: 12, display: 'block', margin: '0 auto 12px' }} />
-        <div style={{ fontSize: 14, color: 'var(--ink-2)' }}>{message || 'Loading…'}</div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="t-label">All admin actions on this driver</span>
+          {!loading && events.length > 0 && <span className="badge info">{events.length} events</span>}
+        </div>
+        {loading ? (
+          <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>Loading audit events…</div>
+        ) : events.length === 0 ? (
+          <div style={{ padding: '24px 20px', color: 'var(--ink-3)', fontSize: 13 }}>No audit events recorded for this driver yet.</div>
+        ) : (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table className="tbl" style={{ minWidth: 600 }}>
+              <thead><tr><th>Action</th><th>Actor</th><th>Severity</th><th>When</th><th>IP</th></tr></thead>
+              <tbody>
+                {events.map(ev => (
+                  <tr key={ev.id}>
+                    <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)' }}>{ev.action}</span></td>
+                    <td style={{ fontSize: 13 }}>{ev.actor_name}</td>
+                    <td>
+                      {ev.severity === 'high' && <span className="badge danger"><span className="dot danger" />High</span>}
+                      {ev.severity === 'med'  && <span className="badge warn"><span className="dot warn" />Med</span>}
+                      {ev.severity === 'low'  && <span className="badge"><span className="dot" />Low</span>}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
+                      {new Date(ev.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)' }}>{ev.source_ip ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -991,8 +1199,6 @@ export default function DriverDetailPage() {
       subtitle={`${driver.driver_code ?? '—'} · ${driver.vehicle_class ?? '—'} · ${driver.city ?? '—'} · ${driver.zone_code ?? '—'} · ${tenure(driver.joined_at)} · ${driver.trips_count.toLocaleString()} trips${driver.rating != null ? ` · ${driver.rating.toFixed(2)} ★` : ''}`}
       actions={
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn sm"><Icon name="envelope" size={13} />Message</button>
-
           {/* Approve — only when pending / in_review, disappears once active */}
           {canApprove && (
             <button className="btn sm accent" onClick={() => setShowApproveDialog(true)}>
@@ -1157,12 +1363,12 @@ export default function DriverDetailPage() {
         )}
         {activeTab === 'documents'    && id && <DocumentsTab driverId={id} navigate={navigate} />}
         {activeTab === 'wallet'       && <WalletTab driver={driver} onDriverUpdate={setDriver} />}
-        {activeTab === 'vehicle'      && <TabStub />}
-        {activeTab === 'performance'  && <TabStub />}
-        {activeTab === 'earnings'     && id && <EarningsTab driverId={id} />}
-        {activeTab === 'trips'        && id && <TripsTab    driverId={id} />}
-        {activeTab === 'disciplinary' && <TabStub />}
-        {activeTab === 'audit'        && <TabStub />}
+        {activeTab === 'vehicle'      && <VehicleTab driver={driver} navigate={navigate} />}
+        {activeTab === 'performance'  && <PerformanceTab driver={driver} />}
+        {activeTab === 'earnings'     && <EarningsTab driver={driver} />}
+        {activeTab === 'trips'        && <TripsTab driver={driver} />}
+        {activeTab === 'disciplinary' && id && <DisciplinaryTab driverId={id} driver={driver} />}
+        {activeTab === 'audit'        && id && <AuditTab driverId={id} />}
       </div>
 
       {/* Reject modal */}

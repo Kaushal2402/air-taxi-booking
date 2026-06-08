@@ -186,6 +186,7 @@ export const paymentsService = {
     service?: string
     date_from?: string
     date_to?: string
+    customer_id?: string
   }) => api.get<PaymentListResponse>('/payments', { params }).then(r => r.data),
 
   searchBooking: (ref: string) =>

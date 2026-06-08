@@ -38,11 +38,13 @@ async def list_tickets(
     assignee_id: str | None = Query(None),
     sla_breach: bool | None = Query(None),
     search: str | None = Query(None),
+    requester_id: str | None = Query(None),
     _: AdminUser = Depends(require_permission("support.tickets.view")),
     db=Depends(get_db),
 ):
     return await support_service.list_tickets(
-        db, page, page_size, category, priority, status, assignee_id, sla_breach, search
+        db, page, page_size, category, priority, status, assignee_id, sla_breach, search,
+        requester_id=requester_id,
     )
 
 

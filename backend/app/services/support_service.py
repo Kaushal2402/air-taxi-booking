@@ -125,6 +125,7 @@ async def list_tickets(
     assignee_id: str | None,
     sla_breach: bool | None,
     search: str | None,
+    requester_id: str | None = None,
 ) -> TicketListResponse:
     q = select(Ticket)
 
@@ -138,6 +139,8 @@ async def list_tickets(
         q = q.where(Ticket.assignee_id == assignee_id)
     if sla_breach is True:
         q = q.where(Ticket.sla_breached == True)  # noqa: E712
+    if requester_id:
+        q = q.where(Ticket.requester_id == requester_id)
     if search:
         like = f"%{search}%"
         q = q.where(

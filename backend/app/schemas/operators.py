@@ -25,6 +25,8 @@ class OperatorResponse(BaseModel):
     notes: str | None
     created_at: Any
     updated_at: Any
+    fleet_count: int = 0
+    pilot_count: int = 0
 
 
 class OperatorCreate(BaseModel):

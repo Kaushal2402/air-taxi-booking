@@ -43,6 +43,8 @@ export interface Operator {
   notes: string | null
   created_at: string
   updated_at: string
+  fleet_count: number
+  pilot_count: number
 }
 
 export interface OperatorDocument {
@@ -124,6 +126,47 @@ export interface OperatorPerformanceResponse {
   payouts_mtd_amount: number
 }
 
+export interface ComplianceAircraftRow {
+  id: string
+  registration_mark: string
+  operator_id: string
+  status: AircraftStatus
+  airworthiness_status: AirworthinessStatus
+  airworthiness_expiry: string | null
+}
+
+export interface AircraftComplianceSummary {
+  total: number
+  ok: number
+  expiring_count: number
+  expired_count: number
+  grounded_count: number
+  expiring: ComplianceAircraftRow[]
+  expired: ComplianceAircraftRow[]
+}
+
+export interface CompliancePilotRow {
+  id: string
+  name: string
+  operator_id: string
+  status: PilotStatus
+  license_no: string | null
+  medical_expiry: string | null
+}
+
+export interface PilotComplianceSummary {
+  total: number
+  ok_count: number
+  no_medical_count: number
+  expired_medical_count: number
+  expiring_30d_count: number
+  expiring_60d_count: number
+  expired_medical: CompliancePilotRow[]
+  expiring_30d: CompliancePilotRow[]
+  expiring_60d: CompliancePilotRow[]
+  no_medical: CompliancePilotRow[]
+}
+
 export interface CreateOperatorBody {
   name: string
   company_registration_no?: string
@@ -159,6 +202,7 @@ export interface CreateAircraftBody {
 
 export interface UpdateAircraftBody {
   registration_mark?: string
+  aircraft_type_id?: string
   seat_capacity?: number
   mtow_kg?: number
   range_nm?: number
@@ -275,4 +319,11 @@ export const operatorService = {
 
   groundPilot: (id: string, body: { reason: string }) =>
     api.post<Pilot>(`/pilots/${id}/ground`, body).then(r => r.data),
+
+  // ── Compliance summaries ────────────────────────────────────────────────────
+  getAircraftCompliance: () =>
+    api.get<AircraftComplianceSummary>('/aircraft/compliance').then(r => r.data),
+
+  getPilotsCompliance: () =>
+    api.get<PilotComplianceSummary>('/pilots/compliance').then(r => r.data),
 }

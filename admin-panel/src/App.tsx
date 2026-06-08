@@ -254,7 +254,7 @@ function App() {
 
           {/* Operators */}
           <Route path="/operators" element={<PrivateRoute><OperatorDirectoryPage /></PrivateRoute>} />
-          <Route path="/operators/new" element={<PrivateRoute><OperatorOnboardingPage /></PrivateRoute>} />
+          <Route path="/operators/onboarding" element={<PrivateRoute><OperatorOnboardingPage /></PrivateRoute>} />
           <Route path="/operators/:id" element={<PrivateRoute><OperatorDetailPage /></PrivateRoute>} />
 
           {/* Aircraft & Crew */}

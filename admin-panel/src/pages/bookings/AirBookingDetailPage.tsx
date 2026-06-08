@@ -10,6 +10,8 @@ import type {
   CancelPreviewResponse,
   ManifestResponse,
 } from '../../services/airBookingsService'
+import { operatorService } from '../../services/operatorService'
+import type { Operator, Aircraft } from '../../services/operatorService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -357,14 +359,27 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
 // ── Assign Operator Modal ─────────────────────────────────────────────────────
 
 function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: string; onClose: () => void; onSuccess: () => void }) {
+  const [operators, setOperators]   = useState<Operator[]>([])
+  const [aircraft, setAircraft]     = useState<Aircraft[]>([])
   const [operatorId, setOperatorId] = useState('')
   const [aircraftId, setAircraftId] = useState('')
-  const [note, setNote] = useState('')
+  const [note, setNote]             = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError]           = useState<string | null>(null)
+
+  useEffect(() => {
+    operatorService.listOperators({ page_size: 100 }).then(r => setOperators(r.items)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!operatorId) { setAircraft([]); setAircraftId(''); return }
+    operatorService.listAircraft({ operator_id: operatorId, status: 'ready', page_size: 100 })
+      .then(r => { setAircraft(r.items); setAircraftId('') })
+      .catch(() => {})
+  }, [operatorId])
 
   async function handleSubmit() {
-    if (!operatorId || !aircraftId) { setError('Operator ID and Aircraft ID are required'); return }
+    if (!operatorId || !aircraftId) { setError('Operator and Aircraft are required'); return }
     setSubmitting(true)
     setError(null)
     try {
@@ -386,12 +401,35 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="field">
-            <label className="field-label">Operator ID (UUID)</label>
-            <div className="input"><input value={operatorId} onChange={e => setOperatorId(e.target.value)} placeholder="Operator UUID…" /></div>
+            <label className="field-label">Operator *</label>
+            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+              <select
+                value={operatorId}
+                onChange={e => setOperatorId(e.target.value)}
+                style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
+              >
+                <option value="">Select operator…</option>
+                {operators.map(op => (
+                  <option key={op.id} value={op.id}>{op.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="field">
-            <label className="field-label">Aircraft ID (UUID)</label>
-            <div className="input"><input value={aircraftId} onChange={e => setAircraftId(e.target.value)} placeholder="Aircraft UUID…" /></div>
+            <label className="field-label">Aircraft *</label>
+            <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+              <select
+                value={aircraftId}
+                onChange={e => setAircraftId(e.target.value)}
+                disabled={!operatorId}
+                style={{ border: 'none', outline: 'none', background: 'transparent', cursor: operatorId ? 'pointer' : 'not-allowed', height: '100%', paddingRight: 10, flex: 1 }}
+              >
+                <option value="">{operatorId ? (aircraft.length ? 'Select aircraft…' : 'No ready aircraft') : 'Select operator first…'}</option>
+                {aircraft.map(a => (
+                  <option key={a.id} value={a.id}>{a.registration_mark} · {a.seat_capacity} seats</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="field">
             <label className="field-label">Note (optional)</label>

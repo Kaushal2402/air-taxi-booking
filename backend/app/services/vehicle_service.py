@@ -759,6 +759,16 @@ async def get_vendor_detail(db: AsyncSession, vendor_id: str) -> dict:
 
 
 async def create_vendor(db: AsyncSession, data: dict) -> dict:
+    # Fall back to platform default commission if not provided
+    commission_rate = data.get("commission_rate")
+    if commission_rate is None:
+        try:
+            from app.services.settings_service import get_settings
+            platform = await get_settings(db)
+            commission_rate = float(platform.default_commission_pct or 20.0)
+        except Exception:
+            commission_rate = 20.0
+
     vendor = Vendor(
         id=str(uuid.uuid4()),
         name=data["name"],
@@ -766,7 +776,7 @@ async def create_vendor(db: AsyncSession, data: dict) -> dict:
         phone=data.get("phone"),
         email=data.get("email"),
         status=data.get("status", "review"),
-        commission_rate=data.get("commission_rate", 22.0),
+        commission_rate=commission_rate,
         commission_type=data.get("commission_type", "percentage"),
     )
     db.add(vendor)
@@ -801,6 +811,44 @@ async def activate_vendor(db: AsyncSession, vendor_id: str) -> dict:
     item = VendorResponse.model_validate(vendor).model_dump()
     item.update(counts)
     return item
+
+
+async def get_vehicles_compliance_summary(db: AsyncSession) -> dict:
+    """Return vehicles grouped by doc_status for the compliance dashboard."""
+    today = datetime.now(timezone.utc).date()
+    in_30 = today + timedelta(days=30)
+
+    result = await db.execute(select(Vehicle))
+    vehicles = list(result.scalars().all())
+
+    expired = [v for v in vehicles if v.doc_status == "expired"]
+    expiring = [v for v in vehicles if v.doc_status == "expiring"]
+    pending = [v for v in vehicles if v.doc_status == "pending"]
+    ok = [v for v in vehicles if v.doc_status == "ok"]
+    grounded = [v for v in vehicles if v.status == "suspended"]
+
+    def _row(v: Vehicle) -> dict:
+        return {
+            "id": v.id,
+            "plate_no": v.plate_no,
+            "make": v.make,
+            "model": v.model,
+            "status": v.status,
+            "doc_status": v.doc_status,
+            "vehicle_class_id": v.vehicle_class_id,
+            "owner_type": v.owner_type,
+        }
+
+    return {
+        "total": len(vehicles),
+        "ok_count": len(ok),
+        "pending_count": len(pending),
+        "expiring_count": len(expiring),
+        "expired_count": len(expired),
+        "grounded_count": len(grounded),
+        "expired": [_row(v) for v in expired],
+        "expiring": [_row(v) for v in expiring],
+    }
 
 
 async def suspend_vendor(db: AsyncSession, vendor_id: str, reason: str) -> dict:

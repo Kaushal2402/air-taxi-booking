@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
 import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'

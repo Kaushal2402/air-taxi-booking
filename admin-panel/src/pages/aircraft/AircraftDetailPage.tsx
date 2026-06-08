@@ -8,6 +8,8 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorService, uploadFile } from '../../services/operatorService'
 import type { Aircraft, MaintenanceWindow, UpdateAircraftBody, Pilot, CreatePilotBody, UpdatePilotBody } from '../../services/operatorService'
+import { catalogService } from '../../services/catalogService'
+import type { AircraftType } from '../../services/catalogService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,7 @@ export default function AircraftDetailPage() {
 
   const [aircraft, setAircraft]           = useState<Aircraft | null>(null)
   const [operatorName, setOperatorName]   = useState<string | null>(null)
+  const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
   const [loading, setLoading]             = useState(true)
   const [apiError, setApiError]           = useState('')
   const [isForbidden, setIsForbidden]     = useState(false)
@@ -134,7 +137,10 @@ export default function AircraftDetailPage() {
     finally { setPilotsLoading(false) }
   }
 
-  useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load()
+    catalogService.listAircraftTypes().then(setAircraftTypes).catch(() => {})
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeTab === 'crew') loadCrew()
   }, [activeTab, aircraft]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -470,6 +476,30 @@ export default function AircraftDetailPage() {
                 )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
+                {/* Aircraft type — dropdown in edit, name in view */}
+                <div className="field">
+                  <label className="field-label">Aircraft type</label>
+                  {editing ? (
+                    <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+                      <select
+                        value={draft.aircraft_type_id ?? aircraft.aircraft_type_id ?? ''}
+                        onChange={e => setDraft(d => ({ ...d, aircraft_type_id: e.target.value || undefined }))}
+                        style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
+                      >
+                        <option value="">—</option>
+                        {aircraftTypes.filter(t => t.is_active).map(t => (
+                          <option key={t.id} value={t.id}>{t.name} ({t.category.toUpperCase()})</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13.5, color: 'var(--ink)', padding: '6px 0' }}>
+                      {aircraft.aircraft_type_id
+                        ? (aircraftTypes.find(t => t.id === aircraft.aircraft_type_id)?.name || aircraft.aircraft_type_id)
+                        : '—'}
+                    </div>
+                  )}
+                </div>
                 {[
                   { label: 'Registration mark',    key: 'registration_mark' as const,   type: 'text' },
                   { label: 'Seat capacity',         key: 'seat_capacity' as const,       type: 'number' },

@@ -12,6 +12,8 @@ import { useFormatMoney } from '../../lib/utils'
 import { kycService } from '../../services/kycService'
 import type { DocTypeItem } from '../../services/kycService'
 import { settingsService } from '../../services/settingsService'
+import { catalogService } from '../../services/catalogService'
+import type { AircraftType } from '../../services/catalogService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -76,6 +78,7 @@ export default function OperatorDetailPage() {
   const [pilots, setPilots]           = useState<Pilot[]>([])
   const [performance, setPerformance] = useState<OperatorPerformanceResponse | null>(null)
   const [docs, setDocs]               = useState<OperatorDocument[]>([])
+  const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
 
   // Edit company form
   const [editing, setEditing]         = useState(false)
@@ -102,7 +105,7 @@ export default function OperatorDetailPage() {
   // Add aircraft modal
   const [showAddAircraft, setShowAddAircraft] = useState(false)
   const [aircraftForm, setAircraftForm] = useState<Omit<CreateAircraftBody, 'operator_id'>>({
-    registration_mark: '', seat_capacity: 1,
+    registration_mark: '', seat_capacity: 1, aircraft_type_id: undefined,
   })
   const [aircraftSaving, setAircraftSaving] = useState(false)
   const [aircraftError, setAircraftError]   = useState('')
@@ -173,6 +176,7 @@ export default function OperatorDetailPage() {
   useEffect(() => {
     loadOperator()
     settingsService.getSettings().then(s => setSiteVisitRequired(!!s.operator_site_visit_required)).catch(() => {})
+    catalogService.listAircraftTypes().then(setAircraftTypes).catch(() => {})
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -610,7 +614,7 @@ export default function OperatorDetailPage() {
                     >
                       <option value="">—</option>
                       <option value="scheduled">Scheduled</option>
-                      <option value="done">Done</option>
+                      <option value="completed">Completed</option>
                       <option value="waived">Waived</option>
                     </select>
                   </div>
@@ -680,7 +684,7 @@ export default function OperatorDetailPage() {
                 <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
                   Fleet · {aircraft.length} aircraft
                 </h3>
-                <button className="btn sm accent" onClick={() => { setAircraftForm({ registration_mark: '', seat_capacity: 1 }); setAircraftError(''); setShowAddAircraft(true) }}>
+                <button className="btn sm accent" onClick={() => { setAircraftForm({ registration_mark: '', seat_capacity: 1, aircraft_type_id: undefined }); setAircraftError(''); setShowAddAircraft(true) }}>
                   <Icon name="plus" size={13} />Add aircraft
                 </button>
               </div>
@@ -719,7 +723,11 @@ export default function OperatorDetailPage() {
                               {a.registration_mark}
                             </span>
                           </td>
-                          <td style={{ fontSize: 13, color: 'var(--ink-2)' }}>{a.aircraft_type_id || '—'}</td>
+                          <td style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+                            {a.aircraft_type_id
+                              ? (aircraftTypes.find(t => t.id === a.aircraft_type_id)?.name || a.aircraft_type_id)
+                              : '—'}
+                          </td>
                           <td className="num">{a.seat_capacity}</td>
                           <td className="num">{a.total_hours?.toLocaleString() || '—'}</td>
                           <td>{aircraftStatusBadge(a.status)}</td>
@@ -1149,11 +1157,35 @@ export default function OperatorDetailPage() {
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div className="field">
+                <label className="field-label">Aircraft type</label>
+                <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+                  <select
+                    value={aircraftForm.aircraft_type_id ?? ''}
+                    onChange={e => {
+                      const t = aircraftTypes.find(x => x.id === e.target.value)
+                      setAircraftForm(f => ({
+                        ...f,
+                        aircraft_type_id: e.target.value || undefined,
+                        seat_capacity: t ? t.seats : f.seat_capacity,
+                        mtow_kg: t?.mtow_kg ?? f.mtow_kg,
+                        range_nm: t?.range_nm ?? f.range_nm,
+                      }))
+                    }}
+                    style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
+                  >
+                    <option value="">Select type…</option>
+                    {aircraftTypes.filter(t => t.is_active).map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.category.toUpperCase()})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="field">
                 <label className="field-label">Registration mark *</label>
                 <div className="input">
                   <input
                     value={aircraftForm.registration_mark}
-                    onChange={e => setAircraftForm(f => ({ ...f, registration_mark: e.target.value }))}
+                    onChange={e => setAircraftForm(f => ({ ...f, registration_mark: e.target.value.toUpperCase() }))}
                     placeholder="VT-ABC"
                     style={{ fontFamily: 'var(--font-mono)' }}
                     autoFocus

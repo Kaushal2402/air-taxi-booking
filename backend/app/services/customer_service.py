@@ -199,9 +199,15 @@ async def create_customer(
     platform = await get_settings(db)
     marketing_opt_in = data.marketing_opt_in if data.marketing_opt_in is not None else platform.consent_marketing_opt_in
 
+    # Assign next seq_id (auto-increment via MAX+1 for async-safe compatibility)
+    max_seq_result = await db.execute(select(func.max(Customer.seq_id)))
+    max_seq = max_seq_result.scalar_one_or_none() or 0
+    next_seq_id = max_seq + 1
+
     now = datetime.now(timezone.utc)
     customer = Customer(
         id=str(uuid.uuid4()),
+        seq_id=next_seq_id,
         name=data.name,
         phone=data.phone,
         email=data.email,
@@ -306,6 +312,62 @@ async def unflag_customer(db: AsyncSession, customer_id: str) -> Customer:
     customer = await get_customer(db, customer_id)
     customer.status = "active"
     customer.flag_reason = None
+    await db.commit()
+    await db.refresh(customer)
+    return customer
+
+
+async def update_customer_metrics_on_completion(
+    db: AsyncSession,
+    customer_id: str,
+    fare_minor: int,
+) -> None:
+    """Called after a booking (road or air) reaches Completed status.
+
+    Increments trips_count, updates LTV and avg_fare, refreshes last_active_at,
+    and recomputes the customer segment. Silently no-ops if customer_id is missing.
+    """
+    if not customer_id:
+        return
+    result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = result.scalar_one_or_none()
+    if not customer:
+        return
+
+    customer.trips_count = (customer.trips_count or 0) + 1
+    customer.ltv_minor = (customer.ltv_minor or 0) + fare_minor
+    old_count = max(1, customer.trips_count - 1)
+    customer.avg_fare_minor = int(
+        ((old_count * (customer.avg_fare_minor or 0)) + fare_minor) / customer.trips_count
+    )
+    customer.last_active_at = datetime.now(timezone.utc)
+    customer.computed_segment = await compute_segment(customer)
+    await db.commit()
+
+
+async def update_customer_metrics_on_cancellation(
+    db: AsyncSession,
+    customer_id: str,
+    total_bookings: int,
+    total_cancellations: int,
+) -> None:
+    """Refreshes cancellation_rate on the Customer after a cancellation."""
+    if not customer_id:
+        return
+    result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = result.scalar_one_or_none()
+    if not customer:
+        return
+    if total_bookings > 0:
+        customer.cancellation_rate = total_cancellations / total_bookings
+    customer.last_active_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+async def ban_customer(db: AsyncSession, customer_id: str, reason: str) -> Customer:
+    customer = await get_customer(db, customer_id)
+    customer.status = "banned"
+    customer.flag_reason = reason
     await db.commit()
     await db.refresh(customer)
     return customer

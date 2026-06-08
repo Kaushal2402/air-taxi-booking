@@ -77,8 +77,33 @@ async def list_operators(
     rows_result = await db.execute(rows_q)
     items = list(rows_result.scalars().all())
 
+    # Batch-fetch fleet and crew counts for all operators in one query each
+    operator_ids = [o.id for o in items]
+    fleet_counts: dict[str, int] = {}
+    pilot_counts: dict[str, int] = {}
+    if operator_ids:
+        fc_rows = await db.execute(
+            select(Aircraft.operator_id, func.count(Aircraft.id).label("cnt"))
+            .where(Aircraft.operator_id.in_(operator_ids))
+            .group_by(Aircraft.operator_id)
+        )
+        fleet_counts = {r.operator_id: r.cnt for r in fc_rows}
+
+        pc_rows = await db.execute(
+            select(Pilot.operator_id, func.count(Pilot.id).label("cnt"))
+            .where(Pilot.operator_id.in_(operator_ids))
+            .group_by(Pilot.operator_id)
+        )
+        pilot_counts = {r.operator_id: r.cnt for r in pc_rows}
+
+    def _to_response(o: Operator) -> OperatorResponse:
+        resp = OperatorResponse.model_validate(o)
+        resp.fleet_count = fleet_counts.get(o.id, 0)
+        resp.pilot_count = pilot_counts.get(o.id, 0)
+        return resp
+
     return OperatorListResponse(
-        items=[OperatorResponse.model_validate(o) for o in items],
+        items=[_to_response(o) for o in items],
         total=total,
     )
 
@@ -134,7 +159,7 @@ async def get_operator_detail(db: AsyncSession, operator_id: str) -> OperatorDet
     )
     docs = list(docs_result.scalars().all())
 
-    base = OperatorResponse.model_validate(operator).model_dump()
+    base = OperatorResponse.model_validate(operator).model_dump(exclude={"fleet_count", "pilot_count"})
     return OperatorDetail(
         **base,
         fleet_count=fleet_count,
@@ -376,7 +401,10 @@ async def approve_aircraft(db: AsyncSession, aircraft_id: str) -> Aircraft:
 async def ground_aircraft(db: AsyncSession, aircraft_id: str, reason: str) -> Aircraft:
     aircraft = await get_aircraft(db, aircraft_id)
     aircraft.status = "grounded"
-    aircraft.airworthiness_status = "expired"
+    # Only mark airworthiness as expired if it was already expired — don't clobber
+    # a valid certificate when grounding for operational / admin reasons.
+    if aircraft.airworthiness_status not in ("expiring", "expired"):
+        pass  # leave airworthiness_status unchanged
     aircraft.notes = reason
     await db.commit()
     await db.refresh(aircraft)
@@ -515,3 +543,102 @@ async def ground_pilot(db: AsyncSession, pilot_id: str, reason: str) -> Pilot:
     await db.commit()
     await db.refresh(pilot)
     return pilot
+
+
+# ── Compliance summaries ──────────────────────────────────────────────────────
+
+async def get_aircraft_compliance_summary(db: AsyncSession) -> dict:
+    """Return counts of aircraft by airworthiness status, plus those expiring within 30 days."""
+    from datetime import date, timedelta
+    today = date.today()
+    in_30 = today + timedelta(days=30)
+
+    rows = (await db.execute(select(Aircraft))).scalars().all()
+
+    expired = [a for a in rows if a.airworthiness_status == "expired"]
+    expiring = [a for a in rows if a.airworthiness_status == "expiring"]
+    grounded = [a for a in rows if a.status == "grounded"]
+    ok = [a for a in rows if a.airworthiness_status == "ok" and a.status not in ("grounded", "pending_review")]
+
+    def _row(a: Aircraft) -> dict:
+        return {
+            "id": a.id,
+            "registration_mark": a.registration_mark,
+            "operator_id": a.operator_id,
+            "status": a.status,
+            "airworthiness_status": a.airworthiness_status,
+            "airworthiness_expiry": str(a.airworthiness_expiry) if a.airworthiness_expiry else None,
+        }
+
+    return {
+        "total": len(rows),
+        "ok": len(ok),
+        "expiring_count": len(expiring),
+        "expired_count": len(expired),
+        "grounded_count": len(grounded),
+        "expiring": [_row(a) for a in expiring],
+        "expired": [_row(a) for a in expired],
+    }
+
+
+async def get_pilots_compliance_summary(db: AsyncSession) -> dict:
+    """Return counts of pilots by medical expiry status."""
+    from datetime import date, timedelta
+    today = date.today()
+    in_30 = today + timedelta(days=30)
+    in_60 = today + timedelta(days=60)
+
+    rows = (await db.execute(select(Pilot))).scalars().all()
+
+    def _parse(d: object) -> object:
+        if d is None:
+            return None
+        from datetime import date as _date
+        if isinstance(d, str):
+            try:
+                return _date.fromisoformat(d)
+            except ValueError:
+                return None
+        return d
+
+    expired_med = []
+    expiring_30 = []
+    expiring_60 = []
+    no_medical = []
+    ok = []
+
+    for p in rows:
+        exp = _parse(p.medical_expiry)
+        if exp is None:
+            no_medical.append(p)
+        elif exp < today:
+            expired_med.append(p)
+        elif exp <= in_30:
+            expiring_30.append(p)
+        elif exp <= in_60:
+            expiring_60.append(p)
+        else:
+            ok.append(p)
+
+    def _row(p: Pilot) -> dict:
+        return {
+            "id": p.id,
+            "name": p.name,
+            "operator_id": p.operator_id,
+            "status": p.status,
+            "license_no": p.license_no,
+            "medical_expiry": str(p.medical_expiry) if p.medical_expiry else None,
+        }
+
+    return {
+        "total": len(rows),
+        "ok_count": len(ok),
+        "no_medical_count": len(no_medical),
+        "expired_medical_count": len(expired_med),
+        "expiring_30d_count": len(expiring_30),
+        "expiring_60d_count": len(expiring_60),
+        "expired_medical": [_row(p) for p in expired_med],
+        "expiring_30d": [_row(p) for p in expiring_30],
+        "expiring_60d": [_row(p) for p in expiring_60],
+        "no_medical": [_row(p) for p in no_medical],
+    }

@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.core.currency import fmt_major, fmt_minor
 from app.services.settings_service import get_base_currency, get_toggle, get_settings, is_in_quiet_window, is_kill_switch_active, get_active_maintenance_window
-from app.services import driver_suspension_service
+from app.services import driver_suspension_service, customer_service
 from app.models.settings import PlatformSettings
 from app.models.booking import (
     BookingAdminNote,
@@ -1159,7 +1159,7 @@ async def advance_status(
     await db.commit()
 
     # ── Auto-suspension threshold enforcement ─────────────────────────────────
-    # Re-load booking after commit so driver_id is available
+    # Re-load booking after commit so driver_id / customer_id are available
     _b = await _load_booking(db, booking_id)
     if _b.driver_id:
         try:
@@ -1174,6 +1174,34 @@ async def advance_status(
             await driver_suspension_service.check_and_auto_suspend(db, _b.driver_id)
         except Exception:
             pass  # never let metric update break the booking response
+
+    # ── Customer metrics ──────────────────────────────────────────────────────
+    if _b.customer_id:
+        try:
+            if new_status == "Completed":
+                fare = _b.fare_final_minor or _b.fare_estimate_minor or 0
+                await customer_service.update_customer_metrics_on_completion(
+                    db, _b.customer_id, fare_minor=fare
+                )
+            elif new_status == "Cancelled":
+                total_res = await db.execute(
+                    select(func.count(RoadBooking.id)).where(
+                        RoadBooking.customer_id == _b.customer_id
+                    )
+                )
+                canc_res = await db.execute(
+                    select(func.count(RoadBooking.id)).where(
+                        RoadBooking.customer_id == _b.customer_id,
+                        RoadBooking.status == "Cancelled",
+                    )
+                )
+                await customer_service.update_customer_metrics_on_cancellation(
+                    db, _b.customer_id,
+                    total_bookings=total_res.scalar_one() or 1,
+                    total_cancellations=canc_res.scalar_one() or 0,
+                )
+        except Exception:
+            pass
 
     booking = await _load_booking(db, booking_id)
     return _build_detail_dict(booking, None, None)

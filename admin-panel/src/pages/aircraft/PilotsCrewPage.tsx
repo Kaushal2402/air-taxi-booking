@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { usePermission } from '../../hooks/usePermission'
-import { parseApiError } from '../../hooks/useApiError'
-import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { operatorService } from '../../services/operatorService'
 import type { Pilot, Operator, CreatePilotBody, UpdatePilotBody } from '../../services/operatorService'
+import { catalogService } from '../../services/catalogService'
+import type { AircraftType } from '../../services/catalogService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,8 +18,6 @@ function statusBadge(status: string) {
 }
 
 function medicalColor(expiryDate: string | null): string {
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (!expiryDate) return 'var(--ink-2)'
   const today    = new Date()
   const expiry   = new Date(expiryDate)
@@ -47,9 +45,10 @@ export default function PilotsCrewPage() {
   const isMobile = useIsMobile()
   const isTablet = useIsTablet()
 
-  const [pilots, setPilots]         = useState<Pilot[]>([])
-  const [operators, setOperators]   = useState<Operator[]>([])
-  const [loading, setLoading]       = useState(true)
+  const [pilots, setPilots]           = useState<Pilot[]>([])
+  const [operators, setOperators]     = useState<Operator[]>([])
+  const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
+  const [loading, setLoading]         = useState(true)
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter]   = useState('all')
   const [operatorFilter, setOperatorFilter] = useState('all')
@@ -88,7 +87,14 @@ export default function PilotsCrewPage() {
     } catch { /* silently fail */ }
   }
 
-  useEffect(() => { load(); loadOperators() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadAircraftTypes = async () => {
+    try {
+      const types = await catalogService.listAircraftTypes()
+      setAircraftTypes(types)
+    } catch { /* silently fail */ }
+  }
+
+  useEffect(() => { load(); loadOperators(); loadAircraftTypes() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [statusFilter, operatorFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (e: React.FormEvent) => { e.preventDefault(); load() }
@@ -156,10 +162,13 @@ export default function PilotsCrewPage() {
     }
   }
 
-  const setTypeRatings = (raw: string) => {
-    const ratings = raw.split(',').map(r => r.trim()).filter(Boolean)
-    if (isNew) setCreateDraft(d => ({ ...d, type_ratings: ratings }))
-    else setDraft(d => ({ ...d, type_ratings: ratings }))
+  const toggleTypeRating = (code: string) => {
+    const current: string[] = (isNew ? createDraft.type_ratings : draft.type_ratings) ?? []
+    const next = current.includes(code)
+      ? current.filter(r => r !== code)
+      : [...current, code]
+    if (isNew) setCreateDraft(d => ({ ...d, type_ratings: next }))
+    else setDraft(d => ({ ...d, type_ratings: next }))
   }
 
   const operatorsMap: Record<string, string> = Object.fromEntries(operators.map(o => [o.id, o.name]))
@@ -170,7 +179,7 @@ export default function PilotsCrewPage() {
 
   // ── Editor panel ─────────────────────────────────────────────────────────
   const renderEditor = () => {
-    const typeRatingsStr = (isNew ? createDraft.type_ratings : draft.type_ratings ?? [])?.join(', ') ?? ''
+    const currentRatings: string[] = (isNew ? createDraft.type_ratings : draft.type_ratings) ?? []
 
     return (
       <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
@@ -276,14 +285,44 @@ export default function PilotsCrewPage() {
             </div>
           </div>
           <div className="field">
-            <label className="field-label">Type ratings (comma-separated)</label>
-            <div className="input">
-              <input
-                value={typeRatingsStr}
-                onChange={e => setTypeRatings(e.target.value)}
-                placeholder="Bell 407, Airbus H125…"
-              />
-            </div>
+            <label className="field-label">Type ratings</label>
+            {aircraftTypes.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '6px 0' }}>
+                No aircraft types in catalog yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 4 }}>
+                {aircraftTypes.map(at => {
+                  const selected = currentRatings.includes(at.code)
+                  return (
+                    <button
+                      key={at.id}
+                      type="button"
+                      onClick={() => toggleTypeRating(at.code)}
+                      style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 11,
+                        padding: '4px 10px',
+                        background: selected ? 'var(--accent-soft)' : 'var(--surface-2)',
+                        color: selected ? 'var(--accent)' : 'var(--ink-2)',
+                        border: `1px solid ${selected ? 'color-mix(in oklab, var(--accent) 35%, var(--rule-strong))' : 'var(--rule)'}`,
+                        borderRadius: 3, cursor: 'pointer', letterSpacing: '0.06em',
+                        fontWeight: selected ? 600 : 400,
+                      }}
+                    >
+                      {at.code}
+                      <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 4 }}>
+                        {at.name}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {currentRatings.length > 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4 }}>
+                Selected: {currentRatings.join(', ')}
+              </div>
+            )}
           </div>
           <div className="field">
             <label className="field-label">Medical expiry</label>

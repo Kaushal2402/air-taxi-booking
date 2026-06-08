@@ -5,6 +5,8 @@ import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { airBookingsService } from '../../services/airBookingsService'
 import type { CharterQuote, AirBookingDetail } from '../../services/airBookingsService'
+import { operatorService } from '../../services/operatorService'
+import type { Operator, Aircraft } from '../../services/operatorService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +29,8 @@ interface AddQuoteFormProps {
 }
 
 function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
+  const [operators, setOperators]   = useState<Operator[]>([])
+  const [aircraft, setAircraft]     = useState<Aircraft[]>([])
   const [form, setForm] = useState({
     operator_id: '',
     aircraft_id: '',
@@ -51,13 +55,35 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    operatorService.listOperators({ page_size: 100 }).then(r => setOperators(r.items)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!form.operator_id) { setAircraft([]); return }
+    operatorService.listAircraft({ operator_id: form.operator_id, status: 'ready', page_size: 100 })
+      .then(r => setAircraft(r.items))
+      .catch(() => {})
+  }, [form.operator_id])
+
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
   const num = (v: string) => v ? parseInt(v, 10) : 0
   const numOpt = (v: string) => v ? parseFloat(v) : undefined
 
+  const selectAircraft = (id: string) => {
+    const a = aircraft.find(x => x.id === id)
+    setForm(f => ({
+      ...f,
+      aircraft_id: id,
+      aircraft_registration: a?.registration_mark ?? f.aircraft_registration,
+      pax_capacity: a ? String(a.seat_capacity) : f.pax_capacity,
+      range_nm: a?.range_nm ? String(a.range_nm) : f.range_nm,
+    }))
+  }
+
   async function handleSubmit() {
     if (!form.operator_id || !form.aircraft_id || !form.base_fare_minor) {
-      setError('Operator ID, Aircraft ID, and Base fare are required.')
+      setError('Operator, Aircraft, and Base fare are required.')
       return
     }
     setSubmitting(true)
@@ -111,8 +137,35 @@ function AddQuoteForm({ bookingId, onSuccess, onCancel }: AddQuoteFormProps) {
       <div style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>Add Quote</div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {field('Operator ID (UUID)', 'operator_id', 'text', 'Operator UUID…')}
-        {field('Aircraft ID (UUID)', 'aircraft_id', 'text', 'Aircraft UUID…')}
+        {/* Operator dropdown */}
+        <div className="field">
+          <label className="field-label">Operator *</label>
+          <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+            <select
+              value={form.operator_id}
+              onChange={e => set('operator_id', e.target.value)}
+              style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
+            >
+              <option value="">Select operator…</option>
+              {operators.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
+            </select>
+          </div>
+        </div>
+        {/* Aircraft dropdown — filtered by operator */}
+        <div className="field">
+          <label className="field-label">Aircraft *</label>
+          <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+            <select
+              value={form.aircraft_id}
+              onChange={e => selectAircraft(e.target.value)}
+              disabled={!form.operator_id}
+              style={{ border: 'none', outline: 'none', background: 'transparent', cursor: form.operator_id ? 'pointer' : 'not-allowed', height: '100%', paddingRight: 10, flex: 1 }}
+            >
+              <option value="">{form.operator_id ? (aircraft.length ? 'Select aircraft…' : 'No ready aircraft') : 'Select operator first…'}</option>
+              {aircraft.map(a => <option key={a.id} value={a.id}>{a.registration_mark} · {a.seat_capacity} seats</option>)}
+            </select>
+          </div>
+        </div>
         {field('Aircraft registration', 'aircraft_registration', 'text', 'VT-XXX')}
         {field('Aircraft model', 'aircraft_model', 'text', 'Embraer Phenom 300')}
         {field('Depart ICAO', 'depart_icao', 'text', 'VOBG')}

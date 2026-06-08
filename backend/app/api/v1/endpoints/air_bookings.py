@@ -68,6 +68,7 @@ async def list_air_bookings(
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
     flagged: bool | None = Query(None),
+    customer_id: str | None = Query(None),
     _: AdminUser = Depends(require_permission("bookings.air.view")),
     db=Depends(get_db),
 ):
@@ -82,6 +83,7 @@ async def list_air_bookings(
         date_from=date_from,
         date_to=date_to,
         flagged=flagged,
+        customer_id=customer_id,
     )
 
 

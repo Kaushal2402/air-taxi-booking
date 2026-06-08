@@ -122,3 +122,7 @@ class SuspendRequest(BaseModel):
 
 class FlagRequest(BaseModel):
     reason: str
+
+
+class BanRequest(BaseModel):
+    reason: str

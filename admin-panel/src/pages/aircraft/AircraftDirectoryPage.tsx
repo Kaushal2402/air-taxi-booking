@@ -3,9 +3,12 @@ import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
+import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { operatorService } from '../../services/operatorService'
 import type { Aircraft, Operator, CreateAircraftBody } from '../../services/operatorService'
+import { catalogService } from '../../services/catalogService'
+import type { AircraftType } from '../../services/catalogService'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +53,7 @@ export default function AircraftDirectoryPage() {
 
   const [aircraft, setAircraft]     = useState<Aircraft[]>([])
   const [operators, setOperators]   = useState<Operator[]>([])
+  const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
   const [loading, setLoading]       = useState(true)
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter]   = useState('all')
@@ -62,18 +66,28 @@ export default function AircraftDirectoryPage() {
   const [creating, setCreating]     = useState(false)
   const [createError, setCreateError] = useState('')
   const canManageAircraft = usePermission('aircraft.manage')
+  const canViewAircraft   = usePermission('aircraft.view')
 
   const load = async () => {
     setLoading(true)
     try {
-      const params: { operator_id?: string; status?: string; search?: string; page_size?: number } = { page_size: 100 }
+      const params: { operator_id?: string; status?: string; search?: string; page_size?: number } = { page_size: 200 }
       if (operatorFilter !== 'all') params.operator_id = operatorFilter
-      if (statusFilter !== 'all')   params.status = statusFilter
-      if (search.trim())            params.search = search.trim()
+      // status-filter tabs that map to backend status
+      if (statusFilter === 'ready' || statusFilter === 'maintenance' || statusFilter === 'grounded') {
+        params.status = statusFilter
+      }
+      if (search.trim()) params.search = search.trim()
       const res = await operatorService.listAircraft(params)
       let items = res.items
       if (airworthinessFilter !== 'all') {
         items = items.filter(a => a.airworthiness_status === airworthinessFilter)
+      }
+      // client-side filter for synthetic tabs
+      if (statusFilter === 'expiring') {
+        items = items.filter(a => a.airworthiness_status === 'expiring')
+      } else if (statusFilter === 'oos') {
+        items = items.filter(a => a.status === 'grounded' || a.status === 'maintenance')
       }
       setAircraft(items)
     } catch { /* silently fail */ }
@@ -87,7 +101,14 @@ export default function AircraftDirectoryPage() {
     } catch { /* silently fail */ }
   }
 
-  useEffect(() => { load(); loadOperators() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadAircraftTypes = async () => {
+    try {
+      const types = await catalogService.listAircraftTypes()
+      setAircraftTypes(types)
+    } catch { /* silently fail */ }
+  }
+
+  useEffect(() => { load(); loadOperators(); loadAircraftTypes() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [statusFilter, operatorFilter, airworthinessFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = (e: React.FormEvent) => { e.preventDefault(); load() }
@@ -107,11 +128,21 @@ export default function AircraftDirectoryPage() {
     }
   }
 
-  const operatorsMap: Record<string, string> = Object.fromEntries(operators.map(o => [o.id, o.name]))
+  if (!canViewAircraft) return <AccessDeniedPage message="You don't have permission to access this page." />
 
-  const readyCount    = aircraft.filter(a => a.status === 'ready').length
-  const maintCount    = aircraft.filter(a => a.status === 'maintenance').length
-  const groundedCount = aircraft.filter(a => a.status === 'grounded').length
+  const operatorsMap: Record<string, string>     = Object.fromEntries(operators.map(o => [o.id, o.name]))
+  const aircraftTypesMap: Record<string, string> = Object.fromEntries(aircraftTypes.map(t => [t.id, t.name]))
+
+  const readyCount      = aircraft.filter(a => a.status === 'ready').length
+  const maintCount      = aircraft.filter(a => a.status === 'maintenance').length
+  const groundedCount   = aircraft.filter(a => a.status === 'grounded').length
+  const expiringCount   = aircraft.filter(a => a.airworthiness_status === 'expiring').length
+  const today           = new Date()
+  const sevenDaysAgo    = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const outOfServiceCount = aircraft.filter(a => {
+    if (a.status !== 'grounded' && a.status !== 'maintenance') return false
+    return true
+  }).length
 
   // ── Mobile card ───────────────────────────────────────────────────────────
   const renderMobileCard = (a: Aircraft) => (
@@ -161,13 +192,15 @@ export default function AircraftDirectoryPage() {
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--rule)',
           display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
         }}>
           {[
-            { l: 'All aircraft',   v: String(aircraft.length), f: 'all',         tone: 'var(--ink)' },
-            { l: 'Ready',          v: String(readyCount),       f: 'ready',       tone: 'var(--accent)' },
-            { l: 'Maintenance',    v: String(maintCount),       f: 'maintenance', tone: 'var(--warn)' },
-            { l: 'Grounded',       v: String(groundedCount),    f: 'grounded',    tone: 'var(--danger)' },
+            { l: 'All aircraft',        v: String(aircraft.length),   f: 'all',         tone: 'var(--ink)' },
+            { l: 'Ready',               v: String(readyCount),        f: 'ready',       tone: 'var(--accent)' },
+            { l: 'Maintenance',         v: String(maintCount),        f: 'maintenance', tone: 'var(--warn)' },
+            { l: 'Grounded',            v: String(groundedCount),     f: 'grounded',    tone: 'var(--danger)' },
+            { l: 'Airworthy expiring',  v: String(expiringCount),     f: 'expiring',    tone: 'var(--warn)' },
+            { l: 'Out of service',      v: String(outOfServiceCount), f: 'oos',         tone: 'var(--ink-3)' },
           ].map((s, i) => (
             <div
               key={s.l}
@@ -175,8 +208,8 @@ export default function AircraftDirectoryPage() {
                 padding: isMobile ? '12px 14px' : '14px 18px',
                 borderRight: isMobile
                   ? (i % 2 === 0 ? '1px solid var(--rule)' : 'none')
-                  : (i < 3 ? '1px solid var(--rule)' : 'none'),
-                borderBottom: isMobile && i < 2 ? '1px solid var(--rule)' : 'none',
+                  : (i < 5 ? '1px solid var(--rule)' : 'none'),
+                borderBottom: isMobile && i < 4 ? '1px solid var(--rule)' : 'none',
                 borderBottomWidth: statusFilter === s.f ? 2 : undefined,
                 borderBottomColor: statusFilter === s.f ? 'var(--accent)' : undefined,
                 background: statusFilter === s.f ? 'var(--surface-2)' : 'transparent',
@@ -295,7 +328,9 @@ export default function AircraftDirectoryPage() {
                               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)' }}>
                                 {a.registration_mark}
                               </div>
-                              <div className="t-meta" style={{ marginTop: 2 }}>{a.aircraft_type_id || '—'}</div>
+                              <div className="t-meta" style={{ marginTop: 2 }}>
+                              {a.aircraft_type_id ? (aircraftTypesMap[a.aircraft_type_id] || a.aircraft_type_id) : '—'}
+                            </div>
                             </div>
                           </div>
                         </td>
@@ -371,6 +406,30 @@ export default function AircraftDirectoryPage() {
                     style={{ fontFamily: 'var(--font-mono)' }}
                     autoFocus
                   />
+                </div>
+              </div>
+              <div className="field">
+                <label className="field-label">Aircraft type</label>
+                <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+                  <select
+                    value={form.aircraft_type_id ?? ''}
+                    onChange={e => {
+                      const t = aircraftTypes.find(x => x.id === e.target.value)
+                      setForm(f => ({
+                        ...f,
+                        aircraft_type_id: e.target.value || undefined,
+                        seat_capacity: t ? t.seats : f.seat_capacity,
+                        mtow_kg: t?.mtow_kg ?? f.mtow_kg,
+                        range_nm: t?.range_nm ?? f.range_nm,
+                      }))
+                    }}
+                    style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
+                  >
+                    <option value="">Select type…</option>
+                    {aircraftTypes.filter(t => t.is_active).map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.category.toUpperCase()})</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

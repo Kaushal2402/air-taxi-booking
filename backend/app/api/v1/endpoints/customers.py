@@ -6,6 +6,7 @@ from app.database import get_db
 from app.dependencies import get_current_admin_user, require_permission
 from app.models.admin_user import AdminUser
 from app.schemas.customer import (
+    BanRequest,
     CustomerCreate,
     CustomerListResponse,
     CustomerResponse,
@@ -154,6 +155,33 @@ async def flag_customer_endpoint(
             target=f"customer:{customer_id}",
             category="Support",
             severity="med",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return result
+
+
+# ── Ban customer ──────────────────────────────────────────────────────────────
+
+@router.post("/{customer_id}/ban", response_model=CustomerResponse)
+async def ban_customer_endpoint(
+    customer_id: str,
+    body: BanRequest,
+    request: Request,
+    admin: AdminUser = Depends(require_permission("customers.suspend")),
+    db=Depends(get_db),
+):
+    result = await customer_service.ban_customer(db, customer_id, reason=body.reason)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=admin.email,
+            actor_role=admin.role if hasattr(admin, "role") else "Admin",
+            action="customer.ban",
+            target=f"customer:{customer_id}",
+            category="Support",
+            severity="high",
             source_ip=request.client.host if request.client else None,
         )
     except Exception:

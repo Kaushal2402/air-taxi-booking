@@ -96,6 +96,7 @@ export interface TicketListParams {
   assignee_id?: string
   sla_breach?: boolean
   search?: string
+  requester_id?: string
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────

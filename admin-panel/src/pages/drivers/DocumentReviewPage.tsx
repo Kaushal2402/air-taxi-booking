@@ -8,6 +8,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { driverService } from '../../services/driverService'
 import type { Driver, DriverDocument, DocType } from '../../services/driverService'
+import { kycService } from '../../services/kycService'
 
 const STATIC_BASE = import.meta.env.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL.replace('/api/v1', '')
@@ -19,16 +20,6 @@ function getInitials(name: string): string {
   return name.split(' ').map(p => p[0] ?? '').join('').slice(0, 2).toUpperCase()
 }
 
-const DOC_TYPE_LABELS: Record<DocType, string> = {
-  pan: 'PAN card',
-  license: 'Driving licence',
-  rc: 'Vehicle RC',
-  insurance: 'Insurance',
-  permit: 'Permit',
-  photo: 'Photo / Selfie',
-}
-
-const DOC_TYPE_ORDER: DocType[] = ['pan', 'license', 'rc', 'insurance', 'permit', 'photo']
 
 // ── Document preview (real image or placeholder) ──────────────────────────────
 
@@ -40,7 +31,7 @@ interface DocPreviewProps {
 }
 
 function DocPreview({ doc, driver, onUpload, uploading = false }: DocPreviewProps) {
-  const label   = DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type
+  const label   = docTypeMap[doc.doc_type] ?? doc.doc_type
   const fileRef = useRef<HTMLInputElement>(null)
   const imageUrl = doc.image_url ? `${STATIC_BASE}${doc.image_url}` : null
 
@@ -144,6 +135,7 @@ interface ReviewPanelProps {
   driver: Driver
   doc: DriverDocument
   allDocs: DriverDocument[]
+  docTypeMap: Record<string, string>
   onAction: (action: 'approve' | 'reject' | 'request_reupload', expiryDate: string | null, note: string | null) => Promise<void>
   isMobile: boolean
   showConfirmApprove: boolean
@@ -159,7 +151,7 @@ interface ReviewPanelProps {
 }
 
 function ReviewPanel({
-  driver, doc, allDocs, onAction, isMobile,
+  driver, doc, allDocs, docTypeMap, onAction, isMobile,
   showConfirmApprove, showConfirmReject, showConfirmReupload,
   setShowConfirmApprove, setShowConfirmReject, setShowConfirmReupload,
   expiryDate, setExpiryDate, reviewNote, setReviewNote,
@@ -168,7 +160,7 @@ function ReviewPanel({
 
   // Extracted fields from the document
   const extractedFields = [
-    ['Document type', DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type, true],
+    ['Document type', docTypeMap[doc.doc_type] ?? doc.doc_type, true],
     ['Document no.', doc.doc_number ?? '—', !!doc.doc_number],
     ['Driver', driver.name, true],
     ['Driver code', driver.driver_code ?? '—', !!driver.driver_code],
@@ -357,7 +349,7 @@ function ReviewPanel({
       <ConfirmDialog
         open={showConfirmApprove}
         title="Approve document"
-        description={`Approve the ${DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}. This will update the driver's KYC status.`}
+        description={`Approve the ${docTypeMap[doc.doc_type] ?? doc.doc_type}. This will update the driver's KYC status.`}
         confirmLabel="Approve"
         variant="default"
         onConfirm={() => onAction('approve', expiryDate || null, reviewNote || null)}
@@ -366,7 +358,7 @@ function ReviewPanel({
       <ConfirmDialog
         open={showConfirmReject}
         title="Reject document"
-        description={`Reject the ${DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}. The driver will be notified to upload a new document.`}
+        description={`Reject the ${docTypeMap[doc.doc_type] ?? doc.doc_type}. The driver will be notified to upload a new document.`}
         confirmLabel="Reject"
         variant="danger"
         onConfirm={() => onAction('reject', expiryDate || null, reviewNote || null)}
@@ -375,7 +367,7 @@ function ReviewPanel({
       <ConfirmDialog
         open={showConfirmReupload}
         title="Request re-upload"
-        description={`Ask the driver to re-upload the ${DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}. They will receive a notification.`}
+        description={`Ask the driver to re-upload the ${docTypeMap[doc.doc_type] ?? doc.doc_type}. They will receive a notification.`}
         confirmLabel="Send request"
         variant="default"
         onConfirm={() => onAction('request_reupload', expiryDate || null, reviewNote || null)}
@@ -399,8 +391,9 @@ export default function DocumentReviewPage() {
   const [docs, setDocs]       = useState<DriverDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [apiError, setApiError] = useState('')
-  const [isForbidden, setIsForbidden] = useState(false)
   const [mobileStep, setMobileStep] = useState<MobileStep>('preview')
+  const [docTypeMap, setDocTypeMap]     = useState<Record<string, string>>({})
+  const [docTypeOrder, setDocTypeOrder] = useState<string[]>([])
 
   const [expiryDate, setExpiryDate] = useState('')
   const [reviewNote, setReviewNote] = useState('')
@@ -418,10 +411,15 @@ export default function DocumentReviewPage() {
     Promise.all([
       driverService.getDriver(driverId),
       driverService.getDocuments(driverId),
+      kycService.getDocTypes(),
     ])
-      .then(([driverData, docsData]) => {
+      .then(([driverData, docsData, types]) => {
         setDriver(driverData)
         setDocs(docsData.items)
+        const map: Record<string, string> = {}
+        types.driver.forEach(t => { map[t.key] = t.label })
+        setDocTypeMap(map)
+        setDocTypeOrder(types.driver.map(t => t.key))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -443,7 +441,11 @@ export default function DocumentReviewPage() {
     }
   }, [currentDoc?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const orderedDocs = DOC_TYPE_ORDER.map(t => docs.find(d => d.doc_type === t)).filter(Boolean) as DriverDocument[]
+  const order = docTypeOrder.length > 0 ? docTypeOrder : docs.map(d => d.doc_type)
+  const orderedDocs = [
+    ...order.map(t => docs.find(d => d.doc_type === t)).filter(Boolean) as DriverDocument[],
+    ...docs.filter(d => !order.includes(d.doc_type)),
+  ]
   const currentIdx  = orderedDocs.findIndex(d => d.id === docId)
   const prevDoc     = currentIdx > 0 ? orderedDocs[currentIdx - 1] : null
   const nextDoc     = currentIdx < orderedDocs.length - 1 ? orderedDocs[currentIdx + 1] : null
@@ -520,8 +522,6 @@ export default function DocumentReviewPage() {
     window.open(`${STATIC_BASE}${currentDoc.image_url}`, '_blank', 'noopener,noreferrer')
   }
 
-  if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
-
   if (loading) {
     return (
       <Shell activeId="drivers" breadcrumb="People & Fleet · Drivers · KYC" title="Loading…">
@@ -544,10 +544,10 @@ export default function DocumentReviewPage() {
   }
 
   const docIdx = orderedDocs.findIndex(d => d.id === docId) + 1
-  const docLabel = DOC_TYPE_LABELS[currentDoc.doc_type] ?? currentDoc.doc_type
+  const docLabel = docTypeMap[currentDoc.doc_type] ?? currentDoc.doc_type
 
   const reviewPanelProps = {
-    driver, doc: currentDoc, allDocs: orderedDocs,
+    driver, doc: currentDoc, allDocs: orderedDocs, docTypeMap,
     onAction: handleAction,
     isMobile,
     showConfirmApprove, showConfirmReject, showConfirmReupload,
@@ -618,7 +618,7 @@ export default function DocumentReviewPage() {
                   >
                     <span className={`dot ${dot}`} />
                     <span style={{ flex: 1, fontSize: 13, fontWeight: active ? 500 : 400, color: active ? 'var(--ink)' : 'var(--ink-2)' }}>
-                      {DOC_TYPE_LABELS[d.doc_type] ?? d.doc_type}
+                      {docTypeMap[d.doc_type] ?? d.doc_type}
                     </span>
                     <Icon name="chevRight" size={14} style={{ color: 'var(--ink-4)' }} />
                   </div>
@@ -699,7 +699,7 @@ export default function DocumentReviewPage() {
               >
                 <span className={`dot ${dot}`} />
                 <span style={{ flex: 1, fontSize: 13, fontWeight: active ? 500 : 400 }}>
-                  {DOC_TYPE_LABELS[d.doc_type] ?? d.doc_type}
+                  {docTypeMap[d.doc_type] ?? d.doc_type}
                 </span>
               </div>
             )
@@ -839,7 +839,7 @@ export default function DocumentReviewPage() {
               {JSON.stringify({
                 request_id: `req_${currentDoc.id.slice(0, 8)}`,
                 vendor: 'IDfy',
-                document_type: DOC_TYPE_LABELS[currentDoc.doc_type],
+                document_type: docTypeMap[currentDoc.doc_type] ?? currentDoc.doc_type,
                 status: 'success',
                 confidence_score: 0.964,
                 extracted_fields: {

@@ -102,6 +102,28 @@ export interface VendorListResponse {
   per_page: number
 }
 
+export interface VehicleComplianceRow {
+  id: string
+  plate_no: string
+  make: string
+  model: string
+  status: VehicleStatus
+  doc_status: VehicleDocStatus
+  vehicle_class_id: string
+  owner_type: VehicleOwnerType
+}
+
+export interface VehiclesComplianceSummary {
+  total: number
+  ok_count: number
+  pending_count: number
+  expiring_count: number
+  expired_count: number
+  grounded_count: number
+  expired: VehicleComplianceRow[]
+  expiring: VehicleComplianceRow[]
+}
+
 // ── Service ────────────────────────────────────────────────────────────────────
 
 export const vehicleService = {
@@ -193,4 +215,8 @@ export const vehicleService = {
 
   suspendVendor: (id: string, reason: string) =>
     api.post<Vendor>(`/vendors/${id}/suspend`, { reason }).then(r => r.data),
+
+  // ── Compliance ──────────────────────────────────────────────────────────────
+  getVehiclesCompliance: () =>
+    api.get<VehiclesComplianceSummary>('/vehicles/compliance').then(r => r.data),
 }
