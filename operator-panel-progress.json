@@ -1,9 +1,9 @@
 {
   "panel": "operator-panel",
-  "last_updated": "2026-06-08",
+  "last_updated": "2026-06-10",
   "modules": [
     { "id": 0,  "name": "Foundation — Shell, Routes, Auth Store, Axios, Sidebar",       "status": "done", "last_updated": "2026-06-08" },
-    { "id": 1,  "name": "Module 1 — Operator Authentication & Identity",                 "status": "done", "last_updated": "2026-06-09" },
+    { "id": 1,  "name": "Module 1 — Operator Authentication & Identity",                 "status": "done", "last_updated": "2026-06-10", "audit_status": "clean", "deferred": ["background-scheduler-cert-expiry", "sso-integration"] },
     { "id": 2,  "name": "Module 2 — Operator Onboarding & Company Profile",             "status": "pending" },
     { "id": 3,  "name": "Module 3 — Operator Dashboard",                                "status": "pending" },
     { "id": 4,  "name": "Module 4 — Operator Team & Role Management (Sub-Users)",       "status": "pending" },
@@ -23,5 +23,5 @@
     { "id": 18, "name": "Module 18 — Operator Settings & Profile Configuration",        "status": "pending" },
     { "id": 19, "name": "Module 19 — Pilot / Crew Companion (Lightweight Sub-Surface)", "status": "pending" }
   ],
-  "notes": "Each run picks the first 'pending' module, builds backend + frontend, then marks it 'done'. Re-run if a module is marked 'in_progress' (previous run was interrupted)."
+  "notes": "Each run picks 3 pending modules. Per module: create branch → build → audit → fix gaps → push → merge to main. SSO and background scheduler are deferred to integration/compliance modules."
 }
