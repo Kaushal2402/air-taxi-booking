@@ -1,17 +1,20 @@
-"""add_operator_invite_tokens
+"""add_operator_auth_and_invite_tables
 
-Revision ID: a1b2c3d4e5f6
-Revises: c9d8e7f6a5b4
+Revision ID: e6f7a8b9c0d1
+Revises: b3c4d5e6f7a8, d2e3f4a5b6c7, c9d8e7f6a5b4
 Create Date: 2026-06-09 00:00:00.000000
 
+Merge revision: joins the operator_auth branch (c9d8e7f6a5b4) and the two
+existing heads (b3c4d5e6f7a8, d2e3f4a5b6c7) so all tables are created in one
+upgrade pass.
 """
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, None] = "c9d8e7f6a5b4"
+revision: str = "e6f7a8b9c0d1"
+down_revision: Union[str, tuple, None] = ("b3c4d5e6f7a8", "d2e3f4a5b6c7", "c9d8e7f6a5b4")
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
