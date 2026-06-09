@@ -535,10 +535,19 @@ async def get_backup_code_status(db: AsyncSession, user_id: str) -> dict:
     return {"total": total, "used": used, "remaining": total - used}
 
 
+PRIVILEGED_ROLES = {"super_admin", "finance_manager", "finance"}
+
+
 async def disable_totp(db: AsyncSession, user_id: str, code: str) -> None:
     """Verify the user's current TOTP code, then permanently disable 2FA and delete all backup codes."""
+    from fastapi import HTTPException
     repo = AdminUserRepository(db)
     user = await repo.get_by_id(user_id)
+    if user and user.role in PRIVILEGED_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Users with privileged roles cannot disable Two-Factor Authentication. Contact your system administrator.",
+        )
     if not user or not user.two_factor_enabled or not user.two_factor_secret:
         raise ValidationException("Two-factor authentication is not enabled on this account")
 
@@ -555,6 +564,82 @@ async def disable_totp(db: AsyncSession, user_id: str, code: str) -> None:
     await db.execute(sa_delete(AdminBackupCode).where(AdminBackupCode.admin_user_id == user_id))
 
     await repo.log_sign_in(user_id, "2fa_disabled", None, None, "ok")
+
+
+async def verify_otp(
+    db: AsyncSession,
+    partial_hash: str,
+    code: str,
+    remember_me: bool,
+    channel: str,
+    request_meta: dict,
+) -> TokenResponse:
+    """Verify an email or SMS OTP using the partial_hash and return full tokens."""
+    from app.core.security import verify_password as _verify_pw
+
+    repo = AdminUserRepository(db)
+
+    # Locate a valid (unexpired, unconsumed) OTP record for this partial_hash + channel
+    otp_record = await repo.get_valid_email_otp_by_hash(partial_hash, channel)
+    if not otp_record:
+        raise UnauthorizedException("Invalid or expired verification code")
+
+    user_id = otp_record.admin_user_id
+    user = await repo.get_by_id(user_id)
+    if not user or not user.two_factor_enabled:
+        raise UnauthorizedException("2FA not configured for this account")
+
+    # Verify the raw code against the stored hash
+    if not _verify_pw(code, otp_record.code_hash):
+        new_count = await repo.increment_failed_attempts(user.id)
+        await repo.log_sign_in(
+            user.id, f"{channel}_otp_failed",
+            request_meta.get("ip"), request_meta.get("location"), "fail",
+            request_meta.get("user_agent"),
+        )
+        if new_count >= settings.LOGIN_MAX_ATTEMPTS:
+            now = datetime.now(timezone.utc)
+            until = now + timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
+            await repo.lock_account(user.id, until)
+            super_admins = await repo.get_super_admins()
+            await db.commit()
+            await _send_lockout_alert(user, super_admins, until, request_meta)
+            raise ForbiddenException(
+                f"Account locked after {settings.LOGIN_MAX_ATTEMPTS} failed attempts. "
+                f"Try again in {settings.LOGIN_LOCKOUT_MINUTES} minutes or contact a super admin."
+            )
+        await db.commit()
+        raise UnauthorizedException("Invalid verification code")
+
+    # Consume the OTP so it cannot be reused
+    await repo.consume_email_otp(otp_record.id)
+
+    # Reset any accumulated failed-attempt state
+    if user.failed_attempts > 0 or user.locked_until is not None:
+        await repo.reset_failed_attempts(user.id)
+
+    ttl = SESSION_TTL_TRUSTED if remember_me else SESSION_TTL_UNTRUSTED
+    now = datetime.now(timezone.utc)
+    refresh_token = create_refresh_token(user.id)
+    session = await repo.create_session(
+        user.id, refresh_token,
+        ip=request_meta.get("ip"), location=request_meta.get("location"),
+        two_fa_method=f"{channel.upper()}_OTP",
+        expires_at=now + ttl,
+    )
+    access_token = create_access_token(user.id, extra_claims={"role": user.role, "sid": session.id})
+    await repo.update_last_sign_in(user.id)
+    await repo.log_sign_in(
+        user.id, f"{channel}_otp_verified",
+        request_meta.get("ip"), request_meta.get("location"), "ok",
+    )
+    await repo.log_sign_in(
+        user.id, "sign_in",
+        request_meta.get("ip"), request_meta.get("location"), "ok",
+        request_meta.get("user_agent"),
+    )
+
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token, user=_user_brief(user))
 
 
 async def verify_backup_code(

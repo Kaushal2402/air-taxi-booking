@@ -126,6 +126,9 @@ export const authService = {
   sendSmsOTP: (partial_token: string) =>
     api.post<{ sent_at: string; cooldown_seconds: number; masked_phone: string }>('/auth/2fa/sms-otp', { partial_token }).then(r => r.data),
 
+  verifySmsOTP: (partialHash: string, code: string, rememberMe = false) =>
+    api.post<TokenResponse>('/auth/2fa/sms-otp/verify', { partial_hash: partialHash, code, remember_me: rememberMe }).then(r => r.data),
+
   acceptInvite: (token: string, password: string, confirm_password: string) =>
     api.post<{ message: string }>('/auth/invite/accept', { token, password, confirm_password }).then(r => r.data),
 }

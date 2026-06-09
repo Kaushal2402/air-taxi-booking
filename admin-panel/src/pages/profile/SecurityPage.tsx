@@ -724,16 +724,39 @@ export default function SecurityPage() {
                     {/* Disable 2FA — only when enrolled */}
                     {user.two_factor_enabled && (
                       <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--rule)' }}>
-                        <button
-                          className="btn sm danger"
-                          onClick={() => setShowDisable2FA(true)}
-                        >
-                          <Icon name="shield" size={12} />
-                          Disable two-factor auth
-                        </button>
-                        <div className="t-meta" style={{ marginTop: 6, lineHeight: 1.4 }}>
-                          You'll need your current authenticator code to confirm.
-                        </div>
+                        {(user.role === 'super_admin' || user.role === 'finance_manager' || user.role === 'finance') ? (
+                          <div style={{
+                            padding: '10px 14px',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--rule-strong)',
+                            borderRadius: 3,
+                            fontSize: 12.5,
+                            color: 'var(--ink-2)',
+                            lineHeight: 1.5,
+                            display: 'flex',
+                            gap: 10,
+                            alignItems: 'flex-start',
+                          }}>
+                            <Icon name="shield" size={14} stroke={2} style={{ color: 'var(--ink-3)', flexShrink: 0, marginTop: 1 }} />
+                            <span>
+                              Two-Factor Authentication cannot be disabled for privileged roles.
+                              Contact your system administrator if you need to reset your authenticator device.
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              className="btn sm danger"
+                              onClick={() => setShowDisable2FA(true)}
+                            >
+                              <Icon name="shield" size={12} />
+                              Disable two-factor auth
+                            </button>
+                            <div className="t-meta" style={{ marginTop: 6, lineHeight: 1.4 }}>
+                              You'll need your current authenticator code to confirm.
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
 

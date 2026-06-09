@@ -21,6 +21,7 @@ from app.schemas.auth import (
     Disable2FARequest,
     EmailOTPRequest,
     EmailOTPResponse,
+    OtpVerifyRequest,
     SmsOTPRequest,
     SmsOTPResponse,
     ForgotPasswordRequest,
@@ -454,3 +455,18 @@ async def send_sms_otp(body: SmsOTPRequest, db=Depends(get_db)):
     Requires the account to have a phone number set. Rate-limited to one send per 60 seconds."""
     result = await auth_service.send_sms_otp(db, body.partial_token)
     return SmsOTPResponse(**result)
+
+
+@router.post("/2fa/sms-otp/verify", response_model=TokenResponse)
+async def verify_sms_otp(body: OtpVerifyRequest, request: Request, db=Depends(get_db)):
+    """Complete login by verifying an SMS OTP. Supply the partial_hash (SHA-256 of the
+    partial_token issued at step-1) plus the 6-digit code sent to the user's phone."""
+    meta = get_request_meta(request)
+    return await auth_service.verify_otp(
+        db,
+        partial_hash=body.partial_hash,
+        code=body.code,
+        remember_me=body.remember_me,
+        channel="sms",
+        request_meta=meta,
+    )
