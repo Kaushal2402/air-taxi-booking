@@ -500,6 +500,11 @@ async def invite_operator_user(
     await db.commit()
     await db.refresh(user)
 
+    await _send_invite_email(user, raw_token)
+    return user
+
+
+async def _send_invite_email(user: OperatorUser, raw_token: str) -> None:
     invite_link = f"{settings.OPERATOR_PANEL_URL}/auth/accept-invite?token={raw_token}"
     try:
         from app.providers import get_email_provider
@@ -522,7 +527,40 @@ async def invite_operator_user(
     except Exception:
         pass
 
-    return user
+
+async def resend_invite(db: AsyncSession, operator_user_id: str) -> None:
+    user_result = await db.execute(select(OperatorUser).where(OperatorUser.id == operator_user_id))
+    user: OperatorUser | None = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.status != "invited":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invite can only be resent to users with status 'invited'",
+        )
+
+    # Invalidate all existing unused tokens for this user
+    existing = await db.execute(
+        select(OperatorInviteToken).where(
+            OperatorInviteToken.operator_user_id == user.id,
+            OperatorInviteToken.accepted_at.is_(None),
+        )
+    )
+    for tok in existing.scalars().all():
+        tok.accepted_at = _utcnow()  # mark as consumed so old links stop working
+
+    raw_token = secrets.token_urlsafe(32)
+    new_token = OperatorInviteToken(
+        id=str(uuid.uuid4()),
+        operator_user_id=user.id,
+        token_hash=_hash_token(raw_token),
+        expires_at=_utcnow() + timedelta(hours=_INVITE_TOKEN_EXPIRE_HOURS),
+        created_at=_utcnow(),
+    )
+    db.add(new_token)
+    await db.commit()
+
+    await _send_invite_email(user, raw_token)
 
 
 async def accept_invite(db: AsyncSession, token: str, password: str) -> None:

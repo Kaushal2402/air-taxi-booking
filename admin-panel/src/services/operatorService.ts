@@ -349,6 +349,9 @@ export const operatorService = {
   inviteUser: (operatorId: string, body: InviteUserBody) =>
     api.post<OperatorUser>(`/operators/${operatorId}/users/invite`, body).then(r => r.data),
 
+  resendInvite: (operatorId: string, userId: string) =>
+    api.post(`/operators/${operatorId}/users/${userId}/resend-invite`).then(r => r.data),
+
   // ── Compliance summaries ────────────────────────────────────────────────────
   getAircraftCompliance: () =>
     api.get<AircraftComplianceSummary>('/aircraft/compliance').then(r => r.data),

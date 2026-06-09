@@ -135,6 +135,8 @@ export default function OperatorDetailPage() {
   const [inviteSaving, setInviteSaving]   = useState(false)
   const [inviteError, setInviteError]     = useState('')
   const [inviteDone, setInviteDone]       = useState('')
+  const [resendingId, setResendingId]     = useState<string | null>(null)
+  const [resendDoneId, setResendDoneId]   = useState<string | null>(null)
 
   const canApproveDoc = usePermission('kyc.documents.approve')
   const canSuspendOperator = usePermission('operators.suspend')
@@ -423,6 +425,20 @@ export default function OperatorDetailPage() {
       setPilotUpdateError('Failed to ground pilot')
     } finally {
       setPilotActionLoading(false)
+    }
+  }
+
+  const handleResendInvite = async (userId: string) => {
+    if (!operator) return
+    setResendingId(userId); setResendDoneId(null)
+    try {
+      await operatorService.resendInvite(operator.id, userId)
+      setResendDoneId(userId)
+      setTimeout(() => setResendDoneId(null), 3000)
+    } catch {
+      // silently ignore — user sees no change
+    } finally {
+      setResendingId(null)
     }
   }
 
@@ -990,12 +1006,13 @@ export default function OperatorDetailPage() {
                       <th>Status</th>
                       <th>Last login</th>
                       <th>2FA</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     {teamUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--ink-3)', padding: '40px 0' }}>
+                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--ink-3)', padding: '40px 0' }}>
                           No team members yet. Invite someone to get started.
                         </td>
                       </tr>
@@ -1045,6 +1062,24 @@ export default function OperatorDetailPage() {
                             ? <span className="badge ok" style={{ fontSize: 10.5 }}>Enabled</span>
                             : <span className="badge" style={{ fontSize: 10.5 }}>Off</span>
                           }
+                        </td>
+                        <td>
+                          {u.status === 'invited' && (
+                            resendDoneId === u.id ? (
+                              <span style={{ fontSize: 11.5, color: 'var(--accent)', fontWeight: 500 }}>
+                                ✓ Sent
+                              </span>
+                            ) : (
+                              <button
+                                className="btn sm ghost"
+                                style={{ fontSize: 11, whiteSpace: 'nowrap' }}
+                                disabled={resendingId === u.id}
+                                onClick={() => handleResendInvite(u.id)}
+                              >
+                                {resendingId === u.id ? 'Sending…' : 'Resend invite'}
+                              </button>
+                            )
+                          )}
                         </td>
                       </tr>
                     ))}

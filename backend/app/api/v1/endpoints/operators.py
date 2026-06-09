@@ -31,6 +31,7 @@ from app.schemas.operators import (
     PilotUpdate,
     RejectBody,
 )
+from app.schemas.common import MessageResponse
 from app.schemas.operator_auth import OperatorInviteUserRequest, OperatorInviteUserResponse
 from app.services import audit_service, operator_auth_service, operator_service
 
@@ -132,6 +133,31 @@ async def invite_operator_user(
     except Exception:
         pass
     return result
+
+
+@operators_router.post("/{id}/users/{user_id}/resend-invite", response_model=MessageResponse)
+async def resend_operator_invite(
+    id: str,
+    user_id: str,
+    request: Request,
+    current_user: AdminUser = Depends(require_permission("operators.edit")),
+    db=Depends(get_db),
+):
+    await operator_auth_service.resend_invite(db, user_id)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator_user.invite_resent",
+            target=f"operator:{id} user:{user_id}",
+            category="Operations",
+            severity="low",
+            source_ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return MessageResponse(message="Invite resent successfully")
 
 
 @operators_router.patch("/{id}", response_model=OperatorResponse)
