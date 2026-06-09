@@ -31,7 +31,8 @@ from app.schemas.operators import (
     PilotUpdate,
     RejectBody,
 )
-from app.services import audit_service, operator_service
+from app.schemas.operator_auth import OperatorInviteUserRequest, OperatorInviteUserResponse
+from app.services import audit_service, operator_auth_service, operator_service
 
 operators_router = APIRouter()
 aircraft_router = APIRouter()
@@ -84,6 +85,39 @@ async def get_operator(
     db=Depends(get_db),
 ):
     return await operator_service.get_operator_detail(db, id)
+
+
+@operators_router.post("/{id}/users/invite", response_model=OperatorInviteUserResponse, status_code=201)
+async def invite_operator_user(
+    id: str,
+    body: OperatorInviteUserRequest,
+    request: Request,
+    current_user: AdminUser = Depends(require_permission("operators.edit")),
+    db=Depends(get_db),
+):
+    result = await operator_auth_service.invite_operator_user(
+        db,
+        operator_id=id,
+        name=body.name,
+        email=body.email,
+        operator_role=body.operator_role,
+        phone=body.phone,
+    )
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="operator_user.invited",
+            target=f"operator:{id} user:{result.id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"email": body.email, "role": body.operator_role},
+        )
+    except Exception:
+        pass
+    return result
 
 
 @operators_router.patch("/{id}", response_model=OperatorResponse)

@@ -88,6 +88,29 @@ class Operator2FADisableRequest(BaseModel):
     code: str
 
 
+class OperatorInviteUserRequest(BaseModel):
+    name: str
+    email: EmailStr
+    operator_role: str = "viewer"
+    phone: Optional[str] = None
+
+
+class OperatorInviteUserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    operator_role: str
+    status: str
+    operator_id: str
+
+    model_config = {"from_attributes": True}
+
+
+class OperatorAcceptInviteRequest(BaseModel):
+    token: str
+    password: str
+
+
 class OperatorSessionOut(BaseModel):
     id: str
     ip_address: Optional[str] = None

@@ -7,6 +7,7 @@ import LoginPage from './pages/auth/LoginPage'
 import TwoFAChallengePage from './pages/auth/TwoFAChallengePage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import AcceptInvitePage from './pages/auth/AcceptInvitePage'
 import DashboardPage from './pages/dashboard/DashboardPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import SecurityPage from './pages/profile/SecurityPage'
@@ -28,6 +29,7 @@ function App() {
           <Route path="/2fa" element={<TwoFAChallengePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/auth/accept-invite" element={<AcceptInvitePage />} />
 
           {/* Authenticated routes */}
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />

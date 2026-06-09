@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8001"
+    OPERATOR_PANEL_URL: str = "http://localhost:5174"
 
     # Login lockout
     LOGIN_MAX_ATTEMPTS: int = 5       # failed attempts before lockout

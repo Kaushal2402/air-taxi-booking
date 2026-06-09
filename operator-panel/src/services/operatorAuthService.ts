@@ -98,4 +98,7 @@ export const operatorAuthService = {
 
   revokeSession: (sessionId: string): Promise<void> =>
     api.delete(`/auth/me/sessions/${sessionId}`).then(() => undefined),
+
+  acceptInvite: (token: string, password: string): Promise<void> =>
+    api.post('/auth/invite/accept', { token, password }).then(() => undefined),
 }

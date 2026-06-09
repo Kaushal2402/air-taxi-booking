@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.security import create_access_token, decode_token
 from app.models.operator import Operator
+from app.models.operator_invite_token import OperatorInviteToken
 from app.models.operator_password_reset_token import OperatorPasswordResetToken
 from app.models.operator_user import OperatorLoginAttempt, OperatorSession, OperatorUser
 from app.schemas.operator_auth import (
@@ -307,7 +308,24 @@ async def forgot_password(db: AsyncSession, email: str) -> None:
     )
     db.add(reset_token)
     await db.commit()
-    # TODO: email the reset link containing raw_token to user.email
+    reset_link = f"{settings.OPERATOR_PANEL_URL}/auth/reset-password?token={raw_token}"
+    try:
+        from app.providers import get_email_provider
+        from app.providers.base.email import EmailMessage
+        email_provider = get_email_provider()
+        await email_provider.send(EmailMessage(
+            to=[user.email],
+            subject=f"Reset your {settings.APP_NAME} password",
+            html_body=(
+                f"<p>Hi {user.name},</p>"
+                f"<p>You requested a password reset. Click the link below to set a new password:</p>"
+                f"<p><a href='{reset_link}'>Reset Password</a></p>"
+                f"<p>This link expires in <strong>{_RESET_TOKEN_EXPIRE_HOURS} hours</strong>.</p>"
+                f"<p style='color:#888;font-size:12px'>If you did not request this, ignore this email.</p>"
+            ),
+        ))
+    except Exception:
+        pass
 
 
 async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
@@ -439,6 +457,99 @@ async def list_sessions(
         )
         for s in sessions
     ]
+
+
+_INVITE_TOKEN_EXPIRE_HOURS = 72
+
+
+async def invite_operator_user(
+    db: AsyncSession,
+    operator_id: str,
+    name: str,
+    email: str,
+    operator_role: str,
+    phone: str | None,
+) -> OperatorUser:
+    existing = await db.execute(select(OperatorUser).where(OperatorUser.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    # Create user with placeholder password — cannot log in until invite is accepted
+    user = OperatorUser(
+        id=str(uuid.uuid4()),
+        operator_id=operator_id,
+        name=name,
+        email=email,
+        phone=phone,
+        password_hash=_pwd_context.hash(secrets.token_urlsafe(32)),
+        operator_role=operator_role,
+        status="invited",
+    )
+    db.add(user)
+    await db.flush()
+
+    raw_token = secrets.token_urlsafe(32)
+    invite_token = OperatorInviteToken(
+        id=str(uuid.uuid4()),
+        operator_user_id=user.id,
+        token_hash=_hash_token(raw_token),
+        expires_at=_utcnow() + timedelta(hours=_INVITE_TOKEN_EXPIRE_HOURS),
+        created_at=_utcnow(),
+    )
+    db.add(invite_token)
+    await db.commit()
+    await db.refresh(user)
+
+    invite_link = f"{settings.OPERATOR_PANEL_URL}/auth/accept-invite?token={raw_token}"
+    try:
+        from app.providers import get_email_provider
+        from app.providers.base.email import EmailMessage
+        email_provider = get_email_provider()
+        await email_provider.send(EmailMessage(
+            to=[user.email],
+            subject=f"You're invited to {settings.APP_NAME} Operator Portal",
+            html_body=(
+                f"<p>Hi {user.name},</p>"
+                f"<p>You have been invited to access the <strong>{settings.APP_NAME}</strong> Operator Portal.</p>"
+                f"<p>Click below to set your password and activate your account:</p>"
+                f"<p><a href='{invite_link}' style='display:inline-block;padding:12px 24px;"
+                f"background:#0F8A5F;color:#fff;text-decoration:none;border-radius:6px;font-weight:600'>"
+                f"Accept Invitation</a></p>"
+                f"<p>This link expires in <strong>{_INVITE_TOKEN_EXPIRE_HOURS} hours</strong>.</p>"
+                f"<p style='color:#888;font-size:12px'>If you did not expect this invitation, ignore this email.</p>"
+            ),
+        ))
+    except Exception:
+        pass
+
+    return user
+
+
+async def accept_invite(db: AsyncSession, token: str, password: str) -> None:
+    token_hash = _hash_token(token)
+    result = await db.execute(
+        select(OperatorInviteToken).where(
+            OperatorInviteToken.token_hash == token_hash,
+            OperatorInviteToken.accepted_at.is_(None),
+        )
+    )
+    invite_tok: OperatorInviteToken | None = result.scalar_one_or_none()
+
+    if not invite_tok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or already used invite link")
+
+    if invite_tok.expires_at.replace(tzinfo=timezone.utc) < _utcnow():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite link has expired")
+
+    user_result = await db.execute(select(OperatorUser).where(OperatorUser.id == invite_tok.operator_user_id))
+    user: OperatorUser | None = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.password_hash = _pwd_context.hash(password)
+    user.status = "active"
+    invite_tok.accepted_at = _utcnow()
+    await db.commit()
 
 
 async def revoke_session(db: AsyncSession, user: OperatorUser, session_id: str) -> None:
