@@ -95,11 +95,15 @@ async def _build_token_response(
     db: AsyncSession,
     user: OperatorUser,
     refresh_token: str,
+    session_id: str | None = None,
 ) -> OperatorTokenResponse:
     operator_name = await _get_operator_name(db, user.operator_id)
+    extra: dict = {"kind": "operator", "operator_id": user.operator_id, "role": user.operator_role}
+    if session_id:
+        extra["sid"] = session_id
     access_token = create_access_token(
         subject=user.id,
-        extra_claims={"kind": "operator", "operator_id": user.operator_id, "role": user.operator_role},
+        extra_claims=extra,
     )
     return OperatorTokenResponse(
         access_token=access_token,
@@ -178,7 +182,7 @@ async def login(
     db.add(session)
     await db.commit()
 
-    return await _build_token_response(db, user, raw_refresh)
+    return await _build_token_response(db, user, raw_refresh, session_id=session.id)
 
 
 async def verify_2fa_login(
@@ -218,7 +222,7 @@ async def verify_2fa_login(
     user.last_login_at = _utcnow()
     await db.commit()
 
-    return await _build_token_response(db, user, raw_refresh)
+    return await _build_token_response(db, user, raw_refresh, session_id=session.id)
 
 
 async def refresh_token(db: AsyncSession, raw_refresh: str) -> OperatorTokenResponse:
@@ -254,7 +258,7 @@ async def refresh_token(db: AsyncSession, raw_refresh: str) -> OperatorTokenResp
     db.add(new_session)
     await db.commit()
 
-    return await _build_token_response(db, user, raw_new)
+    return await _build_token_response(db, user, raw_new, session_id=new_session.id)
 
 
 async def logout(db: AsyncSession, operator_user_id: str, raw_refresh: str | None = None) -> None:
