@@ -1,24 +1,41 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr
+from datetime import datetime
+from typing import Optional
 
-
-class OperatorLoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+from pydantic import BaseModel, EmailStr, computed_field
 
 
 class OperatorUserOut(BaseModel):
     id: str
     name: str
     email: str
-    phone: str | None
+    phone: Optional[str] = None
     operator_role: str
     status: str
     twofa_enabled: bool
     operator_id: str
+    operator_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+    # Aliases expected by the frontend
+    @computed_field  # type: ignore[misc]
+    @property
+    def role(self) -> str:
+        return self.operator_role
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def two_factor_enabled(self) -> bool:
+        return self.twofa_enabled
 
     model_config = {"from_attributes": True}
+
+
+class OperatorLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+    remember_device: bool = False
 
 
 class OperatorTokenResponse(BaseModel):
@@ -26,6 +43,8 @@ class OperatorTokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: OperatorUserOut
+    requires_2fa: bool = False
+    two_fa_token: Optional[str] = None
 
 
 class OperatorRefreshRequest(BaseModel):
@@ -42,5 +61,39 @@ class OperatorPasswordResetRequest(BaseModel):
 
 
 class OperatorUpdateProfileRequest(BaseModel):
-    name: str | None = None
-    phone: str | None = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class OperatorChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class Operator2FAEnrollResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class Operator2FAConfirmRequest(BaseModel):
+    code: str
+
+
+class Operator2FAVerifyRequest(BaseModel):
+    two_fa_token: str
+    code: str
+
+
+class Operator2FADisableRequest(BaseModel):
+    code: str
+
+
+class OperatorSessionOut(BaseModel):
+    id: str
+    ip_address: Optional[str] = None
+    device_info: Optional[str] = None
+    created_at: datetime
+    expires_at: datetime
+    is_current: bool = False
+
+    model_config = {"from_attributes": True}

@@ -16,6 +16,7 @@ import {
   UserCog,
   Settings,
   User,
+  Lock,
   X,
 } from 'lucide-react'
 
@@ -60,9 +61,10 @@ const NAV_GROUPS = [
   {
     label: 'Settings',
     items: [
-      { id: 'team',     label: 'Team & Roles', Icon: UserCog,  path: '/team' },
-      { id: 'settings', label: 'Settings',     Icon: Settings, path: '/settings' },
-      { id: 'profile',  label: 'Profile',      Icon: User,     path: '/profile' },
+      { id: 'team',     label: 'Team & Roles', Icon: UserCog,    path: '/team' },
+      { id: 'settings', label: 'Settings',    Icon: Settings,   path: '/settings' },
+      { id: 'profile',  label: 'Profile',     Icon: User,       path: '/profile' },
+      { id: 'security', label: 'Security',    Icon: Lock,       path: '/security' },
     ],
   },
 ]

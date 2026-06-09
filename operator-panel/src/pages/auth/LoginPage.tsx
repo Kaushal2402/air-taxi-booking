@@ -32,7 +32,7 @@ export default function LoginPage() {
           email: res.user.email,
           role: res.user.role,
           operatorId: res.user.operator_id,
-          operatorName: res.user.operator_name,
+          operatorName: res.user.operator_name ?? '',
           twoFactorEnabled: res.user.two_factor_enabled,
           phone: res.user.phone,
           avatarUrl: res.user.avatar_url,

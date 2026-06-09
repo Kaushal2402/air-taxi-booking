@@ -4,7 +4,12 @@ import { queryClient } from './lib/queryClient'
 import { useOperatorAuthStore } from './stores/authStore'
 import PrivateRoute from './components/layout/PrivateRoute'
 import LoginPage from './pages/auth/LoginPage'
+import TwoFAChallengePage from './pages/auth/TwoFAChallengePage'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import DashboardPage from './pages/dashboard/DashboardPage'
+import ProfilePage from './pages/profile/ProfilePage'
+import SecurityPage from './pages/profile/SecurityPage'
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useOperatorAuthStore(s => s.isAuthenticated)
@@ -18,9 +23,16 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          {/* Public auth routes */}
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/2fa" element={<TwoFAChallengePage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
+          {/* Authenticated routes */}
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+          <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+          <Route path="/security" element={<PrivateRoute><SecurityPage /></PrivateRoute>} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
