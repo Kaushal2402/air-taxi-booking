@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, Monitor, Trash2, ShieldCheck, ShieldOff, QrCode } from 'lucide-react'
+import { Eye, EyeOff, Monitor, Trash2, ShieldCheck, ShieldOff } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorAuthService } from '../../services/operatorAuthService'
@@ -273,26 +274,50 @@ export default function SecurityPage() {
                 </div>
               ) : enrollData ? (
                 <div>
-                  <p style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 12 }}>
-                    Scan the QR code with your authenticator app, then enter the 6-digit code to confirm.
+                  <p style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 16 }}>
+                    Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.
                   </p>
+
+                  {/* QR Code */}
                   <div style={{
-                    background: 'var(--bg)',
+                    display: 'inline-flex',
+                    padding: 16,
+                    background: '#fff',
                     border: '1px solid var(--rule)',
-                    borderRadius: 4,
-                    padding: '16px',
+                    borderRadius: 8,
                     marginBottom: 16,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    wordBreak: 'break-all',
-                    color: 'var(--ink-3)',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                      <QrCode size={14} />
-                      <span>Manual entry key:</span>
-                    </div>
-                    <span style={{ color: 'var(--accent)', letterSpacing: '0.08em' }}>{enrollData.secret}</span>
+                    <QRCodeSVG
+                      value={enrollData.otpauth_uri}
+                      size={180}
+                      level="M"
+                      includeMargin={false}
+                    />
                   </div>
+
+                  {/* Manual entry fallback */}
+                  <details style={{ marginBottom: 16 }}>
+                    <summary style={{
+                      fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer',
+                      userSelect: 'none', marginBottom: 6,
+                    }}>
+                      Can't scan? Enter key manually
+                    </summary>
+                    <div style={{
+                      background: 'var(--surface-sunk)',
+                      border: '1px solid var(--rule)',
+                      borderRadius: 4,
+                      padding: '10px 14px',
+                      marginTop: 8,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                      letterSpacing: '0.12em',
+                      color: 'var(--accent)',
+                      wordBreak: 'break-all',
+                    }}>
+                      {enrollData.secret}
+                    </div>
+                  </details>
                   <div className="field">
                     <label className="field-label">Enter the 6-digit code from your app</label>
                     <input
