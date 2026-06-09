@@ -211,6 +211,8 @@ async def pause_operator(db: AsyncSession, operator_id: str, reason: str | None)
     operator.status = "paused"
     if reason:
         operator.notes = reason
+    from app.services.operator_auth_service import revoke_all_sessions_for_org
+    await revoke_all_sessions_for_org(db, operator_id)
     await db.commit()
     await db.refresh(operator)
     return operator

@@ -11,6 +11,7 @@ import AcceptInvitePage from './pages/auth/AcceptInvitePage'
 import DashboardPage from './pages/dashboard/DashboardPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import SecurityPage from './pages/profile/SecurityPage'
+import TeamPage from './pages/team/TeamPage'
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useOperatorAuthStore(s => s.isAuthenticated)
@@ -37,6 +38,7 @@ function App() {
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
           <Route path="/security" element={<PrivateRoute><SecurityPage /></PrivateRoute>} />
+          <Route path="/team" element={<PrivateRoute><TeamPage /></PrivateRoute>} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

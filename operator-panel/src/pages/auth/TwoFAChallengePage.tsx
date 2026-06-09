@@ -16,6 +16,11 @@ export default function TwoFAChallengePage() {
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const [emailMode, setEmailMode] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
   useEffect(() => {
     if (!twoFaToken) navigate('/login', { replace: true })
     inputRef.current?.focus()
@@ -50,6 +55,48 @@ export default function TwoFAChallengePage() {
       inputRef.current?.focus()
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSendEmailCode = async () => {
+    setSendingEmail(true)
+    setEmailError(null)
+    try {
+      await operatorAuthService.send2faEmailCode(twoFaToken)
+      setEmailSent(true)
+      setEmailMode(true)
+    } catch (err) {
+      const detail = (err as any)?.response?.data?.detail
+      setEmailError(detail ?? 'Failed to send email code')
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  const handleVerifyEmailCode = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setEmailError(null)
+    try {
+      const res = await operatorAuthService.verify2faEmailCode(twoFaToken, code)
+      setAuth(
+        {
+          id: res.user.id,
+          name: res.user.name,
+          email: res.user.email,
+          role: res.user.role,
+          operatorId: res.user.operator_id,
+          operatorName: res.user.operator_name ?? '',
+          twoFactorEnabled: res.user.two_factor_enabled,
+          phone: res.user.phone,
+          avatarUrl: res.user.avatar_url,
+        },
+        res.access_token,
+        res.refresh_token,
+      )
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      const detail = (err as any)?.response?.data?.detail
+      setEmailError(detail ?? 'Invalid code')
     }
   }
 
@@ -89,7 +136,9 @@ export default function TwoFAChallengePage() {
               Two-Factor Authentication
             </h1>
             <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--ink-3)' }}>
-              Enter the 6-digit code from your authenticator app
+              {emailMode
+                ? 'Enter the code sent to your email'
+                : 'Enter the 6-digit code from your authenticator app'}
             </p>
           </div>
         </div>
@@ -101,57 +150,183 @@ export default function TwoFAChallengePage() {
           padding: 28,
           boxShadow: 'var(--shadow-2)',
         }}>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {error && (
-              <div style={{
-                background: 'var(--danger-soft)',
-                border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--rule-strong))',
-                borderRadius: 4,
-                padding: '10px 14px',
-                fontSize: 13,
-                color: 'var(--danger)',
-              }}>
-                {error}
+          {!emailMode ? (
+            <>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {error && (
+                  <div style={{
+                    background: 'var(--danger-soft)',
+                    border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--rule-strong))',
+                    borderRadius: 4,
+                    padding: '10px 14px',
+                    fontSize: 13,
+                    color: 'var(--danger)',
+                  }}>
+                    {error}
+                  </div>
+                )}
+
+                <div className="field">
+                  <label className="field-label" htmlFor="otp-code">Authentication Code</label>
+                  <input
+                    ref={inputRef}
+                    id="otp-code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    className="input"
+                    value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    required
+                    autoComplete="one-time-code"
+                    style={{ letterSpacing: '0.4em', fontSize: 22, textAlign: 'center' }}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn accent lg"
+                  disabled={loading || code.length !== 6}
+                  style={{ width: '100%' }}
+                >
+                  {loading ? 'Verifying…' : 'Verify'}
+                </button>
+              </form>
+
+              {emailError && (
+                <div style={{
+                  marginTop: 12,
+                  background: 'var(--danger-soft)',
+                  border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--rule-strong))',
+                  borderRadius: 4,
+                  padding: '10px 14px',
+                  fontSize: 13,
+                  color: 'var(--danger)',
+                }}>
+                  {emailError}
+                </div>
+              )}
+
+              <div style={{ marginTop: 16, textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleSendEmailCode}
+                  disabled={sendingEmail}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: sendingEmail ? 'not-allowed' : 'pointer',
+                    fontSize: 12,
+                    color: 'var(--accent)',
+                    fontFamily: 'var(--font-mono)',
+                    opacity: sendingEmail ? 0.6 : 1,
+                    textDecoration: 'underline',
+                  }}
+                >
+                  {sendingEmail ? 'Sending…' : "Can't access your authenticator? Email me a code instead"}
+                </button>
               </div>
-            )}
 
-            <div className="field">
-              <label className="field-label" htmlFor="otp-code">Authentication Code</label>
-              <input
-                ref={inputRef}
-                id="otp-code"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                className="input"
-                value={code}
-                onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="000000"
-                required
-                autoComplete="one-time-code"
-                style={{ letterSpacing: '0.4em', fontSize: 22, textAlign: 'center' }}
-              />
-            </div>
+              <div style={{ marginTop: 12, textAlign: 'center' }}>
+                <Link
+                  to="/login"
+                  style={{ fontSize: 12, color: 'var(--ink-4)', fontFamily: 'var(--font-mono)' }}
+                >
+                  ← Back to sign in
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              {emailSent && (
+                <div style={{
+                  marginBottom: 16,
+                  background: 'color-mix(in oklab, var(--accent) 10%, transparent)',
+                  border: '1px solid color-mix(in oklab, var(--accent) 30%, var(--rule-strong))',
+                  borderRadius: 4,
+                  padding: '10px 14px',
+                  fontSize: 13,
+                  color: 'var(--accent)',
+                }}>
+                  Code sent to your email
+                </div>
+              )}
 
-            <button
-              type="submit"
-              className="btn accent lg"
-              disabled={loading || code.length !== 6}
-              style={{ width: '100%' }}
-            >
-              {loading ? 'Verifying…' : 'Verify'}
-            </button>
-          </form>
+              <form onSubmit={handleVerifyEmailCode} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {emailError && (
+                  <div style={{
+                    background: 'var(--danger-soft)',
+                    border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--rule-strong))',
+                    borderRadius: 4,
+                    padding: '10px 14px',
+                    fontSize: 13,
+                    color: 'var(--danger)',
+                  }}>
+                    {emailError}
+                  </div>
+                )}
 
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-            <Link
-              to="/login"
-              style={{ fontSize: 12, color: 'var(--ink-4)', fontFamily: 'var(--font-mono)' }}
-            >
-              ← Back to sign in
-            </Link>
-          </div>
+                <div className="field">
+                  <label className="field-label" htmlFor="email-otp-code">Email Code</label>
+                  <input
+                    id="email-otp-code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    className="input"
+                    value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    required
+                    autoComplete="one-time-code"
+                    autoFocus
+                    style={{ letterSpacing: '0.4em', fontSize: 22, textAlign: 'center' }}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn accent lg"
+                  disabled={code.length !== 6}
+                  style={{ width: '100%' }}
+                >
+                  Verify Email Code
+                </button>
+              </form>
+
+              <div style={{ marginTop: 16, textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => { setEmailMode(false); setEmailError(null); setCode('') }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    color: 'var(--ink-4)',
+                    fontFamily: 'var(--font-mono)',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  ← Back to authenticator code
+                </button>
+              </div>
+
+              <div style={{ marginTop: 12, textAlign: 'center' }}>
+                <Link
+                  to="/login"
+                  style={{ fontSize: 12, color: 'var(--ink-4)', fontFamily: 'var(--font-mono)' }}
+                >
+                  ← Back to sign in
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

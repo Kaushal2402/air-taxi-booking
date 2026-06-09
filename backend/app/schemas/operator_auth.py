@@ -115,6 +115,15 @@ class OperatorAcceptInviteRequest(BaseModel):
     password: str
 
 
+class Operator2FAEmailCodeRequest(BaseModel):
+    two_fa_token: str
+
+
+class Operator2FAEmailCodeVerifyRequest(BaseModel):
+    two_fa_token: str
+    code: str
+
+
 class OperatorSessionOut(BaseModel):
     id: str
     ip_address: Optional[str] = None
@@ -123,4 +132,12 @@ class OperatorSessionOut(BaseModel):
     expires_at: datetime
     is_current: bool = False
 
+    model_config = {"from_attributes": True}
+
+
+class OperatorLoginHistoryOut(BaseModel):
+    id: str
+    ip_address: Optional[str] = None
+    success: bool
+    attempted_at: datetime
     model_config = {"from_attributes": True}

@@ -1,6 +1,19 @@
 import api from '../lib/axios'
 import type { AxiosResponse } from 'axios'
 
+export interface OperatorSubUser {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  operator_role: string
+  status: string
+  twofa_enabled: boolean
+  last_login_at: string | null
+  created_at: string | null
+  operator_id: string
+}
+
 export interface OperatorUserOut {
   id: string
   name: string
@@ -34,6 +47,13 @@ export interface RefreshResponse {
 export interface EnrollResponse {
   secret: string
   otpauth_uri: string
+}
+
+export interface OperatorLoginHistory {
+  id: string
+  ip_address: string | null
+  success: boolean
+  attempted_at: string
 }
 
 export interface OperatorSession {
@@ -101,4 +121,38 @@ export const operatorAuthService = {
 
   acceptInvite: (token: string, password: string): Promise<void> =>
     api.post('/auth/invite/accept', { token, password }).then(() => undefined),
+
+  signOutAllSessions: (): Promise<void> =>
+    api.delete('/auth/me/sessions').then(() => undefined),
+
+  getSignInHistory: (): Promise<OperatorLoginHistory[]> =>
+    api.get<OperatorLoginHistory[]>('/auth/me/history').then((r: AxiosResponse<OperatorLoginHistory[]>) => r.data),
+
+  // ── Sub-user (team) management ─────────────────────────────────────────────
+  listSubUsers: (params?: { search?: string; status?: string }): Promise<OperatorSubUser[]> =>
+    api.get<OperatorSubUser[]>('/users', { params }).then((r: AxiosResponse<OperatorSubUser[]>) => r.data),
+
+  inviteSubUser: (body: { name: string; email: string; operator_role: string; phone?: string }): Promise<OperatorSubUser> =>
+    api.post<OperatorSubUser>('/users/invite', body).then((r: AxiosResponse<OperatorSubUser>) => r.data),
+
+  suspendSubUser: (userId: string): Promise<OperatorSubUser> =>
+    api.post<OperatorSubUser>(`/users/${userId}/suspend`).then((r: AxiosResponse<OperatorSubUser>) => r.data),
+
+  reactivateSubUser: (userId: string): Promise<OperatorSubUser> =>
+    api.post<OperatorSubUser>(`/users/${userId}/reactivate`).then((r: AxiosResponse<OperatorSubUser>) => r.data),
+
+  forceLogoutSubUser: (userId: string): Promise<void> =>
+    api.post(`/users/${userId}/force-logout`).then(() => undefined),
+
+  resetSubUser2fa: (userId: string): Promise<void> =>
+    api.post(`/users/${userId}/reset-2fa`).then(() => undefined),
+
+  resendSubUserInvite: (userId: string): Promise<void> =>
+    api.post(`/users/${userId}/resend-invite`).then(() => undefined),
+
+  send2faEmailCode: (twoFaToken: string): Promise<void> =>
+    api.post('/auth/2fa/email-code', { two_fa_token: twoFaToken }).then(() => undefined),
+
+  verify2faEmailCode: (twoFaToken: string, code: string): Promise<LoginResponse> =>
+    api.post<LoginResponse>('/auth/2fa/email-code/verify', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
 }

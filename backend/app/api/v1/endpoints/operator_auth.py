@@ -10,11 +10,14 @@ from app.schemas.common import MessageResponse
 from app.schemas.operator_auth import (
     Operator2FAConfirmRequest,
     Operator2FADisableRequest,
+    Operator2FAEmailCodeRequest,
+    Operator2FAEmailCodeVerifyRequest,
     Operator2FAEnrollResponse,
     Operator2FAVerifyRequest,
     OperatorAcceptInviteRequest,
     OperatorChangePasswordRequest,
     OperatorForgotPasswordRequest,
+    OperatorLoginHistoryOut,
     OperatorLoginRequest,
     OperatorPasswordResetRequest,
     OperatorRefreshRequest,
@@ -49,6 +52,17 @@ async def login(body: OperatorLoginRequest, request: Request, db: AsyncSession =
 @router.post("/2fa/verify", response_model=OperatorTokenResponse)
 async def verify_2fa_login(body: Operator2FAVerifyRequest, request: Request, db: AsyncSession = Depends(get_db)):
     return await operator_auth_service.verify_2fa_login(db, body.two_fa_token, body.code, _get_ip(request))
+
+
+@router.post("/2fa/email-code", response_model=MessageResponse)
+async def send_2fa_email_code(body: Operator2FAEmailCodeRequest, db: AsyncSession = Depends(get_db)):
+    await operator_auth_service.send_2fa_email_code(db, body.two_fa_token)
+    return MessageResponse(message="Verification code sent to your email.")
+
+
+@router.post("/2fa/email-code/verify", response_model=OperatorTokenResponse)
+async def verify_2fa_email_code(body: Operator2FAEmailCodeVerifyRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    return await operator_auth_service.verify_2fa_email_code(db, body.two_fa_token, body.code, _get_ip(request))
 
 
 @router.post("/refresh", response_model=OperatorTokenResponse)
@@ -104,15 +118,10 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
     current_user: OperatorUser = Depends(get_current_operator_user),
 ):
-    if body.name is not None:
-        current_user.name = body.name
-    if body.phone is not None:
-        current_user.phone = body.phone
-    await db.commit()
-    await db.refresh(current_user)
+    updated = await operator_auth_service.update_me(db, current_user, body.model_dump(exclude_unset=True))
     from app.services.operator_auth_service import _get_operator_name, _build_user_out
-    operator_name = await _get_operator_name(db, current_user.operator_id)
-    return _build_user_out(current_user, operator_name)
+    operator_name = await _get_operator_name(db, updated.operator_id)
+    return _build_user_out(updated, operator_name)
 
 
 @router.get("/me/sessions", response_model=list[OperatorSessionOut])
@@ -123,6 +132,15 @@ async def list_sessions(
     return await operator_auth_service.list_sessions(db, current_user)
 
 
+@router.delete("/me/sessions", response_model=MessageResponse)
+async def revoke_all_sessions(
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    await operator_auth_service.logout(db, current_user.id)
+    return MessageResponse(message="All sessions signed out.")
+
+
 @router.delete("/me/sessions/{session_id}", response_model=MessageResponse)
 async def revoke_session(
     session_id: str,
@@ -131,6 +149,14 @@ async def revoke_session(
 ):
     await operator_auth_service.revoke_session(db, current_user, session_id)
     return MessageResponse(message="Session revoked")
+
+
+@router.get("/me/history", response_model=list[OperatorLoginHistoryOut])
+async def sign_in_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    return await operator_auth_service.get_sign_in_history(db, current_user.id)
 
 
 @router.post("/2fa/enroll", response_model=Operator2FAEnrollResponse)

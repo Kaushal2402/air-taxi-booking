@@ -27,6 +27,7 @@ from app.api.v1.endpoints.data_purge import router as data_purge_router
 from app.api.v1.endpoints.privacy import router as privacy_router
 from app.api.v1.endpoints.reference import router as reference_router
 from app.api.v1.endpoints.operator_auth import router as operator_auth_router
+from app.api.v1.endpoints.operator_users import router as operator_users_router
 
 api_router = APIRouter()
 
@@ -63,3 +64,4 @@ api_router.include_router(data_purge_router,     prefix="/data/purge",     tags=
 api_router.include_router(privacy_router,        prefix="/privacy",        tags=["Privacy Requests"])
 api_router.include_router(reference_router,      prefix="/ref",            tags=["Reference Lookups"])
 api_router.include_router(operator_auth_router,  prefix="/operator/auth",  tags=["Operator Auth"])
+api_router.include_router(operator_users_router, prefix="/operator/users", tags=["Operator Users"])

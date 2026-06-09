@@ -10,6 +10,7 @@ from app.models.customer import Customer, WalletTransaction
 from app.models.driver import Driver, DriverDocument, DriverWalletTransaction
 from app.models.operator import Operator, OperatorDocument, Aircraft, Pilot
 from app.models.operator_user import OperatorUser, OperatorSession, OperatorLoginAttempt
+from app.models.operator_email_otp import OperatorEmailOTP
 from app.models.operator_password_reset_token import OperatorPasswordResetToken
 from app.models.operator_invite_token import OperatorInviteToken
 from app.models.booking import (
@@ -51,6 +52,7 @@ __all__ = [
     "Driver", "DriverDocument", "DriverWalletTransaction",
     "Operator", "OperatorDocument", "Aircraft", "Pilot",
     "OperatorUser", "OperatorSession", "OperatorLoginAttempt",
+    "OperatorEmailOTP",
     "OperatorPasswordResetToken", "OperatorInviteToken",
     "RoadBooking", "BookingTimelineEvent", "BookingFareComponent",
     "BookingAdminNote", "Dispute",

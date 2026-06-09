@@ -508,6 +508,33 @@ async def invite_operator_user(
     return user
 
 
+async def update_me(db: AsyncSession, user: OperatorUser, changes: dict) -> OperatorUser:
+    allowed = {"name", "phone"}
+    for k, v in changes.items():
+        if k in allowed:
+            setattr(user, k, v)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def get_sign_in_history(db: AsyncSession, user_id: str) -> list[OperatorLoginAttempt]:
+    from datetime import timedelta
+    cutoff = _utcnow() - timedelta(days=7)
+    result = await db.execute(
+        select(OperatorLoginAttempt)
+        .where(
+            OperatorLoginAttempt.email == (
+                select(OperatorUser.email).where(OperatorUser.id == user_id).scalar_subquery()
+            ),
+            OperatorLoginAttempt.attempted_at >= cutoff,
+        )
+        .order_by(OperatorLoginAttempt.attempted_at.desc())
+        .limit(50)
+    )
+    return list(result.scalars().all())
+
+
 async def _send_invite_email(user: OperatorUser, raw_token: str) -> None:
     invite_link = f"{settings.OPERATOR_PANEL_URL}/auth/accept-invite?token={raw_token}"
     try:
@@ -594,6 +621,25 @@ async def accept_invite(db: AsyncSession, token: str, password: str) -> None:
     await db.commit()
 
 
+async def revoke_all_sessions_for_org(db: AsyncSession, operator_id: str) -> None:
+    """Revoke all active sessions for every user belonging to an operator org. Called when org is suspended."""
+    user_result = await db.execute(
+        select(OperatorUser.id).where(OperatorUser.operator_id == operator_id)
+    )
+    user_ids = [row[0] for row in user_result.all()]
+    if not user_ids:
+        return
+    session_result = await db.execute(
+        select(OperatorSession).where(
+            OperatorSession.operator_user_id.in_(user_ids),
+            OperatorSession.revoked_at.is_(None),
+        )
+    )
+    for s in session_result.scalars().all():
+        s.revoked_at = _utcnow()
+    await db.commit()
+
+
 async def revoke_session(db: AsyncSession, user: OperatorUser, session_id: str) -> None:
     result = await db.execute(
         select(OperatorSession).where(
@@ -608,3 +654,161 @@ async def revoke_session(db: AsyncSession, user: OperatorUser, session_id: str) 
 
     session.revoked_at = _utcnow()
     await db.commit()
+
+
+# ── Sub-user management (operator_admin managing their own team) ──────────────
+
+async def _get_sub_user(db: AsyncSession, operator_id: str, user_id: str) -> OperatorUser:
+    result = await db.execute(
+        select(OperatorUser).where(
+            OperatorUser.id == user_id,
+            OperatorUser.operator_id == operator_id,
+        )
+    )
+    user: OperatorUser | None = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+
+
+async def list_operator_sub_users(
+    db: AsyncSession,
+    operator_id: str,
+    search: str | None = None,
+    filter_status: str | None = None,
+) -> list[OperatorUser]:
+    from sqlalchemy import or_
+    q = select(OperatorUser).where(OperatorUser.operator_id == operator_id)
+    if filter_status:
+        q = q.where(OperatorUser.status == filter_status)
+    if search:
+        q = q.where(or_(
+            OperatorUser.name.ilike(f"%{search}%"),
+            OperatorUser.email.ilike(f"%{search}%"),
+        ))
+    q = q.order_by(OperatorUser.created_at)
+    result = await db.execute(q)
+    return list(result.scalars().all())
+
+
+async def suspend_sub_user(db: AsyncSession, operator_id: str, user_id: str) -> OperatorUser:
+    user = await _get_sub_user(db, operator_id, user_id)
+    if user.status not in ("active", "invited"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User cannot be suspended")
+    user.status = "suspended"
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def reactivate_sub_user(db: AsyncSession, operator_id: str, user_id: str) -> OperatorUser:
+    user = await _get_sub_user(db, operator_id, user_id)
+    if user.status != "suspended":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is not suspended")
+    user.status = "active"
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def force_logout_sub_user(db: AsyncSession, operator_id: str, user_id: str) -> None:
+    user = await _get_sub_user(db, operator_id, user_id)
+    session_result = await db.execute(
+        select(OperatorSession).where(
+            OperatorSession.operator_user_id == user.id,
+            OperatorSession.revoked_at.is_(None),
+        )
+    )
+    for s in session_result.scalars().all():
+        s.revoked_at = _utcnow()
+    await db.commit()
+
+
+async def reset_sub_user_2fa(db: AsyncSession, operator_id: str, user_id: str) -> None:
+    user = await _get_sub_user(db, operator_id, user_id)
+    user.twofa_enabled = False
+    user.twofa_secret = None
+    await db.commit()
+
+
+async def send_2fa_email_code(db: AsyncSession, two_fa_token: str) -> None:
+    """Send a one-time email OTP as 2FA fallback during login."""
+    import secrets as _secrets
+    payload = decode_token(two_fa_token)
+    if not payload or payload.get("kind") != "operator_2fa_pending":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA token")
+    user_id = payload.get("sub")
+    result = await db.execute(select(OperatorUser).where(OperatorUser.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    raw_code = str(_secrets.randbelow(900000) + 100000)
+    code_hash = hashlib.sha256(raw_code.encode()).hexdigest()
+    from app.models.operator_email_otp import OperatorEmailOTP
+    otp = OperatorEmailOTP(
+        id=str(uuid.uuid4()),
+        operator_user_id=user.id,
+        code_hash=code_hash,
+        expires_at=_utcnow() + timedelta(minutes=10),
+        created_at=_utcnow(),
+    )
+    db.add(otp)
+    await db.commit()
+    try:
+        from app.providers import get_email_provider
+        from app.providers.base.email import EmailMessage
+        email_provider = get_email_provider()
+        await email_provider.send(EmailMessage(
+            to=[user.email],
+            subject=f"Your {settings.APP_NAME} sign-in code: {raw_code}",
+            html_body=(
+                f"<p>Hi {user.name},</p>"
+                f"<p>Your 2FA verification code is: <strong style='font-size:24px;letter-spacing:8px'>{raw_code}</strong></p>"
+                f"<p>This code expires in <strong>10 minutes</strong>.</p>"
+            ),
+        ))
+    except Exception:
+        pass
+
+
+async def verify_2fa_email_code(
+    db: AsyncSession,
+    two_fa_token: str,
+    code: str,
+    ip_address: str | None = None,
+) -> OperatorTokenResponse:
+    """Verify email OTP used as 2FA fallback and issue full tokens."""
+    payload = decode_token(two_fa_token)
+    if not payload or payload.get("kind") != "operator_2fa_pending":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA token")
+    user_id = payload.get("sub")
+    from app.models.operator_email_otp import OperatorEmailOTP
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    otp_result = await db.execute(
+        select(OperatorEmailOTP).where(
+            OperatorEmailOTP.operator_user_id == user_id,
+            OperatorEmailOTP.code_hash == code_hash,
+            OperatorEmailOTP.used_at.is_(None),
+        )
+    )
+    otp = otp_result.scalar_one_or_none()
+    if not otp or otp.expires_at.replace(tzinfo=timezone.utc) < _utcnow():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code")
+    otp.used_at = _utcnow()
+    user_result = await db.execute(select(OperatorUser).where(OperatorUser.id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    raw_refresh = secrets.token_urlsafe(48)
+    session = OperatorSession(
+        id=str(uuid.uuid4()),
+        operator_user_id=user.id,
+        refresh_token_hash=_hash_token(raw_refresh),
+        ip_address=ip_address,
+        created_at=_utcnow(),
+        expires_at=_utcnow() + timedelta(days=_REFRESH_EXPIRE_DAYS),
+    )
+    db.add(session)
+    user.last_login_at = _utcnow()
+    await db.commit()
+    return await _build_token_response(db, user, raw_refresh, session_id=session.id)

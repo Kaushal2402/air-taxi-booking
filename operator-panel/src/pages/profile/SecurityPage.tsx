@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorAuthService } from '../../services/operatorAuthService'
-import type { OperatorSession } from '../../services/operatorAuthService'
+import type { OperatorSession, OperatorLoginHistory } from '../../services/operatorAuthService'
 
 function getStrength(pw: string): { score: number; label: string; color: string } {
   if (pw.length === 0) return { score: 0, label: '', color: 'var(--rule-strong)' }
@@ -103,6 +103,23 @@ export default function SecurityPage() {
       setTimeout(() => setTwoFaSuccess(null), 4000)
     },
     onError: () => setTwoFaError('Invalid code. Please try again.'),
+  })
+
+  const [signingOutAll, setSigningOutAll] = useState(false)
+
+  const handleSignOutAll = async () => {
+    setSigningOutAll(true)
+    try {
+      await operatorAuthService.signOutAllSessions()
+      localStorage.removeItem('operator-auth-storage')
+      window.location.href = '/login'
+    } catch { setSigningOutAll(false) }
+  }
+
+  const { data: signInHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['operator-sign-in-history'],
+    queryFn: () => operatorAuthService.getSignInHistory(),
+    staleTime: 60_000,
   })
 
   const revokeSessionMutation = useMutation({
@@ -416,6 +433,60 @@ export default function SecurityPage() {
                             <Trash2 size={12} />
                             Revoke
                           </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {sessions && sessions.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <button
+                  className="btn sm ghost"
+                  style={{ color: 'var(--danger)' }}
+                  disabled={signingOutAll}
+                  onClick={handleSignOutAll}
+                >
+                  {signingOutAll ? 'Signing out…' : 'Sign out of all sessions'}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Sign-in History */}
+        {card('Sign-in History', 'Last 7 days of login activity', (
+          <div>
+            {historyLoading ? (
+              <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>Loading history…</p>
+            ) : !signInHistory || signInHistory.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--ink-3)' }}>No sign-in activity in the last 7 days.</p>
+            ) : (
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="tbl" style={{ width: '100%', minWidth: 360 }}>
+                  <thead>
+                    <tr>
+                      <th className="t-label">Time</th>
+                      <th className="t-label">IP Address</th>
+                      <th className="t-label">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {signInHistory.map((h: OperatorLoginHistory) => (
+                      <tr key={h.id}>
+                        <td className="t-meta">
+                          {new Date(h.attempted_at).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                          })}
+                        </td>
+                        <td style={{ fontSize: 13, color: 'var(--ink-2)' }}>{h.ip_address ?? '—'}</td>
+                        <td>
+                          {h.success ? (
+                            <span className="badge ok">Success</span>
+                          ) : (
+                            <span className="badge" style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}>Failed</span>
+                          )}
                         </td>
                       </tr>
                     ))}
