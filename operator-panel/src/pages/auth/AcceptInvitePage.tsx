@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Eye, EyeOff, Plane, CheckCircle } from 'lucide-react'
+import { Eye, EyeOff, Plane, CheckCircle, ShieldAlert } from 'lucide-react'
+// QRCodeSVG imported for future 2FA enrollment use (enrollment requires an authenticated session)
+import { QRCodeSVG as _QRCodeSVG } from 'qrcode.react'
 import { operatorAuthService } from '../../services/operatorAuthService'
 
 export default function AcceptInvitePage() {
@@ -15,6 +17,7 @@ export default function AcceptInvitePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [needs2faSetup, setNeeds2faSetup] = useState(false)
 
   useEffect(() => {
     if (!token) setError('Invalid invite link — no token found.')
@@ -30,7 +33,10 @@ export default function AcceptInvitePage() {
     setError(null)
     setLoading(true)
     try {
-      await operatorAuthService.acceptInvite(token, password)
+      const res = await operatorAuthService.acceptInvite(token, password)
+      if (res.needs_2fa_setup) {
+        setNeeds2faSetup(true)
+      }
       setDone(true)
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -100,6 +106,31 @@ export default function AcceptInvitePage() {
                   Your password has been set. You can now sign in.
                 </p>
               </div>
+
+              {needs2faSetup && (
+                <div style={{
+                  width: '100%',
+                  background: 'color-mix(in oklab, var(--accent) 8%, var(--surface))',
+                  border: '1px solid color-mix(in oklab, var(--accent) 30%, var(--rule))',
+                  borderRadius: 6,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  gap: 10,
+                  alignItems: 'flex-start',
+                  textAlign: 'left',
+                }}>
+                  <ShieldAlert size={18} color="var(--accent)" strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>
+                      Two-Factor Authentication required
+                    </p>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+                      Your role requires Two-Factor Authentication. Please set it up from the Security page after logging in.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <button
                 className="btn accent"
                 style={{ width: '100%', marginTop: 8 }}

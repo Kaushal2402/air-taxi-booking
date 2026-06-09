@@ -39,6 +39,7 @@ export default function SecurityPage() {
 
   // 2FA disable
   const [disableCode, setDisableCode] = useState('')
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false)
 
   const strength = getStrength(newPw)
 
@@ -266,6 +267,20 @@ export default function SecurityPage() {
                     <ShieldCheck size={16} color="var(--ok)" />
                     <span style={{ fontSize: 13, color: 'var(--ok)' }}>2FA is enabled</span>
                   </div>
+                  {(me?.operator_role === 'operator_admin' || me?.operator_role === 'finance') && (
+                    <div style={{
+                      padding: '10px 14px',
+                      background: 'var(--warn-soft, #fef3c7)',
+                      border: '1px solid #f59e0b',
+                      borderRadius: 4,
+                      fontSize: 12.5,
+                      color: '#92400e',
+                      marginBottom: 12,
+                    }}>
+                      ⚠️ Your role has elevated access. Disabling 2FA reduces security.
+                      Only proceed if you are setting up a new authenticator device.
+                    </div>
+                  )}
                   <div className="field">
                     <label className="field-label">Enter your authenticator code to disable</label>
                     <input
@@ -283,7 +298,7 @@ export default function SecurityPage() {
                     className="btn sm"
                     style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                     disabled={disableMutation.isPending || disableCode.length !== 6}
-                    onClick={() => { setTwoFaError(null); disableMutation.mutate() }}
+                    onClick={() => { setTwoFaError(null); setShowDisableConfirm(true) }}
                   >
                     <ShieldOff size={13} />
                     {disableMutation.isPending ? 'Disabling…' : 'Disable 2FA'}
@@ -497,6 +512,52 @@ export default function SecurityPage() {
           </div>
         ))}
       </div>
+
+      {/* Disable 2FA Confirmation Modal */}
+      {showDisableConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--rule)',
+            borderRadius: 8,
+            padding: '28px 28px 24px',
+            maxWidth: 420,
+            width: '100%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', marginBottom: 10 }}>
+              Disable Two-Factor Authentication?
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 24, lineHeight: 1.55 }}>
+              This will reduce the security of your account. Are you sure you want to disable Two-Factor Authentication?
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                className="btn sm ghost"
+                onClick={() => setShowDisableConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn sm"
+                style={{ background: 'var(--danger)', color: '#fff', border: 'none' }}
+                disabled={disableMutation.isPending}
+                onClick={() => {
+                  setShowDisableConfirm(false)
+                  disableMutation.mutate()
+                }}
+              >
+                {disableMutation.isPending ? 'Disabling…' : 'Yes, disable 2FA'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   )
 }

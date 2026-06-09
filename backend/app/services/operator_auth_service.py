@@ -122,6 +122,40 @@ async def login(
 ) -> OperatorTokenResponse:
     failures = await _count_recent_failures(db, email)
     if failures >= _MAX_ATTEMPTS:
+        # Alert: send email to operator admins (non-blocking)
+        try:
+            from app.providers import get_email_provider
+            from app.providers.base.email import EmailMessage
+            from sqlalchemy import select as _select
+            _admin_result = await db.execute(
+                _select(OperatorUser).where(
+                    OperatorUser.email == email,
+                )
+            )
+            _locked_user = _admin_result.scalar_one_or_none()
+            if _locked_user:
+                _org_admins = await db.execute(
+                    _select(OperatorUser).where(
+                        OperatorUser.operator_id == _locked_user.operator_id,
+                        OperatorUser.operator_role == "operator_admin",
+                        OperatorUser.status == "active",
+                    )
+                )
+                _email_provider = get_email_provider()
+                for _admin in _org_admins.scalars().all():
+                    if _admin.email != email:
+                        await _email_provider.send(EmailMessage(
+                            to=[_admin.email],
+                            subject=f"Security Alert: Account locked — {settings.APP_NAME}",
+                            html_body=(
+                                f"<p>Hi {_admin.name},</p>"
+                                f"<p>The account for <strong>{email}</strong> has been temporarily locked "
+                                f"after {_MAX_ATTEMPTS} failed login attempts.</p>"
+                                f"<p>If this was not expected, please review your team's security settings.</p>"
+                            ),
+                        ))
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed login attempts. Try again later.",
@@ -464,6 +498,11 @@ async def list_sessions(
 
 
 _INVITE_TOKEN_EXPIRE_HOURS = 72
+_ROLES_REQUIRING_2FA = {"operator_admin", "finance"}
+
+VALID_OPERATOR_ROLES = {
+    "operator_admin", "ops_manager", "dispatcher", "finance", "crew_coordinator", "viewer"
+}
 
 
 async def invite_operator_user(
@@ -474,6 +513,12 @@ async def invite_operator_user(
     operator_role: str,
     phone: str | None,
 ) -> OperatorUser:
+    if operator_role not in VALID_OPERATOR_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {', '.join(sorted(VALID_OPERATOR_ROLES))}",
+        )
+
     existing = await db.execute(select(OperatorUser).where(OperatorUser.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -594,7 +639,7 @@ async def resend_invite(db: AsyncSession, operator_user_id: str) -> None:
     await _send_invite_email(user, raw_token)
 
 
-async def accept_invite(db: AsyncSession, token: str, password: str) -> None:
+async def accept_invite(db: AsyncSession, token: str, password: str) -> bool:
     token_hash = _hash_token(token)
     result = await db.execute(
         select(OperatorInviteToken).where(
@@ -619,6 +664,7 @@ async def accept_invite(db: AsyncSession, token: str, password: str) -> None:
     user.status = "active"
     invite_tok.accepted_at = _utcnow()
     await db.commit()
+    return user.operator_role in _ROLES_REQUIRING_2FA
 
 
 async def revoke_all_sessions_for_org(db: AsyncSession, operator_id: str) -> None:
@@ -695,6 +741,19 @@ async def suspend_sub_user(db: AsyncSession, operator_id: str, user_id: str) -> 
     user = await _get_sub_user(db, operator_id, user_id)
     if user.status not in ("active", "invited"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User cannot be suspended")
+    if user.operator_role == "operator_admin":
+        count_result = await db.execute(
+            select(func.count()).select_from(OperatorUser).where(
+                OperatorUser.operator_id == operator_id,
+                OperatorUser.operator_role == "operator_admin",
+                OperatorUser.status != "suspended",
+            )
+        )
+        if count_result.scalar_one() <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot suspend the last active admin of this organisation.",
+            )
     user.status = "suspended"
     await db.commit()
     await db.refresh(user)

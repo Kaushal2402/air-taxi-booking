@@ -115,6 +115,11 @@ class OperatorAcceptInviteRequest(BaseModel):
     password: str
 
 
+class OperatorAcceptInviteResponse(BaseModel):
+    message: str
+    needs_2fa_setup: bool = False
+
+
 class Operator2FAEmailCodeRequest(BaseModel):
     two_fa_token: str
 

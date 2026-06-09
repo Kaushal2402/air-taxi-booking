@@ -15,6 +15,7 @@ from app.schemas.operator_auth import (
     Operator2FAEnrollResponse,
     Operator2FAVerifyRequest,
     OperatorAcceptInviteRequest,
+    OperatorAcceptInviteResponse,
     OperatorChangePasswordRequest,
     OperatorForgotPasswordRequest,
     OperatorLoginHistoryOut,
@@ -38,10 +39,13 @@ def _get_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-@router.post("/invite/accept", response_model=MessageResponse)
+@router.post("/invite/accept", response_model=OperatorAcceptInviteResponse)
 async def accept_invite(body: OperatorAcceptInviteRequest, db: AsyncSession = Depends(get_db)):
-    await operator_auth_service.accept_invite(db, body.token, body.password)
-    return MessageResponse(message="Account activated. You can now log in.")
+    needs_2fa = await operator_auth_service.accept_invite(db, body.token, body.password)
+    return OperatorAcceptInviteResponse(
+        message="Account activated. You can now log in.",
+        needs_2fa_setup=needs_2fa,
+    )
 
 
 @router.post("/login", response_model=OperatorTokenResponse)
