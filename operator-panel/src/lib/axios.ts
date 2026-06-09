@@ -82,6 +82,13 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // Session was explicitly revoked (e.g. after password change) — skip refresh, force logout
+    const detail: string = error.response?.data?.detail ?? ''
+    if (detail.toLowerCase().includes('revoked')) {
+      clearAndRedirect()
+      return Promise.reject(error)
+    }
+
     const refreshToken = getRefreshToken()
     if (!refreshToken) {
       clearAndRedirect()
