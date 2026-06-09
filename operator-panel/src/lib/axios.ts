@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api/v1/operator'
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001') + '/api/v1/operator'
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -57,6 +57,7 @@ const PUBLIC_AUTH_PATHS = [
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/refresh',
+  '/auth/invite/accept',
 ]
 
 let isRefreshing = false
