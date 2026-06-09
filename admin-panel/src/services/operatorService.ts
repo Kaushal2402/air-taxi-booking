@@ -232,6 +232,28 @@ export interface UpdatePilotBody {
   notes?: string
 }
 
+// ── Operator Users ─────────────────────────────────────────────────────────────
+
+export interface OperatorUser {
+  id: string
+  operator_id: string
+  name: string
+  email: string
+  phone: string | null
+  operator_role: string
+  status: string
+  twofa_enabled: boolean
+  last_login_at: string | null
+  created_at: string
+}
+
+export interface InviteUserBody {
+  name: string
+  email: string
+  operator_role: string
+  phone?: string
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const operatorService = {
@@ -319,6 +341,13 @@ export const operatorService = {
 
   groundPilot: (id: string, body: { reason: string }) =>
     api.post<Pilot>(`/pilots/${id}/ground`, body).then(r => r.data),
+
+  // ── Operator Users (team) ───────────────────────────────────────────────────
+  listUsers: (operatorId: string) =>
+    api.get<OperatorUser[]>(`/operators/${operatorId}/users`).then(r => r.data),
+
+  inviteUser: (operatorId: string, body: InviteUserBody) =>
+    api.post<OperatorUser>(`/operators/${operatorId}/users/invite`, body).then(r => r.data),
 
   // ── Compliance summaries ────────────────────────────────────────────────────
   getAircraftCompliance: () =>

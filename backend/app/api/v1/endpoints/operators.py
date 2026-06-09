@@ -87,6 +87,20 @@ async def get_operator(
     return await operator_service.get_operator_detail(db, id)
 
 
+@operators_router.get("/{id}/users", response_model=list[OperatorInviteUserResponse])
+async def list_operator_users(
+    id: str,
+    _: AdminUser = Depends(require_permission("operators.view")),
+    db=Depends(get_db),
+):
+    from sqlalchemy import select
+    from app.models.operator_user import OperatorUser
+    result = await db.execute(
+        select(OperatorUser).where(OperatorUser.operator_id == id).order_by(OperatorUser.created_at)
+    )
+    return result.scalars().all()
+
+
 @operators_router.post("/{id}/users/invite", response_model=OperatorInviteUserResponse, status_code=201)
 async def invite_operator_user(
     id: str,

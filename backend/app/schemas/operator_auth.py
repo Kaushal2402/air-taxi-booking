@@ -99,9 +99,13 @@ class OperatorInviteUserResponse(BaseModel):
     id: str
     name: str
     email: str
+    phone: Optional[str] = None
     operator_role: str
     status: str
     operator_id: str
+    twofa_enabled: bool = False
+    last_login_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

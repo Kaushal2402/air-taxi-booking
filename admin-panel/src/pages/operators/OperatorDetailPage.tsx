@@ -7,7 +7,7 @@ import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorService, uploadFile } from '../../services/operatorService'
-import type { OperatorDetail, Aircraft, Pilot, OperatorDocument, OperatorPerformanceResponse, DocType, CreateAircraftBody, CreatePilotBody, UpdatePilotBody } from '../../services/operatorService'
+import type { OperatorDetail, Aircraft, Pilot, OperatorDocument, OperatorPerformanceResponse, DocType, CreateAircraftBody, CreatePilotBody, UpdatePilotBody, OperatorUser } from '../../services/operatorService'
 import { useFormatMoney } from '../../lib/utils'
 import { kycService } from '../../services/kycService'
 import type { DocTypeItem } from '../../services/kycService'
@@ -17,7 +17,7 @@ import type { AircraftType } from '../../services/catalogService'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'company' | 'fleet' | 'crew' | 'performance' | 'compliance'
+type TabId = 'company' | 'fleet' | 'crew' | 'performance' | 'compliance' | 'team'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -128,6 +128,14 @@ export default function OperatorDetailPage() {
   const [showGroundPilot, setShowGroundPilot]     = useState(false)
   const [groundPilotReason, setGroundPilotReason] = useState('')
   const [siteVisitRequired, setSiteVisitRequired] = useState(false)
+  // Team (operator users)
+  const [teamUsers, setTeamUsers]         = useState<OperatorUser[]>([])
+  const [showInvite, setShowInvite]       = useState(false)
+  const [inviteForm, setInviteForm]       = useState({ name: '', email: '', operator_role: 'viewer', phone: '' })
+  const [inviteSaving, setInviteSaving]   = useState(false)
+  const [inviteError, setInviteError]     = useState('')
+  const [inviteDone, setInviteDone]       = useState('')
+
   const canApproveDoc = usePermission('kyc.documents.approve')
   const canSuspendOperator = usePermission('operators.suspend')
   const canApproveOperator = usePermission('operators.approve')
@@ -165,6 +173,14 @@ export default function OperatorDetailPage() {
     } catch { /* silently fail */ }
   }
 
+  const loadTeam = async () => {
+    if (!id) return
+    try {
+      const users = await operatorService.listUsers(id)
+      setTeamUsers(users)
+    } catch { /* silently fail */ }
+  }
+
   const loadPerformance = async () => {
     if (!id) return
     try {
@@ -191,6 +207,7 @@ export default function OperatorDetailPage() {
     if (activeTab === 'crew')        loadCrew()
     if (activeTab === 'performance') loadPerformance()
     if (activeTab === 'compliance')  setDocs(operator?.docs ?? [])
+    if (activeTab === 'team')        loadTeam()
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (k: keyof OperatorDetail, v: unknown) => setDraft(d => ({ ...d, [k]: v }))
@@ -409,6 +426,29 @@ export default function OperatorDetailPage() {
     }
   }
 
+  const handleInviteUser = async () => {
+    if (!operator) return
+    if (!inviteForm.name.trim()) { setInviteError('Name is required'); return }
+    if (!inviteForm.email.trim()) { setInviteError('Email is required'); return }
+    setInviteSaving(true); setInviteError(''); setInviteDone('')
+    try {
+      await operatorService.inviteUser(operator.id, {
+        name: inviteForm.name,
+        email: inviteForm.email,
+        operator_role: inviteForm.operator_role,
+        phone: inviteForm.phone || undefined,
+      })
+      setInviteDone(inviteForm.email)
+      setInviteForm({ name: '', email: '', operator_role: 'viewer', phone: '' })
+      await loadTeam()
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setInviteError(detail ?? 'Failed to send invite')
+    } finally {
+      setInviteSaving(false)
+    }
+  }
+
   function pilotInitials(name: string) {
     return name.replace('Capt. ', '').split(' ').map((x: string) => x[0]).join('').slice(0, 2).toUpperCase()
   }
@@ -419,6 +459,7 @@ export default function OperatorDetailPage() {
     { id: 'crew',        label: `Crew · ${operator?.pilot_count ?? 0}` },
     { id: 'performance', label: 'Performance' },
     { id: 'compliance',  label: 'Compliance' },
+    { id: 'team',        label: `Team · ${teamUsers.length}` },
   ]
 
   if (isForbidden) return <AccessDeniedPage message={`You don't have permission to access this page.`} />
@@ -925,6 +966,94 @@ export default function OperatorDetailPage() {
               </div>
             </div>
           )}
+          {/* ── Team tab ── */}
+          {activeTab === 'team' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
+                  Team · {teamUsers.length} {teamUsers.length === 1 ? 'member' : 'members'}
+                </h3>
+                <button
+                  className="btn sm accent"
+                  onClick={() => { setInviteForm({ name: '', email: '', operator_role: 'viewer', phone: '' }); setInviteError(''); setInviteDone(''); setShowInvite(true) }}
+                >
+                  <Icon name="plus" size={13} />Invite user
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="tbl" style={{ minWidth: 560 }}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Last login</th>
+                      <th>2FA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teamUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--ink-3)', padding: '40px 0' }}>
+                          No team members yet. Invite someone to get started.
+                        </td>
+                      </tr>
+                    ) : teamUsers.map(u => (
+                      <tr key={u.id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{
+                              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                              background: u.status === 'active'
+                                ? 'color-mix(in oklab, var(--accent) 12%, var(--surface-sunk))'
+                                : 'var(--surface-sunk)',
+                              color: u.status === 'active' ? 'var(--accent)' : 'var(--ink-3)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 9, fontWeight: 700,
+                            }}>
+                              {u.name.split(' ').map((x: string) => x[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500 }}>{u.name}</span>
+                          </div>
+                        </td>
+                        <td style={{ fontSize: 12.5, color: 'var(--ink-2)', fontFamily: 'var(--font-mono)' }}>
+                          {u.email}
+                        </td>
+                        <td>
+                          <span style={{
+                            fontFamily: 'var(--font-mono)', fontSize: 11,
+                            padding: '2px 7px',
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--rule)',
+                            borderRadius: 3, color: 'var(--ink-2)',
+                          }}>
+                            {u.operator_role}
+                          </span>
+                        </td>
+                        <td>
+                          {u.status === 'active'   && <span className="badge ok"><span className="dot ok" />Active</span>}
+                          {u.status === 'invited'  && <span className="badge info"><span className="dot info" />Invited</span>}
+                          {u.status === 'suspended' && <span className="badge danger"><span className="dot danger" />Suspended</span>}
+                          {!['active','invited','suspended'].includes(u.status) && <span className="badge">{u.status}</span>}
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-3)' }}>
+                          {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : '—'}
+                        </td>
+                        <td>
+                          {u.twofa_enabled
+                            ? <span className="badge ok" style={{ fontSize: 10.5 }}>Enabled</span>
+                            : <span className="badge" style={{ fontSize: 10.5 }}>Off</span>
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -1499,6 +1628,118 @@ export default function OperatorDetailPage() {
                   <button className="btn sm" onClick={() => setSelectedPilot(null)}>Close</button>
                   <button className="btn sm accent" onClick={() => setEditingPilot(true)}>Edit details</button>
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite user modal */}
+      {showInvite && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(26,24,20,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 300, padding: 16,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 460, background: 'var(--surface)',
+            border: '1px solid var(--rule)', boxShadow: 'var(--shadow-pop)', padding: '28px',
+          }}>
+            <h3 style={{ margin: '0 0 4px', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
+              Invite team member
+            </h3>
+            <p style={{ margin: '0 0 18px', fontSize: 13, color: 'var(--ink-3)' }}>
+              An email with an activation link will be sent to the user.
+            </p>
+
+            {inviteError && (
+              <div style={{
+                marginBottom: 14, padding: '8px 12px', background: 'var(--danger-soft)',
+                border: '1px solid color-mix(in oklab, var(--danger) 28%, var(--rule))',
+                borderRadius: 3, fontSize: 12.5, color: 'var(--danger)',
+              }}>{inviteError}</div>
+            )}
+
+            {inviteDone && (
+              <div style={{
+                marginBottom: 14, padding: '8px 12px', background: 'var(--accent-soft)',
+                border: '1px solid color-mix(in oklab, var(--accent) 28%, var(--rule))',
+                borderRadius: 3, fontSize: 12.5, color: 'var(--accent)',
+              }}>
+                ✓ Invite sent to <strong>{inviteDone}</strong>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="field">
+                <label className="field-label">Full name *</label>
+                <div className="input">
+                  <input
+                    value={inviteForm.name}
+                    onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="Priya Sharma"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="field">
+                <label className="field-label">Email *</label>
+                <div className="input">
+                  <input
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                    placeholder="priya@operator.com"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="field">
+                  <label className="field-label">Role *</label>
+                  <div className="input" style={{ padding: 0, paddingLeft: 10 }}>
+                    <select
+                      value={inviteForm.operator_role}
+                      onChange={e => setInviteForm(f => ({ ...f, operator_role: e.target.value }))}
+                      style={{ border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', paddingRight: 10, flex: 1 }}
+                    >
+                      <option value="operator_admin">Operator Admin</option>
+                      <option value="ops_manager">Ops Manager</option>
+                      <option value="dispatcher">Dispatcher</option>
+                      <option value="finance">Finance</option>
+                      <option value="crew_coordinator">Crew Coordinator</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label className="field-label">Phone <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(optional)</span></label>
+                  <div className="input">
+                    <input
+                      value={inviteForm.phone}
+                      onChange={e => setInviteForm(f => ({ ...f, phone: e.target.value }))}
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22 }}>
+              <button className="btn sm" onClick={() => { setShowInvite(false); setInviteError(''); setInviteDone('') }}>
+                {inviteDone ? 'Close' : 'Cancel'}
+              </button>
+              {!inviteDone && (
+                <button className="btn sm accent" onClick={handleInviteUser} disabled={inviteSaving}>
+                  {inviteSaving ? 'Sending…' : 'Send invite'}
+                </button>
+              )}
+              {inviteDone && (
+                <button className="btn sm accent" onClick={() => { setInviteForm({ name: '', email: '', operator_role: 'viewer', phone: '' }); setInviteDone('') }}>
+                  Invite another
+                </button>
               )}
             </div>
           </div>
