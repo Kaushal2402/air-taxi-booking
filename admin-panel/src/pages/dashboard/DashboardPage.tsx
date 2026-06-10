@@ -9,9 +9,16 @@ import { usePlatformStore } from '../../store/platformStore'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface ZoneDemandItem {
+  zone_name: string
+  surge_multiplier: number
+  tone: string
+}
+
 interface KpiStats {
   live_trips_road: number
   live_trips_air: number
+  live_trips_air_ground: number
   live_trips_total: number
   online_drivers: number
   online_drivers_idle: number
@@ -27,6 +34,7 @@ interface KpiStats {
   active_operators_paused: number
   bookings_14d: number[]
   revenue_14d_minor: number[]
+  demand_supply: ZoneDemandItem[]
 }
 
 interface LiveBookingItem {

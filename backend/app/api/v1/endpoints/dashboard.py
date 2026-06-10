@@ -12,6 +12,7 @@ from app.models.air_booking import AirBooking
 from app.models.booking import RoadBooking
 from app.models.driver import Driver
 from app.models.operator import Operator
+from app.services import dispatch_service
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,11 +22,17 @@ router = APIRouter()
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+class ZoneDemandItem(BaseModel):
+    zone_name: str
+    surge_multiplier: float
+    tone: str  # ok|warn|danger
+
+
 class KpiStats(BaseModel):
     live_trips_road: int
     live_trips_air: int
+    live_trips_air_ground: int  # Boarding — at helipad, not yet airborne
     live_trips_total: int
-    # Driver online stats — from Driver.online_status + Driver.status
     online_drivers: int
     online_drivers_idle: int
     online_drivers_on_trip: int
@@ -35,13 +42,12 @@ class KpiStats(BaseModel):
     today_completed: int
     cancel_rate_pct: float
     pickup_eta_median_sec: Optional[int]
-    # Operator stats — real values from Operator table
     active_operators: int
     active_operators_total: int
     active_operators_paused: int
-    # 14-day sparklines (daily booking counts)
     bookings_14d: List[int]
     revenue_14d_minor: List[int]
+    demand_supply: List[ZoneDemandItem]
 
 
 class LiveBookingItem(BaseModel):
@@ -98,11 +104,17 @@ async def get_dashboard(
     )
     live_road = live_road_q.scalar_one() or 0
 
-    # Live air trips
+    # Live air trips (Boarding = at helipad, Departed = airborne)
     live_air_q = await db.execute(
         select(func.count(AirBooking.id)).where(AirBooking.status.in_(LIVE_AIR))
     )
     live_air = live_air_q.scalar_one() or 0
+
+    # Air ground count — at helipad/boarding, not yet departed
+    air_ground_q = await db.execute(
+        select(func.count(AirBooking.id)).where(AirBooking.status == "Boarding")
+    )
+    live_air_ground = air_ground_q.scalar_one() or 0
 
     # Today's road bookings
     today_road_q = await db.execute(
@@ -304,6 +316,17 @@ async def get_dashboard(
     )
     active_operators_paused = paused_ops_q.scalar_one() or 0
 
+    # Demand/supply per zone — reuse dispatch service (already computes per-zone ratios)
+    supply_data = await dispatch_service.get_supply(db)
+    demand_supply: list[ZoneDemandItem] = [
+        ZoneDemandItem(
+            zone_name=z.zone_name,
+            surge_multiplier=z.surge_multiplier,
+            tone=z.tone,
+        )
+        for z in supply_data.zones
+    ]
+
     # Threshold-based alerts derived from live data
     alerts: list[AlertItem] = []
 
@@ -335,6 +358,7 @@ async def get_dashboard(
     kpi = KpiStats(
         live_trips_road=live_road,
         live_trips_air=live_air,
+        live_trips_air_ground=live_air_ground,
         live_trips_total=live_road + live_air,
         online_drivers=online_drivers,
         online_drivers_idle=online_drivers_idle,
@@ -350,6 +374,7 @@ async def get_dashboard(
         active_operators_paused=active_operators_paused,
         bookings_14d=bookings_14d,
         revenue_14d_minor=revenue_14d,
+        demand_supply=demand_supply,
     )
 
     return DashboardResponse(kpi=kpi, live_bookings=live_items, alerts=alerts)

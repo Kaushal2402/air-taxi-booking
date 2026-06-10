@@ -8,9 +8,16 @@ import { useFormatMoney } from '../../lib/utils'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface ZoneDemandItem {
+  zone_name: string
+  surge_multiplier: number
+  tone: string  // ok|warn|danger
+}
+
 interface KpiStats {
   live_trips_road: number
   live_trips_air: number
+  live_trips_air_ground: number
   live_trips_total: number
   online_drivers: number
   online_drivers_idle: number
@@ -26,6 +33,7 @@ interface KpiStats {
   active_operators_paused: number
   bookings_14d: number[]
   revenue_14d_minor: number[]
+  demand_supply: ZoneDemandItem[]
 }
 
 interface LiveBookingItem {
@@ -53,17 +61,6 @@ interface DashboardData {
   live_bookings: LiveBookingItem[]
   alerts: AlertItem[]
 }
-
-// ── Static data (TODO: wire to live APIs) ─────────────────────────────────────
-
-// TODO: wire to pricing/surge engine (Module 13)
-const DEMAND_SUPPLY: [string, number][] = [
-  ['Indiranagar', 1.0],
-  ['HSR Layout', 1.6],
-  ['Whitefield', 1.1],
-  ['Koramangala', 1.3],
-  ['Bommanahalli', 0.9],
-]
 
 // ── FilterChip ────────────────────────────────────────────────────────────────
 
@@ -140,7 +137,7 @@ export default function LiveMapPage() {
   const idleCount = kpi?.online_drivers_idle ?? 0
   const pickupCount = Math.max(0, totalOnline - onTripCount - idleCount)
   const airFlyingCount = kpi?.live_trips_air ?? 0
-  const airGroundCount = 0 // TODO: wire to air ground status from Module 10 (Aircraft)
+  const airGroundCount = kpi?.live_trips_air_ground ?? 0
 
   const driversHeader = `${totalOnline.toLocaleString('en-IN')} / ${totalDrivers.toLocaleString('en-IN')}`
 
@@ -213,8 +210,10 @@ export default function LiveMapPage() {
             {/* Demand vs supply */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: 16 }}>
               <div className="t-label" style={{ marginBottom: 10 }}>Demand vs supply</div>
-              {DEMAND_SUPPLY.map(([zone, ratio]) => (
-                <DemandBar key={zone} zone={zone} ratio={ratio} />
+              {(kpi?.demand_supply ?? []).length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', padding: '8px 0' }}>No zone data</div>
+              ) : (kpi?.demand_supply ?? []).map(z => (
+                <DemandBar key={z.zone_name} zone={z.zone_name} ratio={z.surge_multiplier} />
               ))}
             </div>
           </div>
@@ -312,11 +311,13 @@ export default function LiveMapPage() {
               ))}
             </div>
 
-            {/* Demand vs supply — TODO: wire to pricing/surge engine (Module 13) */}
+            {/* Demand vs supply — per-zone surge ratios from dispatch service */}
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)' }}>
               <div className="t-label" style={{ marginBottom: 10 }}>Demand vs supply</div>
-              {DEMAND_SUPPLY.map(([zone, ratio]) => (
-                <DemandBar key={zone} zone={zone} ratio={ratio} />
+              {(kpi?.demand_supply ?? []).length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', textAlign: 'center', padding: '8px 0' }}>No zone data</div>
+              ) : (kpi?.demand_supply ?? []).map(z => (
+                <DemandBar key={z.zone_name} zone={z.zone_name} ratio={z.surge_multiplier} />
               ))}
             </div>
 
