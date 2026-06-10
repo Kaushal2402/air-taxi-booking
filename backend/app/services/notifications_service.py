@@ -166,17 +166,17 @@ async def get_stats(db: AsyncSession) -> dict:
 
 
 async def list_delivery_log(
-    db: AsyncSession, page: int = 1, page_size: int = 50
+    db: AsyncSession, page: int = 1, page_size: int = 50, reference: str | None = None
 ) -> tuple[list[NotificationLog], int]:
     offset = (page - 1) * page_size
-    result = await db.execute(
-        select(NotificationLog)
-        .order_by(NotificationLog.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    q = select(NotificationLog).order_by(NotificationLog.created_at.desc())
+    count_q = select(func.count(NotificationLog.id))
+    if reference:
+        q = q.where(NotificationLog.reference == reference)
+        count_q = count_q.where(NotificationLog.reference == reference)
+    result = await db.execute(q.offset(offset).limit(page_size))
     items = result.scalars().all()
-    total = (await db.execute(select(func.count(NotificationLog.id)))).scalar_one()
+    total = (await db.execute(count_q)).scalar_one()
     return items, total
 
 
@@ -202,6 +202,7 @@ async def send_event_notification(
     notify_sms: bool = True,
     notify_email: bool = True,
     notify_wa: bool = False,
+    reference: str | None = None,  # booking_ref or any external reference for log filtering
 ) -> None:
     """
     Look up a live template by template_code, render it with variables,
@@ -252,7 +253,7 @@ async def send_event_notification(
         platform = await get_settings(db)
         if is_in_quiet_window(platform) and not tmpl.quiet_hours_override:
             logger.debug("send_event_notification: suppressed by quiet hours for %s", template_code)
-            _log(db, tmpl, "suppressed", "all")
+            _log(db, tmpl, "suppressed", "all", reference=reference)
             return
     except Exception:
         pass  # quiet-hours check is non-fatal
@@ -277,10 +278,10 @@ async def send_event_notification(
             )
             res = await provider.send(recipient_push_token, msg)
             push_delivered = res.success
-            _log(db, tmpl, "delivered" if res.success else "failed", "push")
+            _log(db, tmpl, "delivered" if res.success else "failed", "push", reference=reference)
         except Exception as exc:
             logger.warning("send_event_notification push failed for %s: %s", template_code, exc)
-            _log(db, tmpl, "failed", "push")
+            _log(db, tmpl, "failed", "push", reference=reference)
 
     # 5. SMS — respects sms_fallback_seconds:
     #    • If push was delivered and fallback_seconds > 0 → wait and skip SMS
@@ -296,7 +297,7 @@ async def send_event_notification(
                 "send_event_notification: SMS skipped for %s — push delivered (fallback window=%ds)",
                 template_code, sms_fallback_secs,
             )
-            _log(db, tmpl, "suppressed", "sms", recipient=recipient_phone)
+            _log(db, tmpl, "suppressed", "sms", recipient=recipient_phone, reference=reference)
         else:
             try:
                 from app.providers import get_sms_provider
@@ -304,10 +305,10 @@ async def send_event_notification(
                 body = _render(tmpl.sms_body, variables)
                 res = await provider.send(recipient_phone, body)
                 _log(db, tmpl, "delivered" if res.success else "failed", "sms",
-                     recipient=recipient_phone)
+                     recipient=recipient_phone, reference=reference)
             except Exception as exc:
                 logger.warning("send_event_notification SMS failed for %s: %s", template_code, exc)
-                _log(db, tmpl, "failed", "sms", recipient=recipient_phone)
+                _log(db, tmpl, "failed", "sms", recipient=recipient_phone, reference=reference)
 
     # 5. Email
     if "email" in channels and notify_email and recipient_email and tmpl.email_body:
@@ -322,10 +323,10 @@ async def send_event_notification(
                 text_body=re.sub(r"<[^>]+>", "", _render(tmpl.email_body, variables)),
             ))
             _log(db, tmpl, "delivered" if res.success else "failed", "email",
-                 recipient=recipient_email)
+                 recipient=recipient_email, reference=reference)
         except Exception as exc:
             logger.warning("send_event_notification email failed for %s: %s", template_code, exc)
-            _log(db, tmpl, "failed", "email", recipient=recipient_email)
+            _log(db, tmpl, "failed", "email", recipient=recipient_email, reference=reference)
 
     # 6. WhatsApp
     if "wa" in channels and notify_wa and recipient_phone and tmpl.wa_body:
@@ -335,10 +336,10 @@ async def send_event_notification(
             body = _render(tmpl.wa_body, variables)
             res = await provider.send_text(recipient_phone, body)
             _log(db, tmpl, "delivered" if res.success else "failed", "wa",
-                 recipient=recipient_phone)
+                 recipient=recipient_phone, reference=reference)
         except Exception as exc:
             logger.warning("send_event_notification WhatsApp failed for %s: %s", template_code, exc)
-            _log(db, tmpl, "failed", "wa", recipient=recipient_phone)
+            _log(db, tmpl, "failed", "wa", recipient=recipient_phone, reference=reference)
 
     try:
         await db.commit()
@@ -352,6 +353,7 @@ def _log(
     status: str,
     channel: str,
     recipient: str = "",
+    reference: str | None = None,
 ) -> None:
     """Append a delivery log row (fire-and-forget — caller commits)."""
     db.add(NotificationLog(
@@ -360,6 +362,7 @@ def _log(
         channel=channel,
         recipient=recipient,
         status=status,
+        reference=reference,
     ))
 
 

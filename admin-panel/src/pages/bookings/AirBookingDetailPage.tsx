@@ -4,10 +4,16 @@ import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { airBookingsService } from '../../services/airBookingsService'
+import { notificationsService } from '../../services/notificationsService'
+import type { NotificationLog } from '../../services/notificationsService'
+import { paymentsService } from '../../services/paymentsService'
+import type { PaymentListItem } from '../../services/paymentsService'
 import type {
   AirBookingDetail,
   AirBookingStatus,
+  BookingAuditEvent,
   CancelPreviewResponse,
+  CancelTierInfo,
   ManifestResponse,
 } from '../../services/airBookingsService'
 import { operatorService } from '../../services/operatorService'
@@ -79,14 +85,16 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const CANCEL_TIERS = [
-    { l: '> 48h before', pct: 0 },
-    { l: '24–48h before', pct: 25 },
-    { l: '4–24h before', pct: 50 },
-    { l: '< 4h before / no-show', pct: 100 },
-  ]
+  const TIER_LABELS: Record<string, string> = {
+    '>48h': '> 48h before',
+    '24-48h': '24–48h before',
+    '4-24h': '4–24h before',
+    '<4h': '< 4h before / no-show',
+    'free_window': 'Free cancellation window',
+  }
 
-  const currentTierPct = preview?.fee_pct ?? null
+  const cancelTiers: CancelTierInfo[] = preview?.all_tiers ?? []
+  const currentTierLabel = preview?.tier ?? null
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -193,10 +201,15 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
               <div>
                 <div className="t-label" style={{ marginBottom: 12 }}>Cancellation policy</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {CANCEL_TIERS.map(t => {
-                    const isActive = currentTierPct === t.pct
+                  {loadingPreview ? (
+                    <div style={{ padding: 16, fontSize: 13, color: 'var(--ink-3)' }}>Loading policy…</div>
+                  ) : cancelTiers.length === 0 ? (
+                    <div style={{ padding: 16, fontSize: 13, color: 'var(--ink-3)' }}>Policy unavailable</div>
+                  ) : cancelTiers.map(t => {
+                    const isActive = currentTierLabel === t.label
+                    const feeColor = t.fee_pct === 0 ? 'var(--accent)' : t.fee_pct >= 75 ? 'var(--danger)' : 'var(--warn)'
                     return (
-                      <div key={t.l} style={{
+                      <div key={t.label} style={{
                         display: 'flex', alignItems: 'center', gap: 14,
                         padding: '12px 14px',
                         border: '1px solid ' + (isActive ? 'var(--accent)' : 'var(--rule)'),
@@ -212,11 +225,12 @@ function CancelRescheduleModal({ bookingId, booking, preview, loadingPreview, on
                         }}>
                           {isActive && <span style={{ width: 5, height: 5, background: '#fff', borderRadius: '50%' }} />}
                         </span>
-                        <span style={{ flex: 1, fontSize: 13, fontWeight: isActive ? 500 : 400, color: isActive ? 'var(--ink)' : 'var(--ink-2)' }}>{t.l}</span>
-                        <span style={{
-                          fontFamily: 'var(--font-mono)', fontSize: 13,
-                          color: t.pct === 0 ? 'var(--accent)' : t.pct === 100 ? 'var(--danger)' : t.pct === 50 ? 'var(--warn)' : 'var(--ink-2)',
-                        }}>{t.pct}% fee</span>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: isActive ? 500 : 400, color: isActive ? 'var(--ink)' : 'var(--ink-2)' }}>
+                          {TIER_LABELS[t.label] ?? t.label}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: feeColor }}>
+                          {t.fee_pct}% fee
+                        </span>
                       </div>
                     )
                   })}
@@ -385,8 +399,9 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
     try {
       await airBookingsService.assignOperator(bookingId, { operator_id: operatorId, aircraft_id: aircraftId, note })
       onSuccess()
-    } catch {
-      setError('Failed to assign operator.')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(msg ?? 'Failed to assign operator.')
     } finally {
       setSubmitting(false)
     }
@@ -450,7 +465,7 @@ function AssignOperatorModal({ bookingId, onClose, onSuccess }: { bookingId: str
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type ActiveTab = 'overview' | 'manifest' | 'notes' | 'timeline'
+type ActiveTab = 'overview' | 'manifest' | 'notes' | 'timeline' | 'payments' | 'comms' | 'audit'
 
 export default function AirBookingDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -470,6 +485,13 @@ export default function AirBookingDetailPage() {
 
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
+
+  const [auditEvents, setAuditEvents] = useState<BookingAuditEvent[]>([])
+  const [loadingAudit, setLoadingAudit] = useState(false)
+  const [payments, setPayments] = useState<PaymentListItem[]>([])
+  const [loadingPayments, setLoadingPayments] = useState(false)
+  const [commsLogs, setCommsLogs] = useState<NotificationLog[]>([])
+  const [loadingComms, setLoadingComms] = useState(false)
 
   const [advancingStatus, setAdvancingStatus] = useState(false)
   const [togglingFlag, setTogglingFlag] = useState(false)
@@ -547,6 +569,43 @@ export default function AirBookingDetailPage() {
     setAddingNote(false)
   }
 
+  const loadAuditEvents = async () => {
+    setLoadingAudit(true)
+    try {
+      const resp = await airBookingsService.listBookingAuditEvents(bookingId)
+      setAuditEvents(resp.items)
+    } catch {
+      setAuditEvents([])
+    } finally {
+      setLoadingAudit(false)
+    }
+  }
+
+  const loadPayments = async (ref: string) => {
+    setLoadingPayments(true)
+    try {
+      const res = await paymentsService.listTransactions({ search: ref, page_size: 50 })
+      setPayments(res.items)
+    } catch { setPayments([]) }
+    finally { setLoadingPayments(false) }
+  }
+
+  const loadComms = async (ref: string) => {
+    setLoadingComms(true)
+    try {
+      const res = await notificationsService.getDeliveryLog(1, 100, ref)
+      setCommsLogs(res.items)
+    } catch { setCommsLogs([]) }
+    finally { setLoadingComms(false) }
+  }
+
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab)
+    if (tab === 'audit') loadAuditEvents()
+    if (tab === 'payments' && booking) loadPayments(booking.booking_ref)
+    if (tab === 'comms' && booking) loadComms(booking.booking_ref)
+  }
+
   const handleLockManifest = async () => {
     try {
       const m = await airBookingsService.lockManifest(bookingId)
@@ -581,6 +640,9 @@ export default function AirBookingDetailPage() {
     { key: 'manifest', label: 'Manifest' },
     { key: 'notes', label: `Notes (${booking.admin_notes.length})` },
     { key: 'timeline', label: 'Timeline' },
+    { key: 'payments', label: 'Payments' },
+    { key: 'comms', label: 'Communications' },
+    { key: 'audit', label: 'Audit log' },
   ]
 
   const mainContent = (
@@ -590,7 +652,7 @@ export default function AirBookingDetailPage() {
         {TABS.map(t => (
           <div
             key={t.key}
-            onClick={() => setActiveTab(t.key)}
+            onClick={() => handleTabChange(t.key)}
             style={{
               padding: '14px 18px',
               fontSize: 13,
@@ -673,31 +735,33 @@ export default function AirBookingDetailPage() {
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 10, flexWrap: 'wrap' }}>
                   <span className="t-label" style={{ padding: 0 }}>Weight & balance · MTOW</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
-                    {booking.aircraft_model ?? '—'} · {booking.aircraft_registration ?? '—'} · max gross {manifest.mtow_kg.toLocaleString()} kg
+                    {booking.aircraft_model ?? '—'} · {booking.aircraft_registration ?? '—'} · max gross {manifest.mtow_kg != null ? manifest.mtow_kg.toLocaleString() : '—'} kg
                   </span>
                   <span style={{ fontFamily: 'var(--font-serif)', fontSize: 22, color: 'var(--ink)' }}>
-                    {manifest.total_weight_kg.toLocaleString()} / {manifest.mtow_kg.toLocaleString()} kg
+                    {manifest.total_weight_kg?.toLocaleString() ?? '0'} / {manifest.mtow_kg != null ? manifest.mtow_kg.toLocaleString() : '—'} kg
                   </span>
                   <span className={`badge ${manifest.is_within_limits ? 'ok' : 'danger'}`}>
                     <span className={`dot ${manifest.is_within_limits ? 'ok' : 'danger'}`} />
-                    {manifest.utilization_pct.toFixed(1)}% · {manifest.is_within_limits ? 'within limits' : 'OVER LIMIT'}
+                    {manifest.utilization_pct?.toFixed(1) ?? '0.0'}% · {manifest.is_within_limits ? 'within limits' : 'OVER LIMIT'}
                   </span>
                 </div>
+                {manifest.mtow_kg != null && manifest.mtow_kg > 0 && (
                 <div style={{ display: 'flex', height: 18, borderRadius: 2, overflow: 'hidden', border: '1px solid var(--rule-strong)' }}>
                   {[
-                    { l: 'Empty', v: manifest.aircraft_empty_weight_kg, c: 'var(--ink-2)' },
-                    { l: 'Fuel', v: manifest.fuel_weight_kg, c: 'var(--info)' },
-                    { l: 'Pax', v: manifest.total_pax_weight_kg, c: 'var(--accent)' },
-                    { l: 'Bags', v: manifest.total_baggage_weight_kg, c: 'var(--warn)' },
-                    { l: 'Margin', v: Math.max(0, manifest.mtow_kg - manifest.total_weight_kg), c: 'var(--surface-sunk)' },
+                    { l: 'Empty', v: manifest.aircraft_empty_weight_kg ?? 0, c: 'var(--ink-2)' },
+                    { l: 'Fuel', v: manifest.fuel_weight_kg ?? 0, c: 'var(--info)' },
+                    { l: 'Pax', v: manifest.total_pax_weight_kg ?? 0, c: 'var(--accent)' },
+                    { l: 'Bags', v: manifest.total_baggage_weight_kg ?? 0, c: 'var(--warn)' },
+                    { l: 'Margin', v: Math.max(0, manifest.mtow_kg - (manifest.total_weight_kg ?? 0)), c: 'var(--surface-sunk)' },
                   ].map((s, idx) => (
                     <div
                       key={s.l}
-                      style={{ width: (s.v / manifest.mtow_kg) * 100 + '%', background: s.c, borderRight: idx < 4 ? '1px solid var(--surface)' : 'none' }}
+                      style={{ width: (s.v / manifest.mtow_kg!) * 100 + '%', background: s.c, borderRight: idx < 4 ? '1px solid var(--surface)' : 'none' }}
                       title={`${s.l}: ${s.v} kg`}
                     />
                   ))}
                 </div>
+                )}
               </div>
             )}
 
@@ -806,6 +870,155 @@ export default function AirBookingDetailPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
+              <div className="t-label">Payments & refunds</div>
+              <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
+                Transactions for {booking.booking_ref}
+              </h3>
+            </div>
+            {loadingPayments ? (
+              <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>Loading transactions…</div>
+            ) : payments.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>No payment records found for this booking.</div>
+            ) : (
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Service</th>
+                      <th>Method</th>
+                      <th style={{ textAlign: 'right' }}>Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map(p => {
+                      const isRefund = p.gross_amount < 0
+                      const statusTone = p.status === 'completed' ? 'ok' : p.status === 'failed' ? 'danger' : 'warn'
+                      return (
+                        <tr key={p.id}>
+                          <td className="t-meta" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(p.created_at)}</td>
+                          <td style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{p.service}</td>
+                          <td className="t-meta">{p.method}{p.vpa ? ` · ${p.vpa}` : ''}</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 13, color: isRefund ? 'var(--danger)' : 'var(--ink)' }}>
+                            {isRefund ? '−' : ''}{fmtMinor(Math.abs(p.gross_amount))}
+                          </td>
+                          <td>
+                            <span className={`badge ${statusTone}`}>
+                              <span className={`dot ${statusTone}`} />{p.status}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'comms' && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
+              <div className="t-label">Communications</div>
+              <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
+                Notifications sent for {booking.booking_ref}
+              </h3>
+            </div>
+            {loadingComms ? (
+              <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>Loading communications…</div>
+            ) : commsLogs.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>No notifications sent for this booking yet.</div>
+            ) : (
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Template</th>
+                      <th>Channel</th>
+                      <th>Recipient</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {commsLogs.map(log => {
+                      const statusTone = log.status === 'delivered' ? 'ok' : log.status === 'failed' ? 'danger' : log.status === 'suppressed' ? 'warn' : 'pending'
+                      return (
+                        <tr key={log.id}>
+                          <td className="t-meta" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(log.created_at)}</td>
+                          <td style={{ fontSize: 12.5, color: 'var(--ink)' }}>{log.template_name}</td>
+                          <td>
+                            <span className="badge info"><span className="dot info" />{log.channel}</span>
+                          </td>
+                          <td className="t-meta" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{log.recipient || '—'}</td>
+                          <td>
+                            <span className={`badge ${statusTone}`}>
+                              <span className={`dot ${statusTone}`} />{log.status}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'audit' && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
+              <div className="t-label">Audit log</div>
+              <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>
+                Admin actions on this booking
+              </h3>
+            </div>
+            {loadingAudit ? (
+              <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>Loading audit events…</div>
+            ) : auditEvents.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>No audit events recorded yet.</div>
+            ) : (
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>Actor</th>
+                      <th>Role</th>
+                      <th>Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditEvents.map(ev => {
+                      const sevTone = ev.severity === 'high' ? 'danger' : ev.severity === 'med' ? 'warn' : 'info'
+                      return (
+                        <tr key={ev.id}>
+                          <td className="t-meta" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(ev.created_at)}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)' }}>{ev.action}</td>
+                          <td style={{ fontSize: 13 }}>{ev.actor_name}</td>
+                          <td className="t-meta">{ev.actor_role}</td>
+                          <td>
+                            <span className={`badge ${sevTone}`}>
+                              <span className={`dot ${sevTone}`} />{ev.severity}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

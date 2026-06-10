@@ -228,3 +228,9 @@ class SmsOTPResponse(BaseModel):
     sent_at: str
     cooldown_seconds: int
     masked_phone: str      # e.g. "+91****89" — for display only
+
+
+class OtpVerifyRequest(BaseModel):
+    partial_hash: str   # SHA-256 hex of the partial_token issued at login step-1
+    code: str           # 6-digit OTP entered by the user
+    remember_me: bool = False

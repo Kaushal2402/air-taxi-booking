@@ -184,6 +184,11 @@ class AirBookingListResponse(BaseModel):
 
 # ── Cancel preview ────────────────────────────────────────────────────────────
 
+class CancelTierInfo(BaseModel):
+    label: str        # ">48h", "24-48h", "4-24h", "<4h"
+    fee_pct: int      # actual computed pct of fare (NOT of base_fee_pct)
+
+
 class CancelPreviewResponse(BaseModel):
     booking_id: str
     fare_minor: int
@@ -193,6 +198,7 @@ class CancelPreviewResponse(BaseModel):
     net_refund_minor: int
     hours_to_etd: float
     is_force_majeure_eligible: bool
+    all_tiers: List[CancelTierInfo]  # all 4 tiers with configured fee_pcts
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
@@ -270,6 +276,11 @@ class AdvanceStatusRequest(BaseModel):
 class FlagRequest(BaseModel):
     flagged: bool
     flag_reason: str | None = None
+
+
+class QuoteRequestRequest(BaseModel):
+    operator_ids: List[str] | None = None  # if None, platform notifies all eligible operators
+    note: str | None = None                # optional context for the operator
 
 
 class CreateAirBookingRequest(BaseModel):

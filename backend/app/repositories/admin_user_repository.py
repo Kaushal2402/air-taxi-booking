@@ -377,6 +377,24 @@ class AdminUserRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_valid_email_otp_by_hash(self, partial_token_hash: str, channel: str = "email"):
+        """Return the most-recent unused, unexpired OTP matching only partial_hash + channel.
+        Used by the dedicated /sms-otp/verify (and /email-otp/verify) endpoints where
+        only the partial_hash — not the full token — is available."""
+        from app.models.admin_email_otp import AdminEmailOTP
+        result = await self.db.execute(
+            select(AdminEmailOTP)
+            .where(
+                AdminEmailOTP.partial_token_hash == partial_token_hash,
+                AdminEmailOTP.channel == channel,
+                AdminEmailOTP.used_at.is_(None),
+                AdminEmailOTP.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(AdminEmailOTP.sent_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def create_email_otp(self, user_id: str, partial_token_hash: str, code_hash: str, expires_at: datetime, sent_at: datetime, channel: str = "email") -> None:
         """Replace previous OTPs for this login-attempt+channel and insert a fresh one."""
         from sqlalchemy import delete as sa_delete

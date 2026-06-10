@@ -4,7 +4,7 @@ import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { airBookingsService } from '../../services/airBookingsService'
-import type { CharterQuote, AirBookingDetail } from '../../services/airBookingsService'
+import type { CharterQuote, AirBookingDetail, QuoteRequestPayload } from '../../services/airBookingsService'
 import { operatorService } from '../../services/operatorService'
 import type { Operator, Aircraft } from '../../services/operatorService'
 
@@ -351,6 +351,9 @@ export default function AirBookingQuotePage() {
   const [quotes, setQuotes] = useState<CharterQuote[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [requestNote, setRequestNote] = useState('')
+  const [requestingQuotes, setRequestingQuotes] = useState(false)
 
   const loadData = async () => {
     setLoading(true)
@@ -393,6 +396,18 @@ export default function AirBookingQuotePage() {
     ? `${booking.customer_name ?? '—'} · ${booking.service_label} · ${booking.route_from} → ${booking.route_to} · ${booking.pax_count} pax`
     : ''
 
+  const handleRequestQuotes = async () => {
+    setRequestingQuotes(true)
+    try {
+      const req: QuoteRequestPayload = { note: requestNote || undefined }
+      await airBookingsService.requestQuotes(bookingId, req)
+      setShowRequestModal(false)
+      setRequestNote('')
+      await loadData()
+    } catch { /* ignore */ }
+    setRequestingQuotes(false)
+  }
+
   const recommendedQuote = sortedQuotes.find(q => q.is_recommended && q.status !== 'declined')
 
   return (
@@ -405,6 +420,9 @@ export default function AirBookingQuotePage() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn sm" onClick={() => navigate(`/bookings/air/${bookingId}`)}>
             ← Back to booking
+          </button>
+          <button className="btn sm" onClick={() => setShowRequestModal(true)}>
+            <Icon name="external" size={13} />Request quotes
           </button>
           <button className="btn sm" onClick={() => setShowAddForm(v => !v)}>
             <Icon name="plus" size={13} />{showAddForm ? 'Cancel' : 'Add quote'}
@@ -493,6 +511,42 @@ export default function AirBookingQuotePage() {
           </div>
         )}
       </div>
+
+      {/* Request quotes modal */}
+      {showRequestModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(15,13,10,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--rule-strong)', width: '100%', maxWidth: 440 }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div className="t-label">Quote request</div>
+                <div style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 400, marginTop: 4 }}>Request quotes from operators</div>
+              </div>
+              <button className="btn ghost icon sm" onClick={() => setShowRequestModal(false)}><Icon name="close" size={14} /></button>
+            </div>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
+                This will log a quote request event for this booking. Notify eligible operators via the Notifications module to submit quotes.
+              </div>
+              <div className="field">
+                <label className="field-label">Note to operators (optional)</label>
+                <div className="input">
+                  <input
+                    value={requestNote}
+                    onChange={e => setRequestNote(e.target.value)}
+                    placeholder="Special requirements, preferred aircraft type…"
+                  />
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--rule)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button className="btn" onClick={() => setShowRequestModal(false)}>Cancel</button>
+              <button className="btn accent" disabled={requestingQuotes} onClick={handleRequestQuotes}>
+                {requestingQuotes ? 'Requesting…' : 'Send request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   )
 }

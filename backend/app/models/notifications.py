@@ -68,6 +68,7 @@ class NotificationLog(Base, UUIDPrimaryKeyMixin):
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
     recipient: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=NotificationDeliveryStatus.pending)
+    reference: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)  # e.g. booking_ref
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now(), nullable=False
     )

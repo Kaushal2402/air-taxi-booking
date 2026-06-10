@@ -36,6 +36,7 @@ export interface NotificationLog {
   channel: string
   recipient: string
   status: string
+  reference: string | null
   created_at: string
 }
 
@@ -116,8 +117,8 @@ export const notificationsService = {
   deleteTemplate: (id: string) =>
     api.delete(`/notifications/templates/${id}`).then(r => r.data),
 
-  getDeliveryLog: (page = 1, page_size = 50) =>
-    api.get<NotificationLogListResponse>('/notifications/delivery-log', { params: { page, page_size } }).then(r => r.data),
+  getDeliveryLog: (page = 1, page_size = 50, reference?: string) =>
+    api.get<NotificationLogListResponse>('/notifications/delivery-log', { params: { page, page_size, reference } }).then(r => r.data),
 
   createBroadcast: (body: BroadcastCreate) =>
     api.post('/notifications/broadcast', body).then(r => r.data),

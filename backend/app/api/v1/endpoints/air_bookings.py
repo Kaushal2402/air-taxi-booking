@@ -20,6 +20,7 @@ from app.schemas.air_bookings import (
     FlagRequest,
     ManifestResponse,
     ManifestUpdateRequest,
+    QuoteRequestRequest,
     QuotesListResponse,
     RefundRequest,
     RescheduleRequest,
@@ -290,6 +291,34 @@ async def decline_quote(
     db=Depends(get_db),
 ):
     return await air_bookings_service.decline_quote(db, booking_id, quote_id)
+
+
+# ── Quote request ─────────────────────────────────────────────────────────────
+
+@router.post("/{booking_id}/quote-request", response_model=AirBookingDetail, status_code=200)
+async def request_quotes(
+    booking_id: str,
+    body: QuoteRequestRequest,
+    request: Request,
+    current_user: AdminUser = Depends(require_permission("bookings.air.confirm")),
+    db=Depends(get_db),
+):
+    result = await air_bookings_service.request_operator_quotes(db, booking_id, body)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="air_booking.quotes_requested",
+            target=f"air_booking:{booking_id}",
+            category="Operations",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data=body.model_dump(exclude_unset=True),
+        )
+    except Exception:
+        pass
+    return result
 
 
 # ── Notes ─────────────────────────────────────────────────────────────────────

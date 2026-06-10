@@ -33,6 +33,7 @@ from app.schemas.air_bookings import (
     AirBookingTimelineEvent,
     AssignOperatorRequest,
     CancelPreviewResponse,
+    CancelTierInfo,
     CancelRequest,
     CharterQuote as CharterQuoteSchema,
     FlagRequest,
@@ -40,6 +41,7 @@ from app.schemas.air_bookings import (
     ManifestResponse,
     ManifestUpdateRequest,
     CreateAirBookingRequest,
+    QuoteRequestRequest,
     QuotesListResponse,
     RefundRequest,
     RescheduleRequest,
@@ -331,14 +333,14 @@ async def assign_operator(
 
         if aircraft.status not in ("ready",):
             raise HTTPException(
-                status_code=422,
+                status_code=409,
                 detail=f"Aircraft is not ready for assignment (status: '{aircraft.status}'). "
                        "Only 'ready' aircraft can be assigned to bookings.",
             )
 
         if aircraft.airworthiness_status == "expired":
             raise HTTPException(
-                status_code=422,
+                status_code=409,
                 detail="Aircraft airworthiness certificate has expired. Renew before assigning.",
             )
 
@@ -357,7 +359,7 @@ async def assign_operator(
                         w_end = w_end.replace(tzinfo=timezone.utc)
                     if w_start <= etd <= w_end:
                         raise HTTPException(
-                            status_code=422,
+                            status_code=409,
                             detail=(
                                 f"Aircraft is scheduled for maintenance from "
                                 f"{w_start.strftime('%Y-%m-%d %H:%M')} to "
@@ -369,8 +371,32 @@ async def assign_operator(
                     continue  # malformed window entry — skip
 
         booking.aircraft_id = req.aircraft_id
+        booking.aircraft_registration = aircraft.registration_mark
+        booking.aircraft_seats = aircraft.seat_capacity
+        booking.aircraft_mtow_kg = float(aircraft.mtow_kg) if aircraft.mtow_kg else None
+        # Resolve model name from AircraftType catalog
+        if aircraft.aircraft_type_id:
+            from app.models.catalog import AircraftType
+            at_row = await db.execute(select(AircraftType).where(AircraftType.id == aircraft.aircraft_type_id))
+            at = at_row.scalar_one_or_none()
+            booking.aircraft_model = at.name if at else aircraft.registration_mark
+        else:
+            booking.aircraft_model = aircraft.registration_mark
+        # Airworthiness expiry — store snapshot at assignment time
+        if aircraft.airworthiness_expiry:
+            booking.aircraft_airworthy_until = datetime.combine(
+                aircraft.airworthiness_expiry, datetime.min.time()
+            ).replace(tzinfo=timezone.utc)
 
     booking.operator_id = req.operator_id
+
+    # Denormalize operator name from Operator table
+    from app.models.operator import Operator as OperatorModel
+    op_row = await db.execute(select(OperatorModel).where(OperatorModel.id == req.operator_id))
+    operator = op_row.scalar_one_or_none()
+    if operator:
+        booking.operator_name = operator.name
+
     _add_timeline(db, booking, "Operator assigned", req.note, "info")
     await db.commit()
     await db.refresh(booking)
@@ -408,6 +434,13 @@ async def cancel_preview(db: AsyncSession, booking_id: str) -> CancelPreviewResp
     cancel_fee = 0 if fee_pct == 0 else int(fare * fee_pct / 100)
     net_refund = fare - cancel_fee
 
+    all_tiers = [
+        CancelTierInfo(label=">48h", fee_pct=0),
+        CancelTierInfo(label="24-48h", fee_pct=round(base_fee_pct * 0.25)),
+        CancelTierInfo(label="4-24h", fee_pct=round(base_fee_pct * 0.5)),
+        CancelTierInfo(label="<4h", fee_pct=round(base_fee_pct)),
+    ]
+
     return CancelPreviewResponse(
         booking_id=booking.id,
         fare_minor=fare,
@@ -417,6 +450,7 @@ async def cancel_preview(db: AsyncSession, booking_id: str) -> CancelPreviewResp
         net_refund_minor=net_refund,
         hours_to_etd=round(max(delta_hours, 0), 2),
         is_force_majeure_eligible=delta_hours < 48,
+        all_tiers=all_tiers,
     )
 
 
@@ -472,6 +506,49 @@ async def cancel_booking(
         note_text += f" — No-show wait enforced: {no_show_wait}min"
 
     _add_timeline(db, booking, "Booking cancelled", note_text, "danger")
+
+    # Post refund to payments ledger
+    try:
+        from app.models.payment import Payment, PaymentStatus
+        preview_result = await cancel_preview(db, booking_id)
+        refund_amount = booking.fare_estimate_minor if req.force_majeure else preview_result.net_refund_minor
+        if refund_amount and refund_amount > 0:
+            db.add(Payment(
+                id=str(uuid.uuid4()),
+                booking_id=booking_id,
+                customer_id=booking.customer_id or "",
+                customer_name=booking.customer_name or "",
+                booking_ref=booking.booking_ref,
+                service=f"Air · {booking.service_label or booking.service_subtype} · refund",
+                method=booking.payment_method or "original",
+                gross_amount=-refund_amount,
+                gateway_fee=0,
+                net_amount=-refund_amount,
+                status=PaymentStatus.completed,
+            ))
+    except Exception:
+        pass  # ledger posting is non-fatal
+
+    # Notify customer of cancellation
+    try:
+        from app.services.notifications_service import send_event_notification
+        if booking.customer_phone or booking.customer_email:
+            await send_event_notification(
+                db,
+                "AIR_BOOKING_CANCELLED",
+                {
+                    "customer_name": booking.customer_name or "Customer",
+                    "booking_ref": booking.booking_ref,
+                    "route": f"{booking.route_from} → {booking.route_to}",
+                    "reason": req.reason or "",
+                },
+                recipient_phone=booking.customer_phone,
+                recipient_email=booking.customer_email,
+                reference=booking.booking_ref,
+            )
+    except Exception:
+        pass  # notification is non-fatal
+
     await db.commit()
     return await get_air_booking(db, booking_id)
 
@@ -511,6 +588,47 @@ async def process_refund(
     if req.reason:
         msg += f" — {req.reason}"
     _add_timeline(db, booking, "Refund processed", msg, "ok")
+
+    # Post refund to payments ledger
+    try:
+        from app.models.payment import Payment, PaymentStatus
+        if req.amount_minor and req.amount_minor > 0:
+            db.add(Payment(
+                id=str(uuid.uuid4()),
+                booking_id=booking_id,
+                customer_id=booking.customer_id or "",
+                customer_name=booking.customer_name or "",
+                booking_ref=booking.booking_ref,
+                service=f"Air · {booking.service_label or booking.service_subtype} · refund",
+                method=destination,
+                gross_amount=-req.amount_minor,
+                gateway_fee=0,
+                net_amount=-req.amount_minor,
+                status=PaymentStatus.completed,
+            ))
+    except Exception:
+        pass
+
+    # Notify customer of refund
+    try:
+        from app.services.notifications_service import send_event_notification
+        if booking.customer_phone or booking.customer_email:
+            await send_event_notification(
+                db,
+                "AIR_BOOKING_REFUNDED",
+                {
+                    "customer_name": booking.customer_name or "Customer",
+                    "booking_ref": booking.booking_ref,
+                    "amount": fmt_minor(req.amount_minor, platform.base_currency or "INR") if req.amount_minor else "—",
+                    "destination": destination,
+                },
+                recipient_phone=booking.customer_phone,
+                recipient_email=booking.customer_email,
+                reference=booking.booking_ref,
+            )
+    except Exception:
+        pass
+
     await db.commit()
     return await get_air_booking(db, booking_id)
 
@@ -694,6 +812,72 @@ async def decline_quote(
         **{c.key: getattr(q, c.key) for c in q.__table__.columns},
         total_minor=_quote_total(q),
     )
+
+
+async def request_operator_quotes(
+    db: AsyncSession, booking_id: str, req: QuoteRequestRequest
+) -> AirBookingDetail:
+    result = await db.execute(select(AirBooking).where(AirBooking.id == booking_id))
+    booking = result.scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Air booking not found")
+    if booking.status not in ("Requested", "Confirmed"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Quote requests are only allowed on Requested/Confirmed bookings (current: {booking.status})",
+        )
+    operator_note = req.note or "Admin has requested a quote for this booking."
+    target_desc = (
+        f"Operators: {', '.join(req.operator_ids)}" if req.operator_ids else "all eligible operators"
+    )
+    _add_timeline(
+        db,
+        booking,
+        f"Quote requested from {target_desc}",
+        operator_note,
+        "info",
+    )
+
+    # Notify operator(s) of quote request
+    try:
+        from app.services.notifications_service import send_event_notification
+        from app.models.operator import Operator as OperatorModel
+        op_ids = req.operator_ids or []
+        if op_ids:
+            op_rows = await db.execute(
+                select(OperatorModel).where(OperatorModel.id.in_(op_ids))
+            )
+            operators = op_rows.scalars().all()
+        else:
+            # Notify all active operators
+            op_rows = await db.execute(
+                select(OperatorModel).where(OperatorModel.status == "active").limit(50)
+            )
+            operators = op_rows.scalars().all()
+
+        for op in operators:
+            contact_email = getattr(op, "contact_email", None)
+            contact_phone = getattr(op, "contact_phone", None)
+            if contact_email or contact_phone:
+                await send_event_notification(
+                    db,
+                    "AIR_QUOTE_REQUESTED",
+                    {
+                        "operator_name": op.name,
+                        "booking_ref": booking.booking_ref,
+                        "route": f"{booking.route_from} → {booking.route_to}",
+                        "pax": str(booking.pax_count),
+                        "note": operator_note,
+                    },
+                    recipient_phone=contact_phone,
+                    recipient_email=contact_email,
+                    reference=booking.booking_ref,
+                )
+    except Exception:
+        pass  # notification is non-fatal
+
+    await db.commit()
+    return await get_air_booking(db, booking_id)
 
 
 async def add_note(
@@ -934,14 +1118,15 @@ async def create_air_booking(
     )
     db.add(booking)
 
-    # Carbon offset — add 500 minor units when toggle is on
+    # Carbon offset — amount configurable via PlatformSettings.carbon_offset_amount_minor
     if await get_toggle(db, "carbon_offset"):
         _platform = await get_settings(db)
         _currency = _platform.base_currency or "INR"
-        booking.fare_estimate_minor = (booking.fare_estimate_minor or 0) + 500
+        _offset_amount = _platform.carbon_offset_amount_minor or 500
+        booking.fare_estimate_minor = (booking.fare_estimate_minor or 0) + _offset_amount
         _add_timeline(
             db, booking,
-            f"Carbon offset applied · {fmt_minor(500, _currency)}",
+            f"Carbon offset applied · {fmt_minor(_offset_amount, _currency)}",
             "Platform toggle carbon_offset is enabled",
             "info",
         )

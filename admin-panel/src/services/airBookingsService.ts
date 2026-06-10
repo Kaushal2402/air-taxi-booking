@@ -25,6 +25,31 @@ export type QuoteStatus = 'pending' | 'pushed' | 'accepted' | 'declined'
 
 export type TimelineTone = 'ok' | 'warn' | 'info' | 'pending' | 'danger'
 
+// ── Audit event ───────────────────────────────────────────────────────────────
+
+export interface BookingAuditEvent {
+  id: string
+  actor_name: string
+  actor_role: string
+  action: string
+  target: string
+  severity: string
+  category: string
+  created_at: string
+}
+
+export interface BookingAuditEventsResponse {
+  items: BookingAuditEvent[]
+  total: number
+}
+
+// ── Quote request ─────────────────────────────────────────────────────────────
+
+export interface QuoteRequestPayload {
+  operator_ids?: string[]
+  note?: string
+}
+
 // ── Core interfaces ────────────────────────────────────────────────────────────
 
 export interface AirBookingListItem {
@@ -93,13 +118,13 @@ export interface ManifestPassenger {
 export interface ManifestResponse {
   booking_id: string
   passengers: ManifestPassenger[]
-  total_pax_weight_kg: number
-  total_baggage_weight_kg: number
-  aircraft_empty_weight_kg: number
-  fuel_weight_kg: number
-  total_weight_kg: number
-  mtow_kg: number
-  utilization_pct: number
+  total_pax_weight_kg: number | null
+  total_baggage_weight_kg: number | null
+  aircraft_empty_weight_kg: number | null
+  fuel_weight_kg: number | null
+  total_weight_kg: number | null
+  mtow_kg: number | null
+  utilization_pct: number | null
   is_within_limits: boolean
   is_locked: boolean
 }
@@ -165,6 +190,11 @@ export interface PaginatedAirBookings {
   stats: AirBookingStats
 }
 
+export interface CancelTierInfo {
+  label: string
+  fee_pct: number
+}
+
 export interface CancelPreviewResponse {
   booking_id: string
   fare_minor: number
@@ -174,6 +204,7 @@ export interface CancelPreviewResponse {
   net_refund_minor: number
   hours_to_etd: number
   is_force_majeure_eligible: boolean
+  all_tiers: CancelTierInfo[]
 }
 
 // ── Request types ─────────────────────────────────────────────────────────────
@@ -331,4 +362,10 @@ export const airBookingsService = {
 
   flagBooking: (id: string, req: FlagBookingRequest) =>
     api.patch<AirBookingDetail>(`/bookings/air/${id}/flag`, req).then(r => r.data),
+
+  requestQuotes: (id: string, req: QuoteRequestPayload) =>
+    api.post<AirBookingDetail>(`/bookings/air/${id}/quote-request`, req).then(r => r.data),
+
+  listBookingAuditEvents: (id: string) =>
+    api.get<BookingAuditEventsResponse>('/audit/events', { params: { target: `air_booking:${id}`, page_size: 100 } }).then(r => r.data),
 }

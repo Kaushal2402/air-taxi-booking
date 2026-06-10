@@ -62,6 +62,7 @@ class PlatformSettings(Base):
     refund_destination_default: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Air booking
     air_min_advance_hours: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    carbon_offset_amount_minor: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # default 500 paise
     # Quiet hours
     quiet_hours_enabled: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     quiet_hours_start: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)   # HH:MM

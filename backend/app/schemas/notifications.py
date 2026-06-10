@@ -88,6 +88,7 @@ class NotificationLogResponse(BaseModel):
     channel: str
     recipient: str
     status: str
+    reference: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

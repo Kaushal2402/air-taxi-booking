@@ -33,10 +33,11 @@ async def get_stats(
 async def list_delivery_log(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    reference: str | None = Query(None),
     _: AdminUser = Depends(require_permission("notifications.delivery.view")),
     db=Depends(get_db),
 ):
-    items, total = await notifications_service.list_delivery_log(db, page, page_size)
+    items, total = await notifications_service.list_delivery_log(db, page, page_size, reference=reference)
     return NotificationLogListResponse(
         items=[NotificationLogResponse.model_validate(i) for i in items],
         total=total,
