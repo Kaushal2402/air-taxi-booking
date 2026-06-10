@@ -23,8 +23,10 @@ class OperatorUser(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    # Intra-org role: operator_admin | ops_manager | dispatcher | finance | crew_coordinator | viewer
+    # Intra-org role slug (kept for fast lookups): operator_admin | ops_manager | dispatcher | finance | crew_coordinator | viewer
     operator_role: Mapped[str] = mapped_column(String(50), nullable=False, default="viewer")
+    # FK to operator_roles (nullable for backwards compat — resolved by role slug)
+    operator_role_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
 
     # Status: invited | active | suspended
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="invited", index=True)

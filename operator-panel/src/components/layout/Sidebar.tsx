@@ -18,6 +18,8 @@ import {
   User,
   Lock,
   X,
+  Building2,
+  ShieldAlert,
 } from 'lucide-react'
 
 const NAV_GROUPS = [
@@ -61,10 +63,12 @@ const NAV_GROUPS = [
   {
     label: 'Settings',
     items: [
-      { id: 'team',     label: 'Team & Roles', Icon: UserCog,    path: '/team' },
-      { id: 'settings', label: 'Settings',    Icon: Settings,   path: '/settings' },
-      { id: 'profile',  label: 'Profile',     Icon: User,       path: '/profile' },
-      { id: 'security', label: 'Security',    Icon: Lock,       path: '/security' },
+      { id: 'onboarding', label: 'Company Profile', Icon: Building2,   path: '/onboarding' },
+      { id: 'team',       label: 'Team Members',    Icon: UserCog,     path: '/team' },
+      { id: 'roles',      label: 'Roles',           Icon: ShieldAlert, path: '/team/roles' },
+      { id: 'settings',   label: 'Settings',        Icon: Settings,    path: '/settings' },
+      { id: 'profile',    label: 'Profile',         Icon: User,        path: '/profile' },
+      { id: 'security',   label: 'Security',        Icon: Lock,        path: '/security' },
     ],
   },
 ]
