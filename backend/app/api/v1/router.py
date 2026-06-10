@@ -28,6 +28,9 @@ from app.api.v1.endpoints.privacy import router as privacy_router
 from app.api.v1.endpoints.reference import router as reference_router
 from app.api.v1.endpoints.operator_auth import router as operator_auth_router
 from app.api.v1.endpoints.operator_users import router as operator_users_router
+from app.api.v1.endpoints.operator_profile import router as operator_profile_router
+from app.api.v1.endpoints.operator_dashboard import router as operator_dashboard_router
+from app.api.v1.endpoints.operator_roles import router as operator_roles_router
 
 api_router = APIRouter()
 
@@ -63,5 +66,8 @@ api_router.include_router(sos_router,            prefix="/sos",            tags=
 api_router.include_router(data_purge_router,     prefix="/data/purge",     tags=["Data Retention"])
 api_router.include_router(privacy_router,        prefix="/privacy",        tags=["Privacy Requests"])
 api_router.include_router(reference_router,      prefix="/ref",            tags=["Reference Lookups"])
-api_router.include_router(operator_auth_router,  prefix="/operator/auth",  tags=["Operator Auth"])
-api_router.include_router(operator_users_router, prefix="/operator/users", tags=["Operator Users"])
+api_router.include_router(operator_auth_router,      prefix="/operator/auth",      tags=["Operator Auth"])
+api_router.include_router(operator_users_router,     prefix="/operator/users",     tags=["Operator Users"])
+api_router.include_router(operator_profile_router,   prefix="/operator",           tags=["Operator Profile"])
+api_router.include_router(operator_dashboard_router, prefix="/operator",           tags=["Operator Dashboard"])
+api_router.include_router(operator_roles_router,     prefix="/operator",           tags=["Operator Roles"])

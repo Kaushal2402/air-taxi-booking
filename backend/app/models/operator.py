@@ -15,12 +15,18 @@ class Operator(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "operators"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    trade_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     company_registration_no: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     hq_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     cert_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # e.g. NSOP
 
-    # Status: pending | review | approved | active | paused | deactivated
+    # Operator platform status: pending | review | approved | active | paused | deactivated | suspended
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", index=True)
+
+    # Onboarding workflow: draft | submitted | in_review | approved | rejected | re_review
+    onboarding_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default="draft")
 
     commission_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     payout_account_ref: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
