@@ -52,6 +52,9 @@ class LiveBookingItem(BaseModel):
     status: str
     fare_minor: int
     kind: str  # "road" | "air"
+    driver_name: Optional[str] = None
+    driver_rating: Optional[float] = None
+    vehicle_info: Optional[str] = None
 
 
 class AlertItem(BaseModel):
@@ -218,15 +221,20 @@ async def get_dashboard(
         bookings_14d.append(day_count)
         revenue_14d.append(day_rev)
 
-    # Live bookings (road)
+    # Live bookings (road) — join driver for name/rating/vehicle
     live_road_rows = await db.execute(
-        select(RoadBooking)
+        select(RoadBooking, Driver)
+        .outerjoin(Driver, RoadBooking.driver_id == Driver.id)
         .where(RoadBooking.status.in_(LIVE_ROAD))
         .order_by(RoadBooking.created_at.desc())
         .limit(4)
     )
     live_items: list[LiveBookingItem] = []
-    for b in live_road_rows.scalars().all():
+    for b, d in live_road_rows.all():
+        vehicle_info: Optional[str] = None
+        if d:
+            parts = [p for p in [d.vehicle_class, d.vehicle_plate] if p]
+            vehicle_info = " · ".join(parts) if parts else None
         live_items.append(LiveBookingItem(
             id=b.id,
             booking_ref=b.booking_ref,
@@ -235,6 +243,9 @@ async def get_dashboard(
             status=b.status,
             fare_minor=int(b.fare_final_minor or b.fare_estimate_minor or 0),
             kind="road",
+            driver_name=d.name if d else None,
+            driver_rating=d.rating if d else None,
+            vehicle_info=vehicle_info,
         ))
 
     # Live bookings (air)

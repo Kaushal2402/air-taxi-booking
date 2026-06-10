@@ -36,6 +36,9 @@ interface LiveBookingItem {
   status: string
   fare_minor: number
   kind: 'road' | 'air'
+  driver_name?: string | null
+  driver_rating?: number | null
+  vehicle_info?: string | null
 }
 
 interface AlertItem {
@@ -141,23 +144,14 @@ export default function LiveMapPage() {
 
   const driversHeader = `${totalOnline.toLocaleString('en-IN')} / ${totalDrivers.toLocaleString('en-IN')}`
 
-  // Demo trip for side panel
-  const demoTrip = liveBookings[0] ?? {
-    id: 'demo',
-    booking_ref: 'AC-92F8311',
-    service: 'Cab · XL',
-    route: 'Indiranagar → KIAL T2',
-    status: 'InProgress',
-    fare_minor: 124000,
-    kind: 'road' as const,
-  }
+  const selectedTrip = liveBookings[0] ?? null
 
   const handleCancel = async () => {
-    if (demoTrip.id === 'demo' || demoTrip.kind !== 'road') return
-    if (!window.confirm(`Cancel booking ${demoTrip.booking_ref}?`)) return
+    if (!selectedTrip || selectedTrip.kind !== 'road') return
+    if (!window.confirm(`Cancel booking ${selectedTrip.booking_ref}?`)) return
     setCancelling(true)
     try {
-      await api.post(`/bookings/road/${demoTrip.id}/cancel`, { reason: 'Admin cancelled from live map' })
+      await api.post(`/bookings/road/${selectedTrip.id}/cancel`, { reason: 'Admin cancelled from live map' })
       const r = await api.get<DashboardData>('/dashboard', { params: { window: 'today' } })
       setData(r.data)
     } catch {
@@ -167,10 +161,6 @@ export default function LiveMapPage() {
     }
   }
 
-  const showToast = (msg: string) => {
-    alert(msg)
-  }
-
   if (isMobile) {
     // Mobile: map + scrollable summary below
     return (
@@ -178,7 +168,7 @@ export default function LiveMapPage() {
         activeId="dashboard"
         breadcrumb="Operations · Live · Full map"
         title="Live operations · map"
-        subtitle="Bengaluru · streaming"
+        subtitle="Live · streaming"
         actions={
           <button className="btn sm ghost" onClick={() => navigate('/dashboard')}>← Dashboard</button>
         }
@@ -354,81 +344,97 @@ export default function LiveMapPage() {
           background: 'var(--surface)', border: '1px solid var(--rule)',
           display: 'flex', flexDirection: 'column',
         }}>
-          {/* Header */}
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)' }}>
-            <div className="t-label">Live trip · {demoTrip.booking_ref}</div>
-            <div style={{ fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 400, marginTop: 3 }}>{demoTrip.service}</div>
-          </div>
+          {selectedTrip == null ? (
+            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+              <div style={{ fontSize: 22, marginBottom: 10, opacity: 0.3 }}>✈</div>
+              No live trips right now
+            </div>
+          ) : (
+            <>
+              {/* Header */}
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)' }}>
+                <div className="t-label">Live trip · {selectedTrip.booking_ref}</div>
+                <div style={{ fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 400, marginTop: 3 }}>{selectedTrip.service}</div>
+              </div>
 
-          {/* Route visual */}
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {demoTrip.route.split(' → ').map((pt, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: i === 0 ? 'var(--accent)' : 'var(--danger)',
-                    border: '2px solid var(--surface)', boxShadow: '0 0 0 1px var(--rule)',
-                    flexShrink: 0,
-                  }} />
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--ink)' }}>{pt}</div>
-                    <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{i === 0 ? 'Pickup' : 'Drop'}</div>
+              {/* Route visual */}
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {selectedTrip.route.split(' → ').map((pt, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: i === 0 ? 'var(--accent)' : 'var(--danger)',
+                        border: '2px solid var(--surface)', boxShadow: '0 0 0 1px var(--rule)',
+                        flexShrink: 0,
+                      }} />
+                      <div>
+                        <div style={{ fontSize: 12, color: 'var(--ink)' }}>{pt}</div>
+                        <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{i === 0 ? 'Pickup' : 'Drop'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Driver */}
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: '50%', background: 'var(--surface-sunk)',
+                  border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-serif)', fontSize: 16, color: 'var(--ink-3)', flexShrink: 0,
+                }}>
+                  {selectedTrip.driver_name ? selectedTrip.driver_name[0].toUpperCase() : '—'}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>
+                    {selectedTrip.driver_name ?? 'No driver assigned'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}>
+                    {[
+                      selectedTrip.driver_rating != null ? `${selectedTrip.driver_rating.toFixed(2)} ★` : null,
+                      selectedTrip.vehicle_info,
+                    ].filter(Boolean).join(' · ') || '—'}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Driver */}
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 10, alignItems: 'center' }}>
-            {/* Avatar placeholder */}
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%', background: 'var(--surface-sunk)',
-              border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--font-serif)', fontSize: 16, color: 'var(--ink-3)', flexShrink: 0,
-            }}>D</div>
-            <div>
-              {/* STATIC — use demo data; TODO: wire to Driver module */}
-              <div style={{ fontSize: 13, fontWeight: 500 }}>Demo Driver</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}>4.92 ★ · Demo Vehicle</div>
-            </div>
-          </div>
-
-          {/* Metrics grid */}
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {[
-                { label: 'Estimate', val: fmtMinor(demoTrip.fare_minor) },
-                { label: 'Distance', val: '—' },
-                { label: 'Duration', val: '—' },
-                { label: 'Surge', val: '1.0×' },
-              ].map(m => (
-                <div key={m.label}>
-                  <div className="t-label" style={{ padding: 0, marginBottom: 2 }}>{m.label}</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)' }}>{m.val}</div>
+              {/* Metrics grid */}
+              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { label: 'Estimate', val: fmtMinor(selectedTrip.fare_minor) },
+                    { label: 'Distance', val: '—' },
+                    { label: 'Duration', val: '—' },
+                    { label: 'Surge', val: '—' },
+                  ].map(m => (
+                    <div key={m.label}>
+                      <div className="t-label" style={{ padding: 0, marginBottom: 2 }}>{m.label}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink)' }}>{m.val}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Actions */}
-          <div style={{ padding: '12px 16px', display: 'flex', gap: 6 }}>
-            <button className="btn sm" style={{ flex: 1 }} onClick={() => showToast('Reassign available in Dispatch Console')}>
-              Reassign
-            </button>
-            <button className="btn sm ghost" style={{ flex: 1 }} onClick={() => navigate(`/bookings/road/${demoTrip.id}`)}>
-              View booking
-            </button>
-            <button
-              className="btn sm ghost"
-              style={{ flex: 1, color: 'var(--danger)' }}
-              disabled={cancelling || demoTrip.id === 'demo' || demoTrip.kind !== 'road'}
-              onClick={handleCancel}
-            >
-              {cancelling ? '…' : 'Cancel'}
-            </button>
-          </div>
+              {/* Actions */}
+              <div style={{ padding: '12px 16px', display: 'flex', gap: 6 }}>
+                <button className="btn sm" style={{ flex: 1 }} onClick={() => navigate('/dispatch/console')}>
+                  Reassign
+                </button>
+                <button className="btn sm ghost" style={{ flex: 1 }} onClick={() => navigate(`/bookings/${selectedTrip.kind}/${selectedTrip.id}`)}>
+                  View
+                </button>
+                <button
+                  className="btn sm ghost"
+                  style={{ flex: 1, color: 'var(--danger)' }}
+                  disabled={cancelling || selectedTrip.kind !== 'road'}
+                  onClick={handleCancel}
+                >
+                  {cancelling ? '…' : 'Cancel'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Bottom legend bar */}

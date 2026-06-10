@@ -256,7 +256,7 @@ export function CityMap({ showLegend = true, height = 340, onlineCount, onTripCo
       <g fontFamily="IBM Plex Mono, monospace" fontSize="9" letterSpacing="0.08em" fill="var(--ink-3)" opacity="0.7">
         <text x="340" y="128">Z-N4 · Indiranagar</text>
         <text x="540" y="85">Z-E2 · Whitefield</text>
-        <text x="110" y="252">Z-S1 · HSR · surge 1.6×</text>
+        <text x="110" y="252">Z-S1 · HSR Layout</text>
       </g>
 
       {/* Idle markers (grey) */}
