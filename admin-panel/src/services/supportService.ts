@@ -16,6 +16,7 @@ export interface Ticket {
   sla_due_at: string | null
   sla_breached: boolean
   linked_booking_id: string | null
+  linked_booking_type: 'road' | 'air' | null
   linked_transaction_id: string | null
   subject: string
   created_at: string
@@ -72,6 +73,7 @@ export interface TicketCreatePayload {
   subject: string
   body: string
   linked_booking_id?: string
+  linked_booking_type?: 'road' | 'air'
   linked_transaction_id?: string
 }
 
@@ -97,6 +99,15 @@ export interface TicketListParams {
   sla_breach?: boolean
   search?: string
   requester_id?: string
+}
+
+export interface SupportStats {
+  open_count: number
+  in_progress_count: number
+  breaching_count: number
+  due_in_1h_count: number
+  median_first_reply_seconds: number | null
+  total_tickets_30d: number
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -140,4 +151,10 @@ export const supportService = {
   ) =>
     api.post(`/support/tickets/${id}/status`, { status, resolution_code, resolution_note })
        .then(r => r.data),
+
+  getStats: () =>
+    api.get<SupportStats>('/support/stats').then(r => r.data),
+
+  updateTicketBookingType: (id: string, booking_type: 'road' | 'air' | null) =>
+    api.patch(`/support/tickets/${id}`, { linked_booking_type: booking_type }).then(r => r.data),
 }

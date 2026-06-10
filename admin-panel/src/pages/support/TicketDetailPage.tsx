@@ -3,6 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import { supportService } from '../../services/supportService'
 import type { TicketDetail, TicketMessage } from '../../services/supportService'
+import { adminUserService } from '../../services/adminUserService'
+import type { AdminUser } from '../../services/adminUserService'
+import { bookingsService } from '../../services/bookingsService'
+import { airBookingsService } from '../../services/airBookingsService'
+import { customerService } from '../../services/customerService'
 import { formatDateTime } from '../../lib/utils'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 
@@ -88,6 +93,247 @@ function ResolveModal({ onConfirm, onClose, resolving }: {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Reassign Modal ─────────────────────────────────────────────────────────────
+function ReassignModal({ currentAssigneeId, onConfirm, onClose }: {
+  currentAssigneeId: string | null
+  onConfirm: (userId: string, userName: string) => void
+  onClose: () => void
+}) {
+  const [agents, setAgents] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
+  useEffect(() => {
+    adminUserService.listAdmins({ page_size: 50, status: 'active' })
+      .then(r => setAgents(r.items))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = agents.filter(a =>
+    a.name.toLowerCase().includes(search.toLowerCase()) ||
+    a.email.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'var(--surface)', borderRadius:10, width:'100%', maxWidth:420, maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--rule)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontWeight:600, fontSize:15 }}>Reassign ticket</span>
+          <button className="btn sm ghost" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--rule)' }}>
+          <input className="input" placeholder="Search agents…" value={search} onChange={e => setSearch(e.target.value)} style={{ width:'100%' }} />
+        </div>
+        <div style={{ overflowY:'auto', flex:1 }}>
+          {loading ? (
+            <div style={{ padding:32, textAlign:'center', color:'var(--ink-3)' }}>Loading agents…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding:32, textAlign:'center', color:'var(--ink-3)' }}>No agents found.</div>
+          ) : filtered.map(agent => (
+            <div
+              key={agent.id}
+              onClick={async () => {
+                setAssigning(true)
+                onConfirm(agent.id, agent.name)
+              }}
+              style={{
+                padding:'12px 16px', cursor: assigning ? 'wait' : 'pointer',
+                borderBottom:'1px solid var(--rule-soft)',
+                background: agent.id === currentAssigneeId ? 'color-mix(in oklab, var(--accent) 8%, var(--surface))' : 'transparent',
+                display:'flex', alignItems:'center', gap:12,
+              }}
+              onMouseEnter={e => { if (agent.id !== currentAssigneeId) (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)' }}
+              onMouseLeave={e => { if (agent.id !== currentAssigneeId) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+            >
+              <div style={{ width:32, height:32, borderRadius:'50%', background:'var(--ink)', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, flexShrink:0 }}>
+                {agent.name.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{agent.name}</div>
+                <div style={{ fontSize:11, color:'var(--ink-3)' }}>{agent.role}</div>
+              </div>
+              {agent.id === currentAssigneeId && <span style={{ fontSize:11, color:'var(--accent)' }}>Current</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Refund Modal ──────────────────────────────────────────────────────────────
+function RefundModal({ ticket, onClose, onDone }: {
+  ticket: TicketDetail
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [amount, setAmount] = useState('')
+  const [destination, setDestination] = useState<'original' | 'wallet'>('original')
+  const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const hasBooking = !!ticket.linked_booking_id
+  const isAir = ticket.linked_booking_type === 'air'
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!hasBooking) { setError('No booking linked to this ticket.'); return }
+    const amountMinor = Math.round(parseFloat(amount) * 100)
+    if (isNaN(amountMinor) || amountMinor <= 0) { setError('Enter a valid amount.'); return }
+    setSubmitting(true); setError('')
+    try {
+      if (isAir) {
+        await airBookingsService.processRefund(ticket.linked_booking_id!, {
+          amount_minor: amountMinor,
+          destination: destination as 'original' | 'wallet' | 'wire',
+          reason,
+        })
+      } else {
+        await bookingsService.processRefund(ticket.linked_booking_id!, {
+          amount_minor: amountMinor,
+          destination,
+          reason,
+        })
+      }
+      onDone()
+      onClose()
+    } catch {
+      setError('Refund failed. Please check the booking status and try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'var(--surface)', borderRadius:10, width:'100%', maxWidth:420, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--rule)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontWeight:600, fontSize:15 }}>Request refund</span>
+          <button className="btn sm ghost" onClick={onClose}>✕</button>
+        </div>
+        {!hasBooking ? (
+          <div style={{ padding:24, color:'var(--ink-3)', fontSize:13 }}>
+            No booking is linked to this ticket. Link a booking first to issue a refund.
+            <div style={{ marginTop:16, textAlign:'right' }}>
+              <button className="btn sm ghost" onClick={onClose}>Close</button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ padding:'18px 20px', display:'flex', flexDirection:'column', gap:12 }}>
+            <div style={{ padding:'8px 12px', borderRadius:6, background:'var(--surface-2)', fontSize:12, color:'var(--ink-2)' }}>
+              {isAir ? '✈' : '🚗'} Booking #{ticket.linked_booking_id!.slice(0,8)}…
+            </div>
+            <div className="field">
+              <label className="field-label">Refund amount (₹) <span style={{ color:'var(--danger)' }}>*</span></label>
+              <input className="input" type="number" min="0" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field-label">Destination</label>
+              <select className="input" value={destination} onChange={e => setDestination(e.target.value as 'original' | 'wallet')}>
+                <option value="original">Original payment method</option>
+                <option value="wallet">Customer wallet</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="field-label">Reason <span style={{ color:'var(--ink-3)', fontWeight:400 }}>(optional)</span></label>
+              <input className="input" placeholder="Reason for refund…" value={reason} onChange={e => setReason(e.target.value)} />
+            </div>
+            {error && <div style={{ color:'var(--danger,#e53e3e)', fontSize:12 }}>{error}</div>}
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+              <button type="button" className="btn sm ghost" onClick={onClose}>Cancel</button>
+              <button type="submit" className="btn sm accent" disabled={submitting}>
+                {submitting ? 'Processing…' : 'Issue refund'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Goodwill Credit Modal ─────────────────────────────────────────────────────
+function GoodwillCreditModal({ ticket, onClose, onDone }: {
+  ticket: TicketDetail
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const isCustomer = ticket.requester_type === 'customer'
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!isCustomer) { setError('Goodwill credit is only available for customer tickets.'); return }
+    const amountMinor = Math.round(parseFloat(amount) * 100)
+    if (isNaN(amountMinor) || amountMinor <= 0) { setError('Enter a valid amount.'); return }
+    if (!reason.trim()) { setError('Reason is required.'); return }
+    setSubmitting(true); setError('')
+    try {
+      await customerService.adjustWallet(ticket.requester_id, {
+        amount_minor: amountMinor,
+        direction: 'credit',
+        reason: `Goodwill credit — Ticket ${ticket.ticket_ref}: ${reason.trim()}`,
+        notify_push: false,
+        notify_sms: false,
+        notify_email: false,
+      })
+      onDone()
+      onClose()
+    } catch {
+      setError('Failed to credit wallet. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'var(--surface)', borderRadius:10, width:'100%', maxWidth:400, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--rule)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontWeight:600, fontSize:15 }}>Goodwill credit</span>
+          <button className="btn sm ghost" onClick={onClose}>✕</button>
+        </div>
+        {!isCustomer ? (
+          <div style={{ padding:24, color:'var(--ink-3)', fontSize:13 }}>
+            Goodwill credit is only available for customer tickets.
+            <div style={{ marginTop:16, textAlign:'right' }}>
+              <button className="btn sm ghost" onClick={onClose}>Close</button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ padding:'18px 20px', display:'flex', flexDirection:'column', gap:12 }}>
+            <div style={{ padding:'8px 12px', borderRadius:6, background:'var(--surface-2)', fontSize:12, color:'var(--ink-2)' }}>
+              Credit to: {ticket.requester_name}'s wallet
+            </div>
+            <div className="field">
+              <label className="field-label">Amount (₹) <span style={{ color:'var(--danger)' }}>*</span></label>
+              <input className="input" type="number" min="0" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field-label">Reason <span style={{ color:'var(--danger)' }}>*</span></label>
+              <input className="input" placeholder="e.g. Flight delay compensation…" value={reason} onChange={e => setReason(e.target.value)} />
+            </div>
+            {error && <div style={{ color:'var(--danger,#e53e3e)', fontSize:12 }}>{error}</div>}
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+              <button type="button" className="btn sm ghost" onClick={onClose}>Cancel</button>
+              <button type="submit" className="btn sm accent" disabled={submitting}>
+                {submitting ? 'Crediting…' : 'Apply credit'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )
@@ -185,6 +431,10 @@ export default function TicketDetailPage() {
   const [escalateOpen, setEscalateOpen] = useState(false)
   const [escalateReason, setEscalateReason] = useState('')
   const [escalating, setEscalating] = useState(false)
+
+  const [showReassignModal, setShowReassignModal] = useState(false)
+  const [showRefundModal, setShowRefundModal] = useState(false)
+  const [showGoodwillModal, setShowGoodwillModal] = useState(false)
 
   useEffect(() => {
     if (!ticketId) return
@@ -292,6 +542,34 @@ export default function TicketDetailPage() {
         resolving={resolving}
         onClose={() => setShowResolveModal(false)}
         onConfirm={(code, note) => handleResolve(code, note)}
+      />
+    )}
+    {showReassignModal && (
+      <ReassignModal
+        currentAssigneeId={ticket.assignee_id}
+        onClose={() => setShowReassignModal(false)}
+        onConfirm={async (userId, _userName) => {
+          try {
+            await supportService.assignTicket(ticket.id, userId)
+            const updated = await supportService.getTicket(ticket.id)
+            setTicket(updated)
+          } catch { /* ignore */ }
+          setShowReassignModal(false)
+        }}
+      />
+    )}
+    {showRefundModal && (
+      <RefundModal
+        ticket={ticket}
+        onClose={() => setShowRefundModal(false)}
+        onDone={() => { /* optionally refresh ticket */ }}
+      />
+    )}
+    {showGoodwillModal && (
+      <GoodwillCreditModal
+        ticket={ticket}
+        onClose={() => setShowGoodwillModal(false)}
+        onDone={() => {}}
       />
     )}
     <Shell
@@ -513,11 +791,17 @@ export default function TicketDetailPage() {
                     cursor: 'pointer',
                     marginBottom: 8,
                   }}
-                  onClick={() => navigate(`/bookings/road/${ticket.linked_booking_id}`)}
+                  onClick={() => {
+                    const btype = ticket.linked_booking_type
+                    if (btype === 'air') navigate(`/bookings/air/${ticket.linked_booking_id}`)
+                    else navigate(`/bookings/road/${ticket.linked_booking_id}`)
+                  }}
                 >
                   <span style={{ fontSize: 18 }}>📋</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Booking</div>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>
+                      {ticket.linked_booking_type === 'air' ? '✈ Air Booking' : '🚗 Road Booking'}
+                    </span>
                     <div style={{ fontSize: 11, color: 'var(--ink-3)', fontFamily: 'monospace' }}>
                       #{ticket.linked_booking_id.slice(0, 8)}
                     </div>
@@ -525,16 +809,19 @@ export default function TicketDetailPage() {
                 </div>
               )}
               {ticket.linked_transaction_id && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 12px',
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 12px',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => navigate(`/payments/${ticket.linked_transaction_id}`)}
+                >
                   <span style={{ fontSize: 18 }}>💳</span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>Transaction</div>
@@ -558,10 +845,10 @@ export default function TicketDetailPage() {
 
             {/* Quick action buttons 2×2 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
-              <button className="btn sm ghost" style={{ fontSize: 12 }}>Request refund</button>
-              <button className="btn sm ghost" style={{ fontSize: 12 }}>Goodwill credit</button>
+              <button className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => setShowRefundModal(true)}>Request refund</button>
+              <button className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => setShowGoodwillModal(true)}>Goodwill credit</button>
               <button className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => setEscalateOpen(true)}>Escalate</button>
-              <button className="btn sm ghost" style={{ fontSize: 12 }}>Reassign</button>
+              <button className="btn sm ghost" style={{ fontSize: 12 }} onClick={() => setShowReassignModal(true)}>Reassign</button>
             </div>
 
             {/* Resolution code */}

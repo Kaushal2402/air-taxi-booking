@@ -32,6 +32,7 @@ class Ticket(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     sla_breached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     linked_booking_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    linked_booking_type: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # road|air
     linked_transaction_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     resolution_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

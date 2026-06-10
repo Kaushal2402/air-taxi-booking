@@ -3,7 +3,7 @@ import { usePermission } from '../../hooks/usePermission'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../../components/layout/Shell'
 import { supportService } from '../../services/supportService'
-import type { Ticket } from '../../services/supportService'
+import type { Ticket, SupportStats } from '../../services/supportService'
 import { useIsMobile, useIsTablet } from '../../hooks/useIsMobile'
 import { useDebounce } from '../../hooks/useDebounce'
 import { customerService } from '../../services/customerService'
@@ -501,6 +501,7 @@ export default function TicketQueuePage() {
   const [page, setPage]                 = useState(1)
   const [loading, setLoading]           = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [stats, setStats]               = useState<SupportStats | null>(null)
   const canReplyTickets = usePermission('support.tickets.reply')
   const canViewTickets = usePermission('support.tickets.view')
 
@@ -531,6 +532,10 @@ export default function TicketQueuePage() {
   }, [page, search, filterCategory, filterPriority, filterStatus, filterBreached])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    supportService.getStats().then(setStats).catch(() => {})
+  }, [])
 
   const openCount     = tickets.filter(t => t.status === 'open').length
   const breachingCount = tickets.filter(t => t.sla_breached).length
@@ -574,8 +579,10 @@ export default function TicketQueuePage() {
               { label: 'Open tickets',      value: String(openCount),     sub: 'total open' },
               { label: 'SLA breaching',     value: String(breachingCount),sub: 'breached now',    warn: breachingCount > 0 },
               { label: 'Due < 1h',          value: String(dueIn1h),       sub: 'about to breach', warn: dueIn1h > 0 },
-              { label: 'Median 1st reply',  value: '—',                   sub: 'response time' },
-              { label: 'CSAT',              value: '—',                   sub: 'satisfaction' },
+              { label: 'Median 1st reply', value: stats?.median_first_reply_seconds != null
+                  ? (() => { const s = Math.round(stats.median_first_reply_seconds!); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s/60)}m ${s%60}s` : `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m` })()
+                  : '—', sub: 'response time' },
+              { label: 'CSAT', value: '—', sub: 'satisfaction' },
             ].map(kpi => (
               <div key={kpi.label} style={{ background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 8, padding: '14px 16px' }}>
                 <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 4 }}>{kpi.label}</div>

@@ -37,6 +37,7 @@ class TicketCreate(BaseModel):
     subject: str
     body: str
     linked_booking_id: str | None = None
+    linked_booking_type: str | None = None
     linked_transaction_id: str | None = None
 
 
@@ -57,6 +58,7 @@ class TicketResponse(BaseModel):
     sla_due_at: datetime | None
     sla_breached: bool
     linked_booking_id: str | None
+    linked_booking_type: str | None = None
     linked_transaction_id: str | None
     created_at: datetime
     updated_at: datetime

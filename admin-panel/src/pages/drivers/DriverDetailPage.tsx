@@ -18,6 +18,8 @@ import { vehicleService } from '../../services/vehicleService'
 import type { Vehicle } from '../../services/vehicleService'
 import { auditService } from '../../services/auditService'
 import type { AuditEventSummary } from '../../services/auditService'
+import { supportService } from '../../services/supportService'
+import type { Ticket } from '../../services/supportService'
 import { formatMoney, currencySymbol, formatDate } from '../../lib/utils'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -960,9 +962,78 @@ function AuditTab({ driverId }: { driverId: string }) {
   )
 }
 
+// ── Support tickets tab ───────────────────────────────────────────────────────
+
+function DriverTicketsTab({ driverId }: { driverId: string }) {
+  const navigate = useNavigate()
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supportService.listTickets({ requester_id: driverId, page: 1, page_size: 50 })
+      .then(r => { setTickets(r.items); setTotal(r.total) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [driverId])
+
+  if (loading) return <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)' }}>Loading tickets…</div>
+  if (tickets.length === 0) return <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)' }}>No support tickets raised by this driver.</div>
+
+  return (
+    <div style={{ padding: '24px 32px' }}>
+      <div style={{ padding: '12px 0 8px', fontSize: 13, color: 'var(--ink-2)' }}>
+        {total} ticket{total !== 1 ? 's' : ''}
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="tbl" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Subject</th>
+              <th>Category</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>SLA</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.map(t => (
+              <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/support/${t.id}`)}>
+                <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{t.ticket_ref}</span></td>
+                <td style={{ maxWidth: 220 }}><span style={{ fontSize: 13 }}>{t.subject}</span></td>
+                <td><span className="badge">{t.category.replace(/_/g, ' ')}</span></td>
+                <td>
+                  <span className={t.priority === 'urgent' ? 'badge danger' : t.priority === 'high' ? 'badge warn' : t.priority === 'med' ? 'badge info' : 'badge'}>
+                    {t.priority.toUpperCase()}
+                  </span>
+                </td>
+                <td>
+                  <span className={t.status === 'open' ? 'badge info' : t.status === 'in_progress' ? 'badge warn' : t.status === 'resolved' ? 'badge ok' : 'badge'}>
+                    {t.status.replace('_', ' ')}
+                  </span>
+                </td>
+                <td>
+                  {t.sla_due_at
+                    ? <span style={{ fontSize: 12, color: t.sla_breached ? 'var(--danger,#e53e3e)' : 'var(--ink-3)' }}>
+                        {t.sla_breached ? 'Breached' : new Date(t.sla_due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    : <span style={{ color: 'var(--ink-4)' }}>—</span>}
+                </td>
+                <td><span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{new Date(t.created_at).toLocaleDateString()}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type TabKey = 'overview' | 'documents' | 'vehicle' | 'performance' | 'earnings' | 'trips' | 'wallet' | 'disciplinary' | 'audit'
+type TabKey = 'overview' | 'documents' | 'vehicle' | 'performance' | 'earnings' | 'trips' | 'wallet' | 'disciplinary' | 'audit' | 'tickets'
 
 export default function DriverDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -1189,6 +1260,7 @@ export default function DriverDetailPage() {
     { key: 'wallet',        label: 'Wallet' },
     { key: 'disciplinary',  label: 'Disciplinary' },
     { key: 'audit',         label: 'Audit' },
+    { key: 'tickets',       label: 'Support tickets' },
   ]
 
   return (
@@ -1369,6 +1441,7 @@ export default function DriverDetailPage() {
         {activeTab === 'trips'        && <TripsTab driver={driver} />}
         {activeTab === 'disciplinary' && id && <DisciplinaryTab driverId={id} driver={driver} />}
         {activeTab === 'audit'        && id && <AuditTab driverId={id} />}
+        {activeTab === 'tickets'      && id && <DriverTicketsTab driverId={id} />}
       </div>
 
       {/* Reject modal */}

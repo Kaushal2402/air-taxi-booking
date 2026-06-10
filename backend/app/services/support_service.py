@@ -42,6 +42,7 @@ def _ticket_to_response(ticket: Ticket, assignee_name: str | None = None) -> Tic
         sla_due_at=ticket.sla_due_at,
         sla_breached=ticket.sla_breached,
         linked_booking_id=ticket.linked_booking_id,
+        linked_booking_type=ticket.linked_booking_type,
         linked_transaction_id=ticket.linked_transaction_id,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
@@ -68,6 +69,7 @@ def _ticket_to_detail(
         sla_due_at=ticket.sla_due_at,
         sla_breached=ticket.sla_breached,
         linked_booking_id=ticket.linked_booking_id,
+        linked_booking_type=ticket.linked_booking_type,
         linked_transaction_id=ticket.linked_transaction_id,
         resolution_code=ticket.resolution_code,
         resolution_note=ticket.resolution_note,
@@ -234,6 +236,7 @@ async def create_ticket(
         priority=body.priority,
         subject=body.subject,
         linked_booking_id=body.linked_booking_id,
+        linked_booking_type=body.linked_booking_type,
         linked_transaction_id=body.linked_transaction_id,
         sla_due_at=sla_due_at,
     )
@@ -484,3 +487,77 @@ async def update_sla_policy(
     await db.commit()
 
     return SlaPolicyResponse.model_validate(policy)
+
+
+# ── Stats ─────────────────────────────────────────────────────────────────────
+
+async def get_stats(db: AsyncSession) -> dict:
+    from datetime import timedelta
+    import statistics
+
+    now = _utcnow()
+    cutoff_30d = now - timedelta(days=30)
+
+    # open / in_progress counts
+    open_res = await db.execute(select(func.count()).where(Ticket.status == "open"))
+    open_count = open_res.scalar_one()
+
+    ip_res = await db.execute(select(func.count()).where(Ticket.status == "in_progress"))
+    in_progress_count = ip_res.scalar_one()
+
+    # breaching (sla_breached but not yet closed)
+    breach_res = await db.execute(
+        select(func.count()).where(Ticket.sla_breached == True, Ticket.status.notin_(["resolved", "closed"]))  # noqa: E712
+    )
+    breaching_count = breach_res.scalar_one()
+
+    # due in next 60 minutes
+    window_end = now + timedelta(minutes=60)
+    due1h_res = await db.execute(
+        select(func.count()).where(
+            Ticket.sla_due_at.between(now, window_end),
+            Ticket.sla_breached == False,  # noqa: E712
+        )
+    )
+    due_in_1h_count = due1h_res.scalar_one()
+
+    # total tickets last 30 days
+    total_res = await db.execute(select(func.count()).where(Ticket.created_at >= cutoff_30d))
+    total_tickets_30d = total_res.scalar_one()
+
+    # median first reply: for resolved/closed tickets in last 30d that have >1 message
+    tickets_res = await db.execute(
+        select(Ticket.id, Ticket.created_at).where(
+            Ticket.status.in_(["resolved", "closed"]),
+            Ticket.created_at >= cutoff_30d,
+        )
+    )
+    ticket_rows = tickets_res.all()
+
+    reply_deltas: list[float] = []
+    for t_id, t_created in ticket_rows:
+        msgs_res = await db.execute(
+            select(TicketMessage.created_at)
+            .where(TicketMessage.ticket_id == t_id)
+            .order_by(TicketMessage.created_at)
+            .limit(2)
+        )
+        msgs = msgs_res.scalars().all()
+        if len(msgs) >= 2:
+            first_reply = msgs[1]  # second message is the first actual reply
+            t_created_aware = t_created.replace(tzinfo=timezone.utc) if t_created.tzinfo is None else t_created
+            first_reply_aware = first_reply.replace(tzinfo=timezone.utc) if first_reply.tzinfo is None else first_reply
+            delta = (first_reply_aware - t_created_aware).total_seconds()
+            if delta > 0:
+                reply_deltas.append(delta)
+
+    median_first_reply_seconds: float | None = statistics.median(reply_deltas) if reply_deltas else None
+
+    return {
+        "open_count": open_count,
+        "in_progress_count": in_progress_count,
+        "breaching_count": breaching_count,
+        "due_in_1h_count": due_in_1h_count,
+        "median_first_reply_seconds": median_first_reply_seconds,
+        "total_tickets_30d": total_tickets_30d,
+    }

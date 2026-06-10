@@ -26,6 +26,16 @@ from app.services import audit_service, support_service
 router = APIRouter()
 
 
+# ── Stats ─────────────────────────────────────────────────────────────────────
+
+@router.get("/stats")
+async def get_stats(
+    _: AdminUser = Depends(require_permission("support.tickets.view")),
+    db=Depends(get_db),
+):
+    return await support_service.get_stats(db)
+
+
 # ── Tickets ───────────────────────────────────────────────────────────────────
 
 @router.get("/tickets", response_model=TicketListResponse)
