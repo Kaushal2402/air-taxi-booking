@@ -118,6 +118,7 @@ export default function LiveMapPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [searchVal, setSearchVal] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
@@ -141,7 +142,25 @@ export default function LiveMapPage() {
 
   const driversHeader = `${totalOnline.toLocaleString('en-IN')} / ${totalDrivers.toLocaleString('en-IN')}`
 
-  const selectedTrip = liveBookings[0] ?? null
+  // Apply filter chip + search to live bookings list
+  const filteredBookings = liveBookings.filter(b => {
+    if (activeFilter === 'on-trip') return b.kind === 'road' && b.status === 'InProgress'
+    if (activeFilter === 'idle') return false  // idle drivers have no booking — excluded
+    if (activeFilter === 'pickup') return b.kind === 'road' && b.status === 'Accepted'
+    if (activeFilter === 'air') return b.kind === 'air'
+    return true  // 'all'
+  }).filter(b => {
+    if (!searchVal.trim()) return true
+    const q = searchVal.toLowerCase()
+    return (
+      b.booking_ref.toLowerCase().includes(q) ||
+      b.route.toLowerCase().includes(q) ||
+      b.service.toLowerCase().includes(q) ||
+      (b.driver_name ?? '').toLowerCase().includes(q)
+    )
+  })
+
+  const selectedTrip = filteredBookings.find(b => b.id === selectedId) ?? filteredBookings[0] ?? null
 
   const handleCancel = async () => {
     if (!selectedTrip || selectedTrip.kind !== 'road') return
@@ -228,7 +247,7 @@ export default function LiveMapPage() {
       activeId="dashboard"
       breadcrumb="Operations · Live · Full map"
       title="Live operations · map"
-      subtitle="Bengaluru · streaming"
+      subtitle="Live · streaming"
       actions={
         <button className="btn sm ghost" onClick={() => navigate('/dashboard')}>← Dashboard</button>
       }
@@ -341,12 +360,52 @@ export default function LiveMapPage() {
 
         {/* Right trip detail panel */}
         <div style={{
-          position: 'absolute', right: 16, top: 84, width: 320, zIndex: 10,
+          position: 'absolute', right: 16, top: 84, bottom: 16, width: 320, zIndex: 10,
           background: 'var(--surface)', border: '1px solid var(--rule)',
-          display: 'flex', flexDirection: 'column',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
+          {/* Filtered bookings list */}
+          <div style={{ borderBottom: '1px solid var(--rule)', flexShrink: 0 }}>
+            <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="t-label" style={{ padding: 0 }}>
+                {activeFilter === 'all' ? 'Live trips' : activeFilter.replace('-', ' ')}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-3)' }}>
+                {filteredBookings.length} result{filteredBookings.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {filteredBookings.length === 0 ? (
+              <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--ink-3)', textAlign: 'center' }}>
+                {searchVal.trim() ? `No matches for "${searchVal}"` : 'No live trips for this filter'}
+              </div>
+            ) : (
+              <div style={{ maxHeight: 130, overflowY: 'auto' }}>
+                {filteredBookings.map(b => (
+                  <div
+                    key={b.id}
+                    onClick={() => setSelectedId(b.id)}
+                    style={{
+                      padding: '8px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      borderBottom: '1px solid var(--rule-soft)',
+                      background: b.id === selectedTrip?.id ? 'color-mix(in oklab, var(--accent) 8%, var(--surface))' : 'transparent',
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-2)' }}>{b.booking_ref}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 170 }}>{b.route}</div>
+                    </div>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' as const, flexShrink: 0,
+                      color: b.kind === 'air' ? 'var(--info)' : 'var(--accent)',
+                    }}>{b.kind}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {selectedTrip == null ? (
-            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, flex: 1 }}>
               <div style={{ fontSize: 22, marginBottom: 10, opacity: 0.3 }}>✈</div>
               No live trips right now
             </div>
