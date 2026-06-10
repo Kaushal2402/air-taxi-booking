@@ -21,7 +21,7 @@ interface KpiStats {
   today_gbv_minor: number
   today_completed: number
   cancel_rate_pct: number
-  pickup_eta_median_sec: number
+  pickup_eta_median_sec: number | null
   active_operators: number
   active_operators_total: number
   active_operators_paused: number
@@ -62,8 +62,8 @@ export const fmtMinor = (v: number) => {
   return formatMoneyWith(v, cur)
 }
 
-export const fmtEta = (sec: number) => {
-  if (!sec) return '—'
+export const fmtEta = (sec: number | null | undefined) => {
+  if (sec == null || sec === 0) return '—'
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return `${m}:${String(s).padStart(2, '0')}`
@@ -395,6 +395,26 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Quick-actions bar */}
+        <div style={{
+          display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 16px',
+          background: 'var(--surface)', border: '1px solid var(--rule)',
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: 'var(--ink-3)', alignSelf: 'center', marginRight: 4 }}>QUICK ACTIONS</span>
+          <button className="btn sm" onClick={() => navigate('/bookings/road/new')}>
+            <Icon name="plus" size={12} />Create road booking
+          </button>
+          <button className="btn sm" onClick={() => navigate('/bookings/air/new')}>
+            <Icon name="plus" size={12} />Create air booking
+          </button>
+          <button className="btn sm ghost" onClick={() => navigate('/notifications')}>
+            <Icon name="bell" size={12} />Broadcast notification
+          </button>
+          <button className="btn sm ghost" onClick={() => navigate('/dispatch/console')}>
+            <Icon name="external" size={12} />Dispatch console
+          </button>
+        </div>
+
         {/* KPI strip — 8 cards */}
         <div style={{
           display: 'grid',
@@ -518,20 +538,6 @@ export default function DashboardPage() {
                     <div style={{ marginTop: 6 }}>
                       <span className="t-meta" style={{ color: 'var(--ink-2)' }}>{a.module} →</span>
                     </div>
-                  </div>
-                </div>
-              ))}
-
-              {[
-                { sev: 'info', t: 'Payout run', m: 'Check weekly driver payout queue in Payouts module', mod: 'Payouts' },
-                { sev: 'warn', t: 'KYC queue', m: 'Review pending driver document verifications', mod: 'KYC' },
-              ].map((a, i) => (
-                <div key={`static-${i}`} style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer', opacity: 0.7 }}>
-                  <span className={`dot ${a.sev}`} style={{ marginTop: 6, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500 }}>{a.t}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 3 }}>{a.m}</div>
-                    <div style={{ marginTop: 6 }}><span className="t-meta" style={{ color: 'var(--ink-2)' }}>{a.mod} →</span></div>
                   </div>
                 </div>
               ))}

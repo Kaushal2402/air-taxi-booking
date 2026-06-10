@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -34,8 +34,7 @@ class KpiStats(BaseModel):
     today_gbv_minor: int
     today_completed: int
     cancel_rate_pct: float
-    # TODO: wire to dispatch ETA engine when real-time tracking available
-    pickup_eta_median_sec: int
+    pickup_eta_median_sec: Optional[int]
     # Operator stats — real values from Operator table
     active_operators: int
     active_operators_total: int
@@ -159,37 +158,65 @@ async def get_dashboard(
     completed_air = completed_air_q.scalar_one() or 0
     today_completed = completed_road + completed_air
 
-    # Cancel rate today
-    cancelled_q = await db.execute(
+    # Cancel rate today (road + air)
+    cancelled_road_q = await db.execute(
         select(func.count(RoadBooking.id)).where(
             RoadBooking.created_at >= today_start,
             RoadBooking.status == "Cancelled",
         )
     )
-    cancelled_road = cancelled_q.scalar_one() or 0
-    cancel_rate = round((cancelled_road / today_road * 100) if today_road > 0 else 0.0, 1)
+    cancelled_road = cancelled_road_q.scalar_one() or 0
 
-    # 14-day sparklines
+    cancelled_air_q = await db.execute(
+        select(func.count(AirBooking.id)).where(
+            AirBooking.created_at >= today_start,
+            AirBooking.status == "Cancelled",
+        )
+    )
+    cancelled_air = cancelled_air_q.scalar_one() or 0
+
+    total_cancelled = cancelled_road + cancelled_air
+    cancel_rate = round((total_cancelled / today_total * 100) if today_total > 0 else 0.0, 1)
+
+    # 14-day sparklines (road + air combined)
     bookings_14d: list[int] = []
     revenue_14d: list[int] = []
     for i in range(13, -1, -1):
         day_start = (today_start - timedelta(days=i))
         day_end   = day_start + timedelta(days=1)
-        cnt_q = await db.execute(
+
+        road_cnt_q = await db.execute(
             select(func.count(RoadBooking.id)).where(
                 RoadBooking.created_at >= day_start,
                 RoadBooking.created_at < day_end,
             )
         )
-        rev_q = await db.execute(
+        air_cnt_q = await db.execute(
+            select(func.count(AirBooking.id)).where(
+                AirBooking.created_at >= day_start,
+                AirBooking.created_at < day_end,
+            )
+        )
+
+        road_rev_q = await db.execute(
             select(func.sum(func.coalesce(RoadBooking.fare_final_minor, RoadBooking.fare_estimate_minor))).where(
                 RoadBooking.created_at >= day_start,
                 RoadBooking.created_at < day_end,
                 RoadBooking.status.notin_(["Cancelled"]),
             )
         )
-        bookings_14d.append(cnt_q.scalar_one() or 0)
-        revenue_14d.append(int(rev_q.scalar_one() or 0))
+        air_rev_q = await db.execute(
+            select(func.sum(func.coalesce(AirBooking.fare_final_minor, AirBooking.fare_estimate_minor))).where(
+                AirBooking.created_at >= day_start,
+                AirBooking.created_at < day_end,
+                AirBooking.status.notin_(["Cancelled"]),
+            )
+        )
+
+        day_count = (road_cnt_q.scalar_one() or 0) + (air_cnt_q.scalar_one() or 0)
+        day_rev = int(road_rev_q.scalar_one() or 0) + int(air_rev_q.scalar_one() or 0)
+        bookings_14d.append(day_count)
+        revenue_14d.append(day_rev)
 
     # Live bookings (road)
     live_road_rows = await db.execute(
@@ -266,15 +293,32 @@ async def get_dashboard(
     )
     active_operators_paused = paused_ops_q.scalar_one() or 0
 
-    # Static alerts (no alert table yet — derived from data thresholds)
+    # Threshold-based alerts derived from live data
     alerts: list[AlertItem] = []
-    if cancel_rate > 6:
-        alerts.append(AlertItem(severity="danger", title="Cancel rate spike",
+
+    if cancel_rate > 10:
+        alerts.append(AlertItem(severity="danger", title="Cancel rate critical",
+                                message=f"Today's cancel rate at {cancel_rate}% · above 10% critical threshold",
+                                module="Bookings"))
+    elif cancel_rate > 6:
+        alerts.append(AlertItem(severity="warn", title="Cancel rate elevated",
                                 message=f"Today's cancel rate at {cancel_rate}% · above 6% threshold",
                                 module="Bookings"))
+
+    if active_operators_paused > 0:
+        alerts.append(AlertItem(severity="warn", title="Operators paused",
+                                message=f"{active_operators_paused} operator{'s' if active_operators_paused > 1 else ''} currently paused · review onboarding status",
+                                module="Operators"))
+
+    online_rate = round(online_drivers / online_drivers_total * 100, 0) if online_drivers_total > 0 else 0
+    if online_drivers_total > 0 and online_rate < 10:
+        alerts.append(AlertItem(severity="warn", title="Low driver availability",
+                                message=f"Only {int(online_rate)}% of active drivers online ({online_drivers}/{online_drivers_total})",
+                                module="Drivers"))
+
     if live_road + live_air > 0:
         alerts.append(AlertItem(severity="info", title="Live operations",
-                                message=f"{live_road} road trips · {live_air} air trips in progress",
+                                message=f"{live_road} road trip{'s' if live_road != 1 else ''} · {live_air} air trip{'s' if live_air != 1 else ''} in progress",
                                 module="Dispatch"))
 
     kpi = KpiStats(
@@ -289,8 +333,7 @@ async def get_dashboard(
         today_gbv_minor=gbv_road + gbv_air,
         today_completed=today_completed,
         cancel_rate_pct=cancel_rate,
-        # TODO: wire to dispatch ETA engine when real-time tracking available
-        pickup_eta_median_sec=0,
+        pickup_eta_median_sec=None,
         active_operators=active_operators,
         active_operators_total=active_operators_total,
         active_operators_paused=active_operators_paused,

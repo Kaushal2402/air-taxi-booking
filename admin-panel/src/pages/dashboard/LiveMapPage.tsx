@@ -20,7 +20,7 @@ interface KpiStats {
   today_gbv_minor: number
   today_completed: number
   cancel_rate_pct: number
-  pickup_eta_median_sec: number
+  pickup_eta_median_sec: number | null
   active_operators: number
   active_operators_total: number
   active_operators_paused: number
@@ -118,6 +118,7 @@ export default function LiveMapPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [searchVal, setSearchVal] = useState('')
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     api.get<DashboardData>('/dashboard', { params: { window: 'today' } })
@@ -151,9 +152,22 @@ export default function LiveMapPage() {
     kind: 'road' as const,
   }
 
+  const handleCancel = async () => {
+    if (demoTrip.id === 'demo' || demoTrip.kind !== 'road') return
+    if (!window.confirm(`Cancel booking ${demoTrip.booking_ref}?`)) return
+    setCancelling(true)
+    try {
+      await api.post(`/bookings/road/${demoTrip.id}/cancel`, { reason: 'Admin cancelled from live map' })
+      const r = await api.get<DashboardData>('/dashboard', { params: { window: 'today' } })
+      setData(r.data)
+    } catch {
+      alert('Cancel failed — please try from the bookings page.')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   const showToast = (msg: string) => {
-    // Simple in-page toast (not available in minimal design system)
-    console.log(msg) // eslint-disable-line no-console
     alert(msg)
   }
 
@@ -400,14 +414,19 @@ export default function LiveMapPage() {
 
           {/* Actions */}
           <div style={{ padding: '12px 16px', display: 'flex', gap: 6 }}>
-            <button className="btn sm" style={{ flex: 1 }} onClick={() => showToast('Not available')}>
+            <button className="btn sm" style={{ flex: 1 }} onClick={() => showToast('Reassign available in Dispatch Console')}>
               Reassign
             </button>
-            <button className="btn sm ghost" style={{ flex: 1 }} onClick={() => showToast('Not available')}>
-              Message
+            <button className="btn sm ghost" style={{ flex: 1 }} onClick={() => navigate(`/bookings/road/${demoTrip.id}`)}>
+              View booking
             </button>
-            <button className="btn sm ghost" style={{ flex: 1, color: 'var(--danger)' }} onClick={() => showToast('Not available')}>
-              Cancel
+            <button
+              className="btn sm ghost"
+              style={{ flex: 1, color: 'var(--danger)' }}
+              disabled={cancelling || demoTrip.id === 'demo' || demoTrip.kind !== 'road'}
+              onClick={handleCancel}
+            >
+              {cancelling ? '…' : 'Cancel'}
             </button>
           </div>
         </div>
