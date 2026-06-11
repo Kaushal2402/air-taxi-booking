@@ -1,10 +1,10 @@
 {
   "app": "customer",
-  "status": "not_started",
-  "flutter_initialized": false,
+  "status": "in_progress",
+  "flutter_initialized": true,
   "modules": [
-    { "num": "01", "slug": "auth",     "name": "App Bootstrap & Authentication", "ui_html": "Module 01 - Auth.html",     "ui_screens": "Module 01 - screens.jsx", "status": "pending", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
-    { "num": "02", "slug": "home",     "name": "Home & Service Selector",        "ui_html": "Module 02 - Home.html",     "ui_screens": "Module 02 - screens.jsx", "status": "pending", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
+    { "num": "01", "slug": "auth",     "name": "App Bootstrap & Authentication", "ui_html": "Module 01 - Auth.html",     "ui_screens": "Module 01 - screens.jsx", "status": "in_progress", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
+    { "num": "02", "slug": "home",     "name": "Home & Service Selector",        "ui_html": "Module 02 - Home.html",     "ui_screens": "Module 02 - screens.jsx", "status": "in_progress", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
     { "num": "03", "slug": "booking",  "name": "Booking Flow",                   "ui_html": "Module 03 - Booking.html",  "ui_screens": "Module 03 - screens.jsx", "status": "pending", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
     { "num": "04", "slug": "payment",  "name": "Payments & Checkout",            "ui_html": "Module 04 - Payment.html",  "ui_screens": "Module 04 - screens.jsx", "status": "pending", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
     { "num": "05", "slug": "trips",    "name": "Trip History & Live Tracking",   "ui_html": "Module 05 - Trips.html",    "ui_screens": "Module 05 - screens.jsx", "status": "pending", "branch": null, "pr_url": null, "qa_verdict": null, "date_completed": null },
