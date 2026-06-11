@@ -96,9 +96,11 @@ export interface RoadBookingDetail extends RoadBookingListItem {
   dispute: DisputeResponse | null
   driver_vehicle_plate: string | null
   driver_vehicle_model: string | null
+  driver_phone: string | null
   customer_phone: string | null
   customer_ride_count: number
   customer_rating: number | null
+  payment_status: string
 }
 
 export interface BookingStats {
@@ -128,6 +130,7 @@ export interface DisputeListItem {
   disputed_amount_minor: number
   priority: 'high' | 'medium' | 'low'
   stage: string
+  sla_deadline: string | null
   created_at: string
 }
 
@@ -206,6 +209,11 @@ export interface AddNoteBody {
 
 export interface AdvanceStatusBody {
   status: 'Accepted' | 'Arrived' | 'InProgress' | 'Completed' | 'Cancelled'
+  note?: string | null
+}
+
+export interface DisputeStageBody {
+  stage: 'in_review' | 'awaiting_driver' | 'awaiting_finance' | 'closed'
   note?: string | null
 }
 
@@ -301,6 +309,9 @@ export const bookingsService = {
 
   advanceStatus: (id: string, body: AdvanceStatusBody) =>
     api.post<RoadBookingDetail>(`/bookings/road/${id}/advance-status`, body).then(r => r.data),
+
+  updateDisputeStage: (bookingId: string, body: DisputeStageBody) =>
+    api.patch<DisputeResponse>(`/bookings/road/${bookingId}/dispute`, body).then(r => r.data),
 
   listDisputes: (params?: {
     page?: number

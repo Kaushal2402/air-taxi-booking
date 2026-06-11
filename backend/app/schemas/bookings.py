@@ -71,6 +71,7 @@ class DisputeListItem(BaseModel):
     disputed_amount_minor: int
     priority: str
     stage: str
+    sla_deadline: Optional[Any] = None
     created_at: Any
 
     model_config = {"from_attributes": True}
@@ -130,9 +131,11 @@ class RoadBookingDetail(RoadBookingListItem):
     dispute: Optional[DisputeResponse] = None
     driver_vehicle_plate: Optional[str] = None
     driver_vehicle_model: Optional[str] = None
+    driver_phone: Optional[str] = None
     customer_phone: Optional[str] = None
     customer_ride_count: int
     customer_rating: Optional[float] = None
+    payment_status: str = "pending"
 
     model_config = {"from_attributes": True}
 
@@ -224,4 +227,9 @@ class AddNoteBody(BaseModel):
 
 class AdvanceStatusBody(BaseModel):
     status: str    # Accepted | Arrived | InProgress | Completed | Cancelled
+    note: Optional[str] = None
+
+
+class DisputeStageBody(BaseModel):
+    stage: str    # in_review | awaiting_driver | awaiting_finance | closed
     note: Optional[str] = None

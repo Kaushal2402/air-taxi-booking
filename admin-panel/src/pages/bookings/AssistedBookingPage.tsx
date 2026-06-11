@@ -23,6 +23,16 @@ function toDatetimeLocal(d: Date): string {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 
+/** Haversine distance between two lat/lng pairs in km. */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const toRad = (d: number) => d * Math.PI / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 /**
  * Compute fare estimate using a live road fare rule.
  * All monetary values in rule are in ₹ (not paise), so multiply by 100.
@@ -117,7 +127,11 @@ const PAYMENT_METHODS = [
 interface FormState {
   customer: Customer | null
   pickupAddress: string
+  pickupLat: string
+  pickupLng: string
   dropAddress: string
+  dropLat: string
+  dropLng: string
   when: 'now' | 'scheduled'
   scheduledAt: string
   pax: number
@@ -131,7 +145,11 @@ interface FormState {
 const INITIAL_FORM: FormState = {
   customer: null,
   pickupAddress: '',
+  pickupLat: '',
+  pickupLng: '',
   dropAddress: '',
+  dropLat: '',
+  dropLng: '',
   when: 'now',
   scheduledAt: '',
   pax: 1,
@@ -274,7 +292,14 @@ export default function AssistedBookingPage() {
       .finally(() => setLoadingClasses(false))
   }, [])
 
-  const distanceKm = form.pickupAddress && form.dropAddress ? 18.6 : 0
+  const distanceKm = (() => {
+    const pLat = parseFloat(form.pickupLat)
+    const pLng = parseFloat(form.pickupLng)
+    const dLat = parseFloat(form.dropLat)
+    const dLng = parseFloat(form.dropLng)
+    if (isNaN(pLat) || isNaN(pLng) || isNaN(dLat) || isNaN(dLng)) return 0
+    return Math.round(haversineKm(pLat, pLng, dLat, dLng) * 10) / 10
+  })()
 
   // Compute fare: use live rule if available, else fallback
   const fareMinor = (() => {
@@ -341,10 +366,18 @@ export default function AssistedBookingPage() {
 
     setSubmitting(true)
     try {
+      const pLat = parseFloat(form.pickupLat)
+      const pLng = parseFloat(form.pickupLng)
+      const dLat = parseFloat(form.dropLat)
+      const dLng = parseFloat(form.dropLng)
       const booking = await bookingsService.createAssistedBooking({
         customer_id: form.customer.id,
         pickup_address: form.pickupAddress,
+        pickup_lat: isNaN(pLat) ? null : pLat,
+        pickup_lng: isNaN(pLng) ? null : pLng,
         drop_address: form.dropAddress,
+        drop_lat: isNaN(dLat) ? null : dLat,
+        drop_lng: isNaN(dLng) ? null : dLng,
         service_type: form.vehicleClass === 'Bike' ? 'bike' : 'cab',
         vehicle_class: form.vehicleClass,
         scheduled_at: form.when === 'scheduled' ? form.scheduledAt || null : null,
@@ -502,7 +535,7 @@ export default function AssistedBookingPage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div className="field">
-                  <label className="field-label">Pickup <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <label className="field-label">Pickup address <span style={{ color: 'var(--danger)' }}>*</span></label>
                   <div className="input">
                     <Icon name="mapPin" size={14} className="icon" />
                     <input
@@ -511,10 +544,30 @@ export default function AssistedBookingPage() {
                       placeholder="Whitefield · Hope Farm Junction"
                     />
                   </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
+                    <div className="input" style={{ height: 30 }}>
+                      <input
+                        type="number" step="any"
+                        value={form.pickupLat}
+                        onChange={e => patchForm('pickupLat', e.target.value)}
+                        placeholder="Lat e.g. 12.971"
+                        style={{ fontSize: 12 }}
+                      />
+                    </div>
+                    <div className="input" style={{ height: 30 }}>
+                      <input
+                        type="number" step="any"
+                        value={form.pickupLng}
+                        onChange={e => patchForm('pickupLng', e.target.value)}
+                        placeholder="Lng e.g. 77.594"
+                        style={{ fontSize: 12 }}
+                      />
+                    </div>
+                  </div>
                   {errors.pickup && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>{errors.pickup}</div>}
                 </div>
                 <div className="field">
-                  <label className="field-label">Drop <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <label className="field-label">Drop address <span style={{ color: 'var(--danger)' }}>*</span></label>
                   <div className="input">
                     <Icon name="mapPin" size={14} className="icon" />
                     <input
@@ -522,6 +575,26 @@ export default function AssistedBookingPage() {
                       onChange={e => patchForm('dropAddress', e.target.value)}
                       placeholder="MG Road · 47 Brigade Square"
                     />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 6 }}>
+                    <div className="input" style={{ height: 30 }}>
+                      <input
+                        type="number" step="any"
+                        value={form.dropLat}
+                        onChange={e => patchForm('dropLat', e.target.value)}
+                        placeholder="Lat e.g. 12.976"
+                        style={{ fontSize: 12 }}
+                      />
+                    </div>
+                    <div className="input" style={{ height: 30 }}>
+                      <input
+                        type="number" step="any"
+                        value={form.dropLng}
+                        onChange={e => patchForm('dropLng', e.target.value)}
+                        placeholder="Lng e.g. 77.608"
+                        style={{ fontSize: 12 }}
+                      />
+                    </div>
                   </div>
                   {errors.drop && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>{errors.drop}</div>}
                 </div>
@@ -565,9 +638,16 @@ export default function AssistedBookingPage() {
               {form.pickupAddress && form.dropAddress && (
                 <div style={{ padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--rule)', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 16, fontSize: 12.5, color: 'var(--ink-2)', flexWrap: 'wrap' }}>
                   <span className="t-label">Route</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>18.6 km · est. 42 min</span>
-                  <span style={{ width: 1, height: 16, background: 'var(--rule)', flexShrink: 0 }} />
-                  <span>Surge · <span style={{ color: 'var(--warn)' }}>1.2×</span> (eve. peak)</span>
+                  {distanceKm > 0 ? (
+                    <>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                        {distanceKm} km · est. {Math.round(distanceKm / 30 * 60)} min
+                      </span>
+                      <span className="t-meta" style={{ color: 'var(--accent)' }}>· GPS computed</span>
+                    </>
+                  ) : (
+                    <span className="t-meta">Enter lat/lng above to compute distance &amp; fare estimate</span>
+                  )}
                 </div>
               )}
             </div>
@@ -595,7 +675,7 @@ export default function AssistedBookingPage() {
                   const rule = fareRules.find(r =>
                     r.vehicle_class_name?.toLowerCase() === vc.key.toLowerCase()
                   )
-                  const sampleDist = distanceKm > 0 ? distanceKm : 18.6
+                  const sampleDist = distanceKm > 0 ? distanceKm : 10
                   const fare = rule ? Math.round(calcFareFromRule(rule, sampleDist)) : calcFareFallback(sampleDist, vc.key)
                   const selected = form.vehicleClass === vc.key
                   return (

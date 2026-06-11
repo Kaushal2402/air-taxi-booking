@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 import string
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, func, or_, select
@@ -29,6 +29,7 @@ from app.schemas.bookings import (
     AdjustFareBody,
     AssistedBookingCreate,
     CancelBookingBody,
+    DisputeStageBody,
     FlagBookingBody,
     OpenDisputeBody,
     ReassignBody,
@@ -100,6 +101,16 @@ async def _load_booking(db: AsyncSession, booking_id: str) -> RoadBooking:
 
 
 # ── Denormalization helpers ───────────────────────────────────────────────────
+
+def _derive_payment_status(status: str) -> str:
+    if status == "Completed":
+        return "captured"
+    if status in ("Cancelled", "Refunded"):
+        return "refunded"
+    if status in ("Accepted", "Arrived", "InProgress", "Disputed"):
+        return "pre_auth"
+    return "pending"
+
 
 def _booking_to_list_item_dict(
     booking: RoadBooking,
@@ -321,6 +332,7 @@ async def get_booking(db: AsyncSession, booking_id: str) -> dict:
 
     customer_name: str | None = None
     driver_name: str | None = None
+    driver_phone: str | None = None
 
     if booking.customer_id:
         c = await db.get(Customer, booking.customer_id)
@@ -331,14 +343,16 @@ async def get_booking(db: AsyncSession, booking_id: str) -> dict:
         d = await db.get(Driver, booking.driver_id)
         if d:
             driver_name = d.name
+            driver_phone = d.phone
 
-    return _build_detail_dict(booking, customer_name, driver_name)
+    return _build_detail_dict(booking, customer_name, driver_name, driver_phone)
 
 
 def _build_detail_dict(
     booking: RoadBooking,
     customer_name: str | None,
     driver_name: str | None,
+    driver_phone: str | None = None,
 ) -> dict:
     base = _booking_to_list_item_dict(booking, customer_name, driver_name)
     base.update(
@@ -355,9 +369,11 @@ def _build_detail_dict(
             "internal_reason": booking.internal_reason,
             "driver_vehicle_plate": booking.driver_vehicle_plate,
             "driver_vehicle_model": booking.driver_vehicle_model,
+            "driver_phone": driver_phone,
             "customer_phone": booking.customer_phone,
             "customer_ride_count": booking.customer_ride_count,
             "customer_rating": booking.customer_rating,
+            "payment_status": _derive_payment_status(booking.status),
             "timeline": list(booking.timeline_events),
             "fare_components": list(booking.fare_components),
             "admin_notes": list(booking.admin_notes),
@@ -766,7 +782,7 @@ async def reassign_driver(
     await db.commit()
 
     booking = await _load_booking(db, booking_id)
-    return _build_detail_dict(booking, None, new_driver.name)
+    return _build_detail_dict(booking, None, new_driver.name, new_driver.phone)
 
 
 # ── Adjust fare ───────────────────────────────────────────────────────────────
@@ -1061,6 +1077,12 @@ async def list_disputes(
         customer_id: str | None = row[2]
         fare_final: int | None = row[3]
 
+        # SLA deadline: 48 hours from dispute creation
+        created_at = dispute.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        sla_deadline = created_at + timedelta(hours=48)
+
         items.append(
             {
                 "id": dispute.id,
@@ -1072,11 +1094,62 @@ async def list_disputes(
                 "disputed_amount_minor": fare_final or 0,
                 "priority": dispute.priority,
                 "stage": dispute.stage,
+                "sla_deadline": sla_deadline,
                 "created_at": dispute.created_at,
             }
         )
 
     return items, total
+
+
+# ── Update dispute stage ──────────────────────────────────────────────────────
+
+_STAGE_TRANSITIONS: dict[str, list[str]] = {
+    "open":             ["in_review", "awaiting_driver", "awaiting_finance", "closed"],
+    "in_review":        ["awaiting_driver", "awaiting_finance", "closed"],
+    "awaiting_driver":  ["in_review", "awaiting_finance", "closed"],
+    "awaiting_finance": ["in_review", "closed"],
+}
+
+_STAGE_EVENTS: dict[str, tuple[str, str]] = {
+    "in_review":        ("Dispute under review", "info"),
+    "awaiting_driver":  ("Awaiting driver response", "warn"),
+    "awaiting_finance": ("Awaiting Finance approval", "warn"),
+    "closed":           ("Dispute closed (rejected)", "danger"),
+}
+
+
+async def update_dispute_stage(
+    db: AsyncSession,
+    booking_id: str,
+    new_stage: str,
+    note: str | None = None,
+) -> Dispute:
+    booking = await _load_booking(db, booking_id)
+
+    if booking.dispute is None:
+        raise NotFoundException("Dispute for booking", booking_id)
+
+    dispute = booking.dispute
+    allowed = _STAGE_TRANSITIONS.get(dispute.stage, [])
+    if new_stage not in allowed:
+        raise ValidationException(
+            f"Cannot move dispute from '{dispute.stage}' to '{new_stage}'. "
+            f"Allowed: {', '.join(allowed) if allowed else 'none'}"
+        )
+
+    dispute.stage = new_stage
+    event_label, tone = _STAGE_EVENTS.get(new_stage, (f"Dispute stage → {new_stage}", "info"))
+    await _add_timeline_event(
+        db,
+        booking_id,
+        event_label,
+        note or f"Stage updated to {new_stage} via admin",
+        tone,
+    )
+    await db.commit()
+    await db.refresh(dispute)
+    return dispute
 
 
 # ── Advance status (ops workflow) ─────────────────────────────────────────────

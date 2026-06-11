@@ -1,24 +1,44 @@
 import { useState, useEffect } from 'react'
-import { parseApiError } from '../../hooks/useApiError'
-import AccessDeniedPage from '../../components/ui/AccessDeniedPage'
+import { MapContainer, TileLayer, Marker, Polyline, Popup } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import Shell from '../../components/layout/Shell'
 import Icon from '../../components/ui/Icon'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { bookingsService } from '../../services/bookingsService'
-import type { DisputeListItem, ResolveDisputeBody } from '../../services/bookingsService'
+import type { DisputeListItem, ResolveDisputeBody, DisputeStageBody, BookingTelemetry } from '../../services/bookingsService'
 import { useFormatMoney } from '../../lib/utils'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Fix leaflet icon paths
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+})
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatAge(iso: string): string {
   try {
     const ms = Date.now() - new Date(iso).getTime()
     const h = Math.floor(ms / 3600000)
     if (h < 24) return `${h}h`
-    const d = Math.floor(h / 24)
-    return `${d}d`
+    return `${Math.floor(h / 24)}d`
   } catch { return '—' }
+}
+
+function slaRemaining(deadline: string | null): { label: string; urgent: boolean } {
+  if (!deadline) return { label: '—', urgent: false }
+  try {
+    const ms = new Date(deadline).getTime() - Date.now()
+    if (ms <= 0) return { label: 'Overdue', urgent: true }
+    const h = Math.floor(ms / 3600000)
+    const m = Math.floor((ms % 3600000) / 60000)
+    if (h < 4) return { label: `${h}h ${m}m`, urgent: true }
+    if (h < 24) return { label: `${h}h`, urgent: false }
+    return { label: `${Math.floor(h / 24)}d ${h % 24}h`, urgent: false }
+  } catch { return { label: '—', urgent: false } }
 }
 
 function priorityBadge(priority: 'high' | 'medium' | 'low') {
@@ -48,7 +68,9 @@ function stageLabel(stage: string): string {
   return map[stage] ?? stage
 }
 
-function exportDisputesCsv(items: DisputeListItem[]) {
+// ── Export (fmtMinor passed explicitly to avoid module-scope ref error) ────────
+
+function exportDisputesCsv(items: DisputeListItem[], fmtMinor: (v: number) => string) {
   const headers = ['Dispute Ref', 'Booking Ref', 'Customer', 'Reason', 'Amount', 'Priority', 'Stage', 'Created']
   const rows = items.map(d => [
     d.dispute_ref,
@@ -70,6 +92,87 @@ function exportDisputesCsv(items: DisputeListItem[]) {
   URL.revokeObjectURL(url)
 }
 
+// ── Telemetry Map ─────────────────────────────────────────────────────────────
+
+function TelemetryMap({ bookingId }: { bookingId: string }) {
+  const [telemetry, setTelemetry] = useState<BookingTelemetry | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    bookingsService.getTelemetry(bookingId)
+      .then(t => setTelemetry(t))
+      .catch(() => setTelemetry(null))
+      .finally(() => setLoading(false))
+  }, [bookingId])
+
+  if (loading) {
+    return (
+      <div style={{ height: 200, background: 'var(--surface-2)', border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+        Loading GPS trace…
+      </div>
+    )
+  }
+
+  const pickupPos: [number, number] | null = (telemetry?.pickup_lat && telemetry?.pickup_lng)
+    ? [telemetry.pickup_lat, telemetry.pickup_lng] : null
+  const dropPos: [number, number] | null = (telemetry?.drop_lat && telemetry?.drop_lng)
+    ? [telemetry.drop_lat, telemetry.drop_lng] : null
+  const center: [number, number] = pickupPos ?? [12.9716, 77.5946]
+  const gpsPoints: [number, number][] = (telemetry?.gps_points ?? []).map(p => [p.lat, p.lng])
+
+  const expected = telemetry?.distance_expected_km ?? null
+  const actual = telemetry?.distance_actual_km ?? null
+  const delta = (expected && actual) ? actual - expected : null
+  const variance = (expected && delta != null) ? (delta / expected) * 100 : null
+
+  if (!pickupPos) {
+    return (
+      <div style={{ height: 200, background: 'var(--surface-2)', border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+        No GPS coordinates available for this booking
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <MapContainer center={center} zoom={12} style={{ height: 200, width: '100%' }}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {pickupPos && (
+          <Marker position={pickupPos}><Popup>Pickup</Popup></Marker>
+        )}
+        {dropPos && (
+          <Marker position={dropPos}><Popup>Drop</Popup></Marker>
+        )}
+        {gpsPoints.length > 1 && (
+          <Polyline positions={gpsPoints} color="#0F8A5F" weight={3} opacity={0.8} dashArray="6 4" />
+        )}
+        {pickupPos && dropPos && gpsPoints.length === 0 && (
+          <Polyline positions={[pickupPos, dropPos]} color="#0F8A5F" weight={2} opacity={0.5} dashArray="8 6" />
+        )}
+      </MapContainer>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginTop: 14 }}>
+        {[
+          ['Expected', expected != null ? `${expected.toFixed(1)} km` : '—', false],
+          ['Actual',   actual   != null ? `${actual.toFixed(1)} km`   : '—', false],
+          ['Delta',    delta    != null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} km` : '—', delta != null && delta > 2],
+          ['Variance', variance != null ? `${variance >= 0 ? '+' : ''}${variance.toFixed(1)}%`   : '—', variance != null && variance > 10],
+        ].map(([k, v, warn]) => (
+          <div key={String(k)}>
+            <div className="t-label" style={{ padding: 0 }}>{String(k)}</div>
+            <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 13, color: warn ? 'var(--warn)' : 'var(--ink-2)' }}>
+              {String(v)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 // ── Resolution Panel ──────────────────────────────────────────────────────────
 
 type DisputeAction = 'uphold_fare' | 'partial_refund' | 'full_refund' | 'goodwill_credit'
@@ -77,14 +180,14 @@ type DisputeAction = 'uphold_fare' | 'partial_refund' | 'full_refund' | 'goodwil
 interface ResolutionPanelProps {
   dispute: DisputeListItem
   onResolve: (body: ResolveDisputeBody) => Promise<void>
+  fmtMinor: (v: number) => string
 }
 
-function ResolutionPanel({ dispute, onResolve }: ResolutionPanelProps) {
+function ResolutionPanel({ dispute, onResolve, fmtMinor }: ResolutionPanelProps) {
   const [action, setAction] = useState<DisputeAction>('partial_refund')
   const [resolutionNote, setResolutionNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [isForbidden, setIsForbidden] = useState(false)
 
   const actionOptions: { key: DisputeAction; label: string }[] = [
     { key: 'uphold_fare',    label: 'Uphold fare · close dispute' },
@@ -196,6 +299,71 @@ function ResolutionPanel({ dispute, onResolve }: ResolutionPanelProps) {
   )
 }
 
+// ── Stage Action Buttons ──────────────────────────────────────────────────────
+
+interface StageActionsProps {
+  dispute: DisputeListItem
+  onStageUpdate: (body: DisputeStageBody) => Promise<void>
+}
+
+function StageActions({ dispute, onStageUpdate }: StageActionsProps) {
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  const isOpen = ['open', 'in_review', 'awaiting_driver', 'awaiting_finance'].includes(dispute.stage)
+  if (!isOpen) return null
+
+  const act = async (stage: DisputeStageBody['stage'], note?: string) => {
+    setSaving(stage)
+    setError('')
+    try {
+      await onStageUpdate({ stage, note })
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setError(err?.response?.data?.detail || 'Update failed')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+      {error && (
+        <div style={{ width: '100%', fontSize: 12, color: 'var(--danger)', padding: '4px 0' }}>{error}</div>
+      )}
+      {dispute.stage !== 'in_review' && (
+        <button
+          className="btn sm"
+          disabled={!!saving}
+          onClick={() => act('in_review', 'Escalated for review')}
+        >
+          {saving === 'in_review' ? '…' : 'Escalate'}
+        </button>
+      )}
+      {dispute.stage !== 'awaiting_driver' && (
+        <button
+          className="btn sm"
+          disabled={!!saving}
+          onClick={() => act('awaiting_driver', 'Awaiting driver response / evidence')}
+        >
+          {saving === 'awaiting_driver' ? '…' : 'Request info'}
+        </button>
+      )}
+      <button
+        className="btn sm danger"
+        disabled={!!saving}
+        onClick={() => {
+          const note = window.prompt('Reason for rejection (optional):')
+          if (note === null) return // user cancelled
+          act('closed', note || 'Rejected by admin')
+        }}
+      >
+        {saving === 'closed' ? '…' : 'Reject'}
+      </button>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DisputesPage() {
@@ -206,7 +374,7 @@ export default function DisputesPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [stageFilter] = useState('')
+  const [stageFilter, setStageFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
   const [selected, setSelected] = useState<DisputeListItem | null>(null)
   const [showMobileDetail, setShowMobileDetail] = useState(false)
@@ -260,11 +428,23 @@ export default function DisputesPage() {
     }
   }
 
+  const handleStageUpdate = async (body: DisputeStageBody) => {
+    if (!selected) return
+    await bookingsService.updateDisputeStage(selected.booking_id, body)
+    // Refresh list and update selected
+    const res = await bookingsService.listDisputes({ page_size: 50, stage: stageFilter || undefined, priority: priorityFilter || undefined })
+    setDisputes(res.items)
+    setTotal(res.total)
+    const updated = res.items.find(d => d.id === selected.id)
+    if (updated) setSelected(updated)
+  }
+
   const reviewCount = disputes.filter(d => d.stage === 'in_review' || d.stage === 'awaiting_driver').length
   const financeCount = disputes.filter(d => d.stage === 'awaiting_finance').length
 
-  // Mobile: show detail
+  // Mobile detail view
   if (isMobile && showMobileDetail && selected) {
+    const sla = slaRemaining(selected.sla_deadline)
     return (
       <Shell
         activeId="bookings-r"
@@ -294,8 +474,11 @@ export default function DisputesPage() {
               Filed by {selected.customer_name} · {formatAge(selected.created_at)} ago
             </div>
           </div>
+          <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <StageActions dispute={selected} onStageUpdate={handleStageUpdate} />
+          </div>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 3, marginBottom: 16 }}>
-            <ResolutionPanel dispute={selected} onResolve={handleResolve} />
+            <ResolutionPanel dispute={selected} onResolve={handleResolve} fmtMinor={fmtMinor} />
           </div>
         </div>
       </Shell>
@@ -310,11 +493,8 @@ export default function DisputesPage() {
       subtitle={`${total} open · ${reviewCount} awaiting evidence · ${financeCount} awaiting Finance`}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm" onClick={() => exportDisputesCsv(disputes)}>
+          <button className="btn sm" onClick={() => exportDisputesCsv(disputes, fmtMinor)}>
             <Icon name="download" size={13} />Export
-          </button>
-          <button className="btn sm">
-            <Icon name="filter" size={13} />Saved view
           </button>
         </div>
       }
@@ -322,27 +502,40 @@ export default function DisputesPage() {
       <div style={{ display: isMobile ? 'block' : 'grid', gridTemplateColumns: '420px 1fr', minHeight: '100%' }}>
         {/* Left panel — dispute list */}
         <aside style={{ borderRight: isMobile ? 'none' : '1px solid var(--rule)', background: 'var(--surface)', overflowY: 'auto' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 8 }}>
-            <div className="input" style={{ flex: 1, height: 32 }}>
-              <Icon name="search" size={14} className="icon" />
-              <input
-                placeholder="Search disputes…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="input" style={{ flex: 1, height: 32 }}>
+                <Icon name="search" size={14} className="icon" />
+                <input
+                  placeholder="Search disputes…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="input" style={{ height: 32, width: 140, padding: 0, paddingLeft: 8 }}>
-              <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
-                style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 12.5 }}>
-                <option value="">All priorities</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div className="input" style={{ flex: 1, height: 32, padding: 0, paddingLeft: 8 }}>
+                <select value={stageFilter} onChange={e => setStageFilter(e.target.value)}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 12.5 }}>
+                  <option value="">All stages</option>
+                  <option value="open">Open</option>
+                  <option value="in_review">In review</option>
+                  <option value="awaiting_driver">Awaiting driver</option>
+                  <option value="awaiting_finance">Awaiting Finance</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <div className="input" style={{ flex: 1, height: 32, padding: 0, paddingLeft: 8 }}>
+                <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', cursor: 'pointer', height: '100%', fontSize: 12.5 }}>
+                  <option value="">All priorities</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
             </div>
-            <button className="btn ghost icon sm">
-              <Icon name="filter" size={13} />
-            </button>
           </div>
 
           {loading ? (
@@ -351,6 +544,7 @@ export default function DisputesPage() {
             <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>No disputes found.</div>
           ) : filtered.map((d) => {
             const isSel = selected?.id === d.id
+            const sla = slaRemaining(d.sla_deadline)
             return (
               <div
                 key={d.id}
@@ -374,8 +568,8 @@ export default function DisputesPage() {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.08em' }}>
                     · {stageLabel(d.stage)}
                   </span>
-                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>
-                    {fmtMinor(d.disputed_amount_minor)}
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12, color: sla.urgent ? 'var(--danger)' : 'var(--ink-3)' }}>
+                    SLA {sla.label}
                   </span>
                 </div>
               </div>
@@ -398,10 +592,11 @@ export default function DisputesPage() {
                     <button className="btn ghost icon sm" onClick={() => setResolveError('')} style={{ color: 'var(--danger)' }}>×</button>
                   </div>
                 )}
+
                 {/* Header */}
                 <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--rule)', background: 'var(--surface)' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div className="t-label">Dispute · {selected.dispute_ref} · linked to {selected.booking_ref}</div>
                       <h2 style={{ margin: '6px 0 0', fontFamily: 'var(--font-serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.018em' }}>
                         "{selected.reason}"
@@ -410,71 +605,56 @@ export default function DisputesPage() {
                         Filed by {selected.customer_name} · {formatAge(selected.created_at)} ago
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      <button className="btn sm">Escalate</button>
-                      <button className="btn sm">Request more info</button>
-                      <button className="btn sm danger">Reject</button>
-                      <button className="btn sm accent" onClick={() => {
-                        if (selected) {
-                          const noteEl = document.querySelector<HTMLInputElement>('[placeholder="Resolution note (visible in audit) *"]')
-                          if (noteEl) noteEl.focus()
-                        }
-                      }}>Resolve →</button>
-                    </div>
+                    <StageActions dispute={selected} onStageUpdate={handleStageUpdate} />
                   </div>
 
                   {/* SLA strip */}
-                  <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', background: 'var(--surface-2)', border: '1px solid var(--rule)' }}>
-                    {[
-                      ['Disputed amount', fmtMinor(selected.disputed_amount_minor)],
-                      ['SLA · remaining', '12h'],
-                      ['Stage', stageLabel(selected.stage)],
-                      ['Priority', selected.priority.charAt(0).toUpperCase() + selected.priority.slice(1)],
-                    ].map(([k, v], i) => (
-                      <div key={k} style={{ padding: '14px 18px', borderRight: i < 3 ? '1px solid var(--rule)' : 'none' }}>
-                        <div className="t-label" style={{ padding: 0 }}>{k}</div>
-                        <div style={{ marginTop: 4, fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400 }}>{v}</div>
+                  {(() => {
+                    const sla = slaRemaining(selected.sla_deadline)
+                    return (
+                      <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', background: 'var(--surface-2)', border: '1px solid var(--rule)' }}>
+                        {[
+                          ['Disputed amount', fmtMinor(selected.disputed_amount_minor), false],
+                          ['SLA · remaining', sla.label, sla.urgent],
+                          ['Stage', stageLabel(selected.stage), false],
+                          ['Priority', selected.priority.charAt(0).toUpperCase() + selected.priority.slice(1), false],
+                        ].map(([k, v, urgent], i) => (
+                          <div key={String(k)} style={{ padding: '14px 18px', borderRight: i < 3 ? '1px solid var(--rule)' : 'none' }}>
+                            <div className="t-label" style={{ padding: 0 }}>{String(k)}</div>
+                            <div style={{ marginTop: 4, fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 400, color: urgent ? 'var(--danger)' : 'var(--ink)' }}>
+                              {String(v)}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Body */}
                 <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 24 }}>
                   {/* Evidence */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    {/* Telemetry */}
+                    {/* Telemetry map */}
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)', padding: '18px 20px' }}>
                       <div className="t-label" style={{ marginBottom: 10 }}>Telemetry · evidence</div>
-                      <div style={{ height: 180, background: 'var(--surface-2)', border: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, color: 'var(--ink-4)', fontSize: 13 }}>
-                        Map placeholder · GPS trace
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                        {[
-                          ['Expected', '24.8 km', false],
-                          ['Actual',   '31.4 km', false],
-                          ['Delta',    '+6.6 km', true],
-                          ['Variance', '+26.6%',  true],
-                        ].map(([k, v, warn]) => (
-                          <div key={String(k)}>
-                            <div className="t-label" style={{ padding: 0 }}>{String(k)}</div>
-                            <div style={{
-                              marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 13,
-                              color: warn ? 'var(--warn)' : 'var(--ink-2)',
-                            }}>{String(v)}</div>
-                          </div>
-                        ))}
-                      </div>
+                      <TelemetryMap bookingId={selected.booking_id} />
                     </div>
 
-                    {/* Communication thread placeholder */}
+                    {/* Communication thread — linked to support tickets */}
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
                       <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--rule)' }}>
                         <div className="t-label">Communication</div>
                         <h3 style={{ margin: '4px 0 0', fontFamily: 'var(--font-serif)', fontSize: 16, fontWeight: 400 }}>Customer thread</h3>
                       </div>
-                      <div style={{ padding: '32px 18px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
-                        No messages yet.
+                      <div style={{ padding: '20px 18px', color: 'var(--ink-4)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div>Messages are managed in the Support module.</div>
+                        <a
+                          href={`/support/tickets?search=${selected.booking_ref}`}
+                          style={{ fontSize: 12.5, color: 'var(--accent)', textDecoration: 'none' }}
+                        >
+                          Open support ticket for {selected.booking_ref} →
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -482,7 +662,7 @@ export default function DisputesPage() {
                   {/* Resolution */}
                   <div>
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--rule)' }}>
-                      <ResolutionPanel dispute={selected} onResolve={handleResolve} />
+                      <ResolutionPanel dispute={selected} onResolve={handleResolve} fmtMinor={fmtMinor} />
                     </div>
                   </div>
                 </div>

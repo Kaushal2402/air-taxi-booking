@@ -19,6 +19,7 @@ from app.schemas.bookings import (
     CancelBookingBody,
     DisputeListResponse,
     DisputeResponse,
+    DisputeStageBody,
     FlagBookingBody,
     OpenDisputeBody,
     ReassignBody,
@@ -264,6 +265,33 @@ async def open_dispute(
             severity="high",
             source_ip=request.client.host if request.client else None,
             after_data={"reason": body.reason},
+        )
+    except Exception:
+        pass
+    return result
+
+
+@road_bookings_router.patch("/{booking_id}/dispute", response_model=DisputeResponse)
+async def update_dispute_stage(
+    booking_id: str,
+    body: DisputeStageBody,
+    request: Request,
+    current_user: AdminUser = Depends(require_permission("bookings.road.view")),
+    db=Depends(get_db),
+):
+    """Update dispute stage: escalate, request info, or reject."""
+    result = await bookings_service.update_dispute_stage(db, booking_id, body.stage, body.note)
+    try:
+        await audit_service.log_event(
+            db,
+            actor_name=current_user.email,
+            actor_role=current_user.role if hasattr(current_user, "role") else "Admin",
+            action="booking.dispute_stage_updated",
+            target=f"booking:{booking_id}",
+            category="Support",
+            severity="med",
+            source_ip=request.client.host if request.client else None,
+            after_data={"stage": body.stage, "note": body.note},
         )
     except Exception:
         pass

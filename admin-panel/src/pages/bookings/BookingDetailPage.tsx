@@ -504,6 +504,7 @@ interface AdjustFareModalProps {
 
 function AdjustFareModal({ booking, onClose, onConfirm }: AdjustFareModalProps) {
   const sym = useCurrencySymbol()
+  const fmtMinor = useFormatMoney()
   const current = booking.fare_final_minor ?? booking.fare_estimate_minor
   const [newFare, setNewFare] = useState(String(current / 100))
   const [reason, setReason] = useState('')
@@ -896,6 +897,8 @@ const RESOLVE_ACTIONS = [
 ]
 
 function ResolveDisputeModal({ booking, onClose, onConfirm }: ResolveDisputeModalProps) {
+  const fmtMinor = useFormatMoney()
+  const sym = useCurrencySymbol()
   const fare = booking.fare_final_minor ?? booking.fare_estimate_minor
   const [action, setAction] = useState<ResolveDisputeBody['action']>('partial_refund')
   const [refundAmount, setRefundAmount] = useState(String((fare / 200).toFixed(2))) // default half
@@ -1457,7 +1460,15 @@ export default function BookingDetailPage() {
                   <div className="t-meta" style={{ marginTop: 2 }}>{booking.customer_phone}</div>
                 )}
               </div>
-              <button className="btn icon sm"><Icon name="phone" size={12} /></button>
+              {booking.customer_phone ? (
+                <a href={`tel:${booking.customer_phone}`} className="btn icon sm" title={`Call ${booking.customer_phone}`}>
+                  <Icon name="phone" size={12} />
+                </a>
+              ) : (
+                <button className="btn icon sm" disabled title="No phone on record">
+                  <Icon name="phone" size={12} />
+                </button>
+              )}
             </div>
 
             <div style={{ height: 1, background: 'var(--rule)', margin: '24px 0' }} />
@@ -1478,8 +1489,19 @@ export default function BookingDetailPage() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, color: 'var(--ink)' }}>{booking.driver_name}</div>
+                    {booking.driver_phone && (
+                      <div className="t-meta" style={{ marginTop: 2 }}>{booking.driver_phone}</div>
+                    )}
                   </div>
-                  <button className="btn icon sm"><Icon name="phone" size={12} /></button>
+                  {booking.driver_phone ? (
+                    <a href={`tel:${booking.driver_phone}`} className="btn icon sm" title={`Call ${booking.driver_phone}`}>
+                      <Icon name="phone" size={12} />
+                    </a>
+                  ) : (
+                    <button className="btn icon sm" disabled title="No phone on record">
+                      <Icon name="phone" size={12} />
+                    </button>
+                  )}
                 </div>
                 {(booking.driver_vehicle_plate || booking.driver_vehicle_model) && (
                   <div style={{ marginTop: 12, padding: '12px 14px', border: '1px solid var(--rule)', borderRadius: 3 }}>
@@ -1506,7 +1528,17 @@ export default function BookingDetailPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{booking.payment_method ?? '—'}</div>
               </div>
-              <span className="badge ok"><span className="dot ok" />Pre-auth</span>
+              {(() => {
+                const ps = booking.payment_status ?? 'pending'
+                const cfg: Record<string, { tone: string; label: string }> = {
+                  captured:  { tone: 'ok',      label: 'Captured' },
+                  pre_auth:  { tone: 'info',     label: 'Pre-auth' },
+                  refunded:  { tone: 'pending',  label: 'Refunded' },
+                  pending:   { tone: 'warn',     label: 'Pending' },
+                }
+                const { tone, label } = cfg[ps] ?? cfg.pending
+                return <span className={`badge ${tone}`}><span className={`dot ${tone}`} />{label}</span>
+              })()}
             </div>
 
             {booking.dispute && (

@@ -344,7 +344,7 @@ export default function RoadBookingsPage() {
       subtitle={stats ? `${total.toLocaleString('en-IN')} today · ${fmtMinor(stats.gross_revenue_minor)} gross` : undefined}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm" onClick={() => exportCsv(items)}>
+          <button className="btn sm" onClick={() => exportCsv(items, fmtMinor)}>
             <Icon name="download" size={13} />Export
           </button>
           <button className="btn sm" onClick={() => setShowMapModal(true)}>
@@ -473,7 +473,7 @@ export default function RoadBookingsPage() {
 
             <div style={{ flex: 1 }} />
 
-            <button className="btn sm ghost">
+            <button className="btn sm ghost" disabled title="Saved views coming soon">
               <Icon name="filter" size={13} />
               Saved view <Icon name="chevDown" size={11} />
             </button>
@@ -498,10 +498,25 @@ export default function RoadBookingsPage() {
               <button className="btn sm ghost" onClick={() => exportCsv(items.filter(b => selectedIds.includes(b.id)), fmtMinor)}>
                 <Icon name="download" size={12} />Export selection
               </button>
-              <button className="btn sm ghost">
+              <button
+                className="btn sm ghost"
+                onClick={() => navigate(`/notifications/templates?customer_ids=${selectedIds.join(',')}`)}
+                title="Go to Notifications to send a broadcast to these customers"
+              >
                 <Icon name="envelope" size={12} />Message customers
               </button>
-              <button className="btn sm ghost">
+              <button
+                className="btn sm ghost"
+                onClick={async () => {
+                  try {
+                    await Promise.all(selectedIds.map(id =>
+                      bookingsService.flagBooking(id, { flagged: true, flag_reason: 'Bulk flagged by admin' })
+                    ))
+                    await loadData(page)
+                    setSelectedIds([])
+                  } catch { /* ignore */ }
+                }}
+              >
                 <Icon name="flag" size={12} />Flag
               </button>
               <div style={{ flex: 1 }} />
