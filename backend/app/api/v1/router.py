@@ -31,6 +31,9 @@ from app.api.v1.endpoints.operator_users import router as operator_users_router
 from app.api.v1.endpoints.operator_profile import router as operator_profile_router
 from app.api.v1.endpoints.operator_dashboard import router as operator_dashboard_router
 from app.api.v1.endpoints.operator_roles import router as operator_roles_router
+from app.api.v1.endpoints.operator_aircraft import router as operator_aircraft_router
+from app.api.v1.endpoints.operator_crew import router as operator_crew_router
+from app.api.v1.endpoints.operator_routes import router as operator_routes_router
 
 api_router = APIRouter()
 
@@ -71,3 +74,6 @@ api_router.include_router(operator_users_router,     prefix="/operator/users",  
 api_router.include_router(operator_profile_router,   prefix="/operator",           tags=["Operator Profile"])
 api_router.include_router(operator_dashboard_router, prefix="/operator",           tags=["Operator Dashboard"])
 api_router.include_router(operator_roles_router,     prefix="/operator",           tags=["Operator Roles"])
+api_router.include_router(operator_aircraft_router,  prefix="/operator",           tags=["Operator Aircraft"])
+api_router.include_router(operator_crew_router,      prefix="/operator",           tags=["Operator Crew"])
+api_router.include_router(operator_routes_router,    prefix="/operator",           tags=["Operator Routes"])

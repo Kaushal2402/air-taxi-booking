@@ -14,6 +14,13 @@ import SecurityPage from './pages/profile/SecurityPage'
 import TeamPage from './pages/team/TeamPage'
 import RolesPage from './pages/team/RolesPage'
 import CompanyProfilePage from './pages/onboarding/CompanyProfilePage'
+import FleetPage from './pages/aircraft/FleetPage'
+import AircraftDetailPage from './pages/aircraft/AircraftDetailPage'
+import CrewRosterPage from './pages/crew/CrewRosterPage'
+import CrewDetailPage from './pages/crew/CrewDetailPage'
+import RoutesPage from './pages/routes/RoutesPage'
+import RouteDetailPage from './pages/routes/RouteDetailPage'
+import WeekSchedulePage from './pages/routes/WeekSchedulePage'
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useOperatorAuthStore(s => s.isAuthenticated)
@@ -43,6 +50,19 @@ function App() {
           <Route path="/team" element={<PrivateRoute><TeamPage /></PrivateRoute>} />
           <Route path="/team/roles" element={<PrivateRoute><RolesPage /></PrivateRoute>} />
           <Route path="/onboarding" element={<PrivateRoute><CompanyProfilePage /></PrivateRoute>} />
+
+          {/* Module 5 — Aircraft & Fleet */}
+          <Route path="/aircraft" element={<PrivateRoute><FleetPage /></PrivateRoute>} />
+          <Route path="/aircraft/:id" element={<PrivateRoute><AircraftDetailPage /></PrivateRoute>} />
+
+          {/* Module 6 — Crew Management */}
+          <Route path="/crew" element={<PrivateRoute><CrewRosterPage /></PrivateRoute>} />
+          <Route path="/crew/:id" element={<PrivateRoute><CrewDetailPage /></PrivateRoute>} />
+
+          {/* Module 7 — Routes & Schedule */}
+          <Route path="/routes" element={<PrivateRoute><RoutesPage /></PrivateRoute>} />
+          <Route path="/routes/schedule" element={<PrivateRoute><WeekSchedulePage /></PrivateRoute>} />
+          <Route path="/routes/:id" element={<PrivateRoute><RouteDetailPage /></PrivateRoute>} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
