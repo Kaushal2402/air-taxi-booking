@@ -1,17 +1,27 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/di/providers.dart';
+import '../data/services/home_service.dart';
 import 'home_models.dart';
 
 // ---------------------------------------------------------------------------
-// All providers return empty/null defaults while backend is PENDING.
-// When backend endpoints are implemented:
-//   1. Inject HomeService via a Provider<HomeService>
-//   2. Replace empty defaults with actual service calls
-//   3. Handle errors with AsyncValue.guard
+// Infrastructure
+// ---------------------------------------------------------------------------
+
+/// Provides the HomeService singleton, wired to the shared API client.
+final homeServiceProvider = Provider<HomeService>((ref) {
+  final client = ref.read(utbpApiClientProvider);
+  return HomeService(client: client);
+});
+
+// ---------------------------------------------------------------------------
+// NOTE: All endpoints under /api/v1/app/home/, /api/v1/app/trips/,
+// /api/v1/app/promotions/, and /api/v1/app/notifications/ are PENDING
+// backend implementation.  Every provider catches UnimplementedError and
+// returns an empty/null default so screens always show empty states.
 // ---------------------------------------------------------------------------
 
 /// Provides the list of service type filter chips (Helicopter, Charter, etc.)
-/// Falls back to empty list if endpoint is unavailable.
 final serviceTypesProvider =
     AsyncNotifierProvider<ServiceTypesNotifier, List<ServiceType>>(
   ServiceTypesNotifier.new,
@@ -20,8 +30,13 @@ final serviceTypesProvider =
 class ServiceTypesNotifier extends AsyncNotifier<List<ServiceType>> {
   @override
   Future<List<ServiceType>> build() async {
-    // PENDING: return homeService.getServiceTypes()
-    return const [];
+    try {
+      return await ref.read(homeServiceProvider).getServiceTypes();
+    } on UnimplementedError {
+      return const [];
+    } catch (_) {
+      return const [];
+    }
   }
 }
 
@@ -32,25 +47,29 @@ final popularRoutesProvider =
 );
 
 class PopularRoutesNotifier extends AsyncNotifier<List<PopularRoute>> {
-  String? _activeFilter;
+  String? _filter;
 
   @override
   Future<List<PopularRoute>> build() async {
-    // PENDING: return homeService.getPopularRoutes(serviceType: _activeFilter)
-    return const [];
+    try {
+      return await ref
+          .read(homeServiceProvider)
+          .getPopularRoutes(serviceType: _filter);
+    } on UnimplementedError {
+      return const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
-  Future<void> filterByServiceType(String? serviceType) async {
-    _activeFilter = serviceType;
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      // PENDING: return homeService.getPopularRoutes(serviceType: serviceType)
-      return const <PopularRoute>[];
-    });
+  /// Re-fetches routes filtered by the given service type.
+  void filterByServiceType(String? type) {
+    _filter = type;
+    ref.invalidateSelf();
   }
 }
 
-/// Provides the single active/upcoming trip for the bottom-of-hero card.
+/// Provides the single active/upcoming trip.
 /// null means no active trip (show empty state).
 final activeTripProvider =
     AsyncNotifierProvider<ActiveTripNotifier, ActiveTrip?>(
@@ -60,15 +79,23 @@ final activeTripProvider =
 class ActiveTripNotifier extends AsyncNotifier<ActiveTrip?> {
   @override
   Future<ActiveTrip?> build() async {
-    // PENDING: return homeService.getActiveTrip()
-    return null;
+    try {
+      return await ref.read(homeServiceProvider).getActiveTrip();
+    } on UnimplementedError {
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      // PENDING: return homeService.getActiveTrip()
-      return null;
+      try {
+        return await ref.read(homeServiceProvider).getActiveTrip();
+      } on UnimplementedError {
+        return null;
+      }
     });
   }
 }
@@ -82,15 +109,23 @@ final promotionsProvider =
 class PromotionsNotifier extends AsyncNotifier<List<Promotion>> {
   @override
   Future<List<Promotion>> build() async {
-    // PENDING: return homeService.getPromotions()
-    return const [];
+    try {
+      return await ref.read(homeServiceProvider).getPromotions();
+    } on UnimplementedError {
+      return const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      // PENDING: return homeService.getPromotions()
-      return const <Promotion>[];
+      try {
+        return await ref.read(homeServiceProvider).getPromotions();
+      } on UnimplementedError {
+        return const <Promotion>[];
+      }
     });
   }
 }
@@ -109,20 +144,34 @@ class NotificationsNotifier extends AsyncNotifier<List<AppNotification>> {
   Future<List<AppNotification>> build() async {
     _page = 1;
     _hasMore = true;
-    // PENDING: return homeService.getNotifications(page: 1)
-    return const [];
+    try {
+      return await ref
+          .read(homeServiceProvider)
+          .getNotifications(page: 1);
+    } on UnimplementedError {
+      return const [];
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> loadMore() async {
     if (!_hasMore) return;
     final current = state.valueOrNull ?? [];
-    // PENDING: fetch next page and append
-    _hasMore = false; // set to false until backend wired
+    // Backend PENDING: fetch next page and append
+    _hasMore = false;
     state = AsyncValue.data(current);
   }
 
   Future<void> markAllRead() async {
-    // PENDING: homeService.markAllNotificationsRead()
+    // Optimistic local update — backend PATCH is also called when available.
+    try {
+      await ref.read(homeServiceProvider).markAllNotificationsRead();
+    } on UnimplementedError {
+      // Backend pending — continue with optimistic update.
+    } catch (_) {
+      // Best-effort.
+    }
     final current = state.valueOrNull ?? [];
     final updated = current.map((n) => n.copyWith(isRead: true)).toList();
     state = AsyncValue.data(updated);
