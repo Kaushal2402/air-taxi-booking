@@ -1,6 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:utbp_api_client/utbp_api_client.dart';
 
+import '../data/services/auth_service.dart';
 import 'auth_models.dart';
+
+// ---------------------------------------------------------------------------
+// Infrastructure providers
+// ---------------------------------------------------------------------------
+
+final utbpApiClientProvider = Provider<UtbpApiClient>((ref) {
+  return UtbpApiClient(
+    baseUrl: const String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'http://localhost:8000',
+    ),
+  );
+});
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService(client: ref.read(utbpApiClientProvider));
+});
 
 // ---------------------------------------------------------------------------
 // AuthNotifier
@@ -14,9 +33,20 @@ import 'auth_models.dart';
 class AuthNotifier extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
-    // TODO: read token from secure storage; if valid call GET /me
-    // For now, always start as guest until backend endpoints are ready.
-    return AuthState.guest;
+    // Check for stored token to restore session.
+    final client = ref.read(utbpApiClientProvider);
+    final token = await client.getToken();
+    if (token == null) return AuthState.guest;
+
+    // Token exists — try to fetch current profile.
+    try {
+      final service = ref.read(authServiceProvider);
+      final profile = await service.getMe();
+      return AuthState(isAuthenticated: true, profile: profile);
+    } catch (_) {
+      // Backend not yet available — treat as guest.
+      return AuthState.guest;
+    }
   }
 
   /// Sign in with email + password.
@@ -26,13 +56,22 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String password,
   }) async {
     state = const AsyncValue.loading();
-    // TODO: call authService.loginWithEmail(email, password)
-    // For now return guest — presentation layer handles UnimplementedError
-    state = const AsyncValue.data(AuthState.guest);
+    state = await AsyncValue.guard(() async {
+      final service = ref.read(authServiceProvider);
+      final data = await service.loginWithEmail(email, password);
+      final profile = CustomerProfile.fromJson(
+        data['profile'] as Map<String, dynamic>,
+      );
+      await ref.read(utbpApiClientProvider).saveTokens(
+        access: data['access_token'] as String,
+        refresh: data['refresh_token'] as String,
+      );
+      return AuthState(isAuthenticated: true, profile: profile);
+    });
   }
 
   /// Register with name + phone + optional email/password.
-  /// On success: saves tokens, updates state to authenticated.
+  /// On success: saves tokens, OTP sent to phone — returns guest state.
   Future<void> signUp({
     required String name,
     required String phone,
@@ -40,8 +79,17 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     String? password,
   }) async {
     state = const AsyncValue.loading();
-    // TODO: call authService.register(...)
-    state = const AsyncValue.data(AuthState.guest);
+    state = await AsyncValue.guard(() async {
+      final service = ref.read(authServiceProvider);
+      await service.register(
+        name: name,
+        phone: phone,
+        email: email,
+        password: password,
+      );
+      // After register, OTP is sent to phone — stay as guest until verified.
+      return AuthState.guest;
+    });
   }
 
   /// Verify OTP for phone-based login/registration.
@@ -51,9 +99,21 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     required String otp,
   }) async {
     state = const AsyncValue.loading();
-    // TODO: call authService.verifyOtp(phone, otp)
-    state = const AsyncValue.data(AuthState.guest);
-    return false; // false = existing user, true = new user needing profile setup
+    bool isNewUser = false;
+    state = await AsyncValue.guard(() async {
+      final service = ref.read(authServiceProvider);
+      final data = await service.verifyOtp(phone, otp);
+      isNewUser = data['is_new_user'] as bool? ?? false;
+      final profile = CustomerProfile.fromJson(
+        data['profile'] as Map<String, dynamic>,
+      );
+      await ref.read(utbpApiClientProvider).saveTokens(
+        access: data['access_token'] as String,
+        refresh: data['refresh_token'] as String,
+      );
+      return AuthState(isAuthenticated: true, profile: profile);
+    });
+    return isNewUser;
   }
 
   /// Completes profile setup (step 3 of onboarding).
@@ -63,20 +123,32 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     bool notificationsEnabled = true,
   }) async {
     state = const AsyncValue.loading();
-    // TODO: call authService.updateMe({display_name, home_city, notifications_enabled})
-    state = const AsyncValue.data(AuthState.guest);
+    state = await AsyncValue.guard(() async {
+      final service = ref.read(authServiceProvider);
+      final updated = await service.updateMe({
+        'name': displayName,
+        if (homeCity != null) 'home_city': homeCity,
+        'notifications_enabled': notificationsEnabled,
+      });
+      return AuthState(isAuthenticated: true, profile: updated);
+    });
   }
 
   /// Sends a password reset email.
   Future<void> forgotPassword(String email) async {
-    // TODO: call authService.forgotPassword(email)
-    throw UnimplementedError('forgotPassword: backend endpoint pending.');
+    final service = ref.read(authServiceProvider);
+    await service.forgotPassword(email);
   }
 
   /// Signs out: clears tokens, resets all user state.
   Future<void> signOut() async {
     state = const AsyncValue.loading();
-    // TODO: call authService.logout() then client.clearTokens()
+    try {
+      await ref.read(authServiceProvider).logout();
+    } catch (_) {
+      // Best-effort — continue sign-out even if backend call fails.
+    }
+    await ref.read(utbpApiClientProvider).clearTokens();
     // IMPORTANT: when backend is wired, also reset every other provider
     // that holds user data (home, trips, wallet, profile, notifications).
     state = const AsyncValue.data(AuthState.guest);
@@ -86,7 +158,15 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<void> refreshProfile() async {
     final current = state.valueOrNull;
     if (current == null || !current.isAuthenticated) return;
-    // TODO: call authService.getMe() and update state
+    try {
+      final service = ref.read(authServiceProvider);
+      final profile = await service.getMe();
+      state = AsyncValue.data(
+        current.copyWith(profile: profile),
+      );
+    } catch (_) {
+      // Silently ignore — keep existing state on failure.
+    }
   }
 }
 
