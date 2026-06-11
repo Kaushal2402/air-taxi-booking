@@ -43,6 +43,9 @@ from app.models.report import ReportTemplate, ReportSchedule, ReportExport
 from app.models.branding import BrandProfile, BrandAsset, BrandTouchpoint
 from app.models.rbac import Role, PermissionCatalog, RolePermission
 from app.models.notifications import NotificationTemplate, NotificationLog, NotificationBroadcast
+from app.models.operator_aircraft import OperatorAircraft, AircraftDocument, AircraftMaintenanceWindow
+from app.models.operator_crew import OperatorCrewMember, CrewDocument, CrewTypeRating
+from app.models.operator_routes import OperatorRoute, OperatorSchedule
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -73,4 +76,7 @@ __all__ = [
     "BrandProfile", "BrandAsset", "BrandTouchpoint",
     "Role", "PermissionCatalog", "RolePermission",
     "NotificationTemplate", "NotificationLog", "NotificationBroadcast",
+    "OperatorAircraft", "AircraftDocument", "AircraftMaintenanceWindow",
+    "OperatorCrewMember", "CrewDocument", "CrewTypeRating",
+    "OperatorRoute", "OperatorSchedule",
 ]
