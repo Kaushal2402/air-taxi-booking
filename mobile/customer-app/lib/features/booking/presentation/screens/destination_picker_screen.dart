@@ -51,31 +51,25 @@ class _DestinationPickerScreenState
   }) async {
     final draft = ref.read(bookingFlowProvider);
 
-    // Guard: origin must be set before picking a destination.
-    if (draft.originCode == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select your origin helipad first'),
-        ),
-      );
-      return;
-    }
-
-    final originCode = draft.originCode!;
+    // Origin is guaranteed non-null: OriginPickerScreen (the previous step)
+    // always sets originCode before navigating here.
+    final originCode = draft.originCode!; // invariant: set by OriginPickerScreen
     final originName = draft.originName ?? originCode;
 
-    // Resolve the real routeId from the backend.
+    // Resolve the real routeId and category from the backend.
     String? routeId;
+    String? routeCategory;
     try {
       final routes = await ref
           .read(bookingServiceProvider)
           .getAirRoutes(originCode: originCode, destinationCode: code);
       if (routes.isNotEmpty) {
         routeId = routes.first.id;
+        routeCategory = routes.first.category;
       }
     } on UnimplementedError {
-      // Backend not yet live — routeId will remain null.
-      // The provider will surface this gracefully when flights are fetched.
+      // Backend not yet live — routeId and routeCategory will remain null.
+      // Providers surface this gracefully when flights are fetched.
     } catch (_) {
       // Network error — proceed without routeId; retry on next screen.
     }
@@ -89,6 +83,7 @@ class _DestinationPickerScreenState
           destinationCode: code,
           destinationName: city,
           routeId: routeId ?? '',
+          routeCategory: routeCategory,
         );
     context.push(AppRoutes.bookingDateTime);
   }

@@ -48,6 +48,7 @@ class _BookingSummaryScreenState
         : DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     ref.read(fareEstimateProvider.notifier).fetch(
+          service: draft.routeCategory ?? 'helicopter_shuttle',
           routeId: draft.routeId!,
           flightId: draft.selectedFlightId,
           date: date,

@@ -122,6 +122,7 @@ class _PassengerDetailsScreenState
           ? DateFormat('yyyy-MM-dd').format(updatedDraft.selectedDate!)
           : DateFormat('yyyy-MM-dd').format(DateTime.now());
       ref.read(fareEstimateProvider.notifier).fetch(
+            service: updatedDraft.routeCategory ?? 'helicopter_shuttle',
             routeId: updatedDraft.routeId!,
             flightId: updatedDraft.selectedFlightId,
             date: date,
