@@ -813,10 +813,10 @@ async def send_2fa_email_code(db: AsyncSession, two_fa_token: str) -> None:
     )
     db.add(otp)
     await db.commit()
+    from app.providers import get_email_provider
+    from app.providers.base.email import EmailMessage
+    email_provider = get_email_provider()
     try:
-        from app.providers import get_email_provider
-        from app.providers.base.email import EmailMessage
-        email_provider = get_email_provider()
         await email_provider.send(EmailMessage(
             to=[user.email],
             subject=f"Your {settings.APP_NAME} sign-in code: {raw_code}",
@@ -826,8 +826,11 @@ async def send_2fa_email_code(db: AsyncSession, two_fa_token: str) -> None:
                 f"<p>This code expires in <strong>10 minutes</strong>.</p>"
             ),
         ))
-    except Exception:
-        pass
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to send verification email. Please try again.",
+        ) from exc
 
 
 async def verify_2fa_email_code(

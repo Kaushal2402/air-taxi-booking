@@ -169,7 +169,7 @@ export default function RolesPage() {
 
   return (
     <Shell
-      activeId="team"
+      activeId="roles"
       breadcrumb="Team / Roles"
       title="Roles & Permissions"
       subtitle="Manage intra-org roles for your team"

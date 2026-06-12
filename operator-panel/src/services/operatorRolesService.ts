@@ -22,17 +22,17 @@ export interface OperatorRoleUpdate {
 
 export const operatorRolesService = {
   listRoles: (): Promise<OperatorRole[]> =>
-    api.get<OperatorRole[]>('/roles').then(r => r.data),
+    api.get<OperatorRole[]>('/operator/roles').then(r => r.data),
 
   createRole: (body: OperatorRoleCreate): Promise<OperatorRole> =>
-    api.post<OperatorRole>('/roles', body).then(r => r.data),
+    api.post<OperatorRole>('/operator/roles', body).then(r => r.data),
 
   updateRole: (id: string, body: OperatorRoleUpdate): Promise<OperatorRole> =>
-    api.patch<OperatorRole>(`/roles/${id}`, body).then(r => r.data),
+    api.patch<OperatorRole>(`/operator/roles/${id}`, body).then(r => r.data),
 
   assignRole: (userId: string, roleId: string): Promise<unknown> =>
-    api.post(`/users/${userId}/assign-role`, { role_id: roleId }).then(r => r.data),
+    api.post(`/operator/users/${userId}/assign-role`, { role_id: roleId }).then(r => r.data),
 
   listPermissions: (): Promise<{ permissions: string[] }> =>
-    api.get<{ permissions: string[] }>('/roles/permissions').then(r => r.data),
+    api.get<{ permissions: string[] }>('/operator/roles/permissions').then(r => r.data),
 }
