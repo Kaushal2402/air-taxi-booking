@@ -21,6 +21,13 @@ import CrewDetailPage from './pages/crew/CrewDetailPage'
 import RoutesPage from './pages/routes/RoutesPage'
 import RouteDetailPage from './pages/routes/RouteDetailPage'
 import WeekSchedulePage from './pages/routes/WeekSchedulePage'
+import PricingRulesPage from './pages/pricing/PricingRulesPage'
+import CorporateAgreementsPage from './pages/pricing/CorporateAgreementsPage'
+import QuoteHistoryPage from './pages/pricing/QuoteHistoryPage'
+import RequestsQueuePage from './pages/bookings/RequestsQueuePage'
+import RequestDetailPage from './pages/bookings/RequestDetailPage'
+import AssignmentBoardPage from './pages/dispatch/AssignmentBoardPage'
+import CrewAssignmentPage from './pages/dispatch/CrewAssignmentPage'
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useOperatorAuthStore(s => s.isAuthenticated)
@@ -63,6 +70,19 @@ function App() {
           <Route path="/routes" element={<PrivateRoute><RoutesPage /></PrivateRoute>} />
           <Route path="/routes/schedule" element={<PrivateRoute><WeekSchedulePage /></PrivateRoute>} />
           <Route path="/routes/:id" element={<PrivateRoute><RouteDetailPage /></PrivateRoute>} />
+
+          {/* Module 8 — Pricing & Quotes */}
+          <Route path="/pricing" element={<PrivateRoute><PricingRulesPage /></PrivateRoute>} />
+          <Route path="/pricing/corporate" element={<PrivateRoute><CorporateAgreementsPage /></PrivateRoute>} />
+          <Route path="/pricing/quotes" element={<PrivateRoute><QuoteHistoryPage /></PrivateRoute>} />
+
+          {/* Module 9 — Booking Requests & Queue */}
+          <Route path="/bookings" element={<PrivateRoute><RequestsQueuePage /></PrivateRoute>} />
+          <Route path="/bookings/:id" element={<PrivateRoute><RequestDetailPage /></PrivateRoute>} />
+
+          {/* Module 10 — Flight Assignment & Dispatch */}
+          <Route path="/dispatch" element={<PrivateRoute><AssignmentBoardPage /></PrivateRoute>} />
+          <Route path="/dispatch/:id/assign" element={<PrivateRoute><CrewAssignmentPage /></PrivateRoute>} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

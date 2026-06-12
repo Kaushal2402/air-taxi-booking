@@ -1,6 +1,6 @@
 {
   "panel": "operator-panel",
-  "last_updated": "2026-06-11",
+  "last_updated": "2026-06-12",
   "modules": [
     { "id": 0,  "name": "Foundation — Shell, Routes, Auth Store, Axios, Sidebar",       "status": "done", "last_updated": "2026-06-08" },
     { "id": 1,  "name": "Module 1 — Operator Authentication & Identity",                 "status": "done", "last_updated": "2026-06-10", "audit_status": "clean", "deferred": ["background-scheduler-cert-expiry", "sso-integration"] },
@@ -10,9 +10,9 @@
     { "id": 5,  "name": "Module 5 — Aircraft / Fleet Management",                       "status": "done", "last_updated": "2026-06-11", "audit_status": "clean", "branch": "module/2026-06-11-aircraft-fleet" },
     { "id": 6,  "name": "Module 6 — Crew Management (Pilots & Cabin Crew)",             "status": "done", "last_updated": "2026-06-11", "audit_status": "clean", "branch": "module/2026-06-11-aircraft-fleet" },
     { "id": 7,  "name": "Module 7 — Routes & Schedule / Inventory Management",          "status": "done", "last_updated": "2026-06-11", "audit_status": "clean", "branch": "module/2026-06-11-aircraft-fleet" },
-    { "id": 8,  "name": "Module 8 — Operator Pricing & Quotes",                         "status": "pending" },
-    { "id": 9,  "name": "Module 9 — Booking Requests & Queue",                          "status": "pending" },
-    { "id": 10, "name": "Module 10 — Flight Assignment & Dispatch",                     "status": "pending" },
+    { "id": 8,  "name": "Module 8 — Operator Pricing & Quotes",                         "status": "in_progress", "last_updated": "2026-06-12" },
+    { "id": 9,  "name": "Module 9 — Booking Requests & Queue",                          "status": "in_progress", "last_updated": "2026-06-12" },
+    { "id": 10, "name": "Module 10 — Flight Assignment & Dispatch",                     "status": "in_progress", "last_updated": "2026-06-12" },
     { "id": 11, "name": "Module 11 — Passenger Manifest Management",                    "status": "pending" },
     { "id": 12, "name": "Module 12 — Flight Operations & Day-of-Flight Control",        "status": "pending" },
     { "id": 13, "name": "Module 13 — Cancellation & Rescheduling",                     "status": "pending" },
