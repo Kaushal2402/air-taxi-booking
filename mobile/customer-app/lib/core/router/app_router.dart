@@ -18,6 +18,7 @@ import '../../features/home/presentation/screens/route_preview_screen.dart';
 import '../../features/home/presentation/screens/promotions_screen.dart';
 import '../../features/home/presentation/screens/notifications_screen.dart';
 // Module 03 — Booking
+import '../../features/booking/presentation/screens/origin_picker_screen.dart';
 import '../../features/booking/presentation/screens/destination_picker_screen.dart';
 import '../../features/booking/presentation/screens/date_time_screen.dart';
 import '../../features/booking/presentation/screens/passenger_count_screen.dart';
@@ -47,6 +48,8 @@ abstract class AppRoutes {
   static const notifications = '/home/notifications';
 
   // Module 03 — Booking flow
+  /// Entry point of the booking flow — origin helipad selection.
+  static const bookingOrigin = '/booking/origin';
   static const bookingDestination = '/booking/destination';
   static const bookingDateTime = '/booking/date-time';
   static const bookingPassengers = '/booking/passengers';
@@ -178,6 +181,10 @@ GoRouter buildAppRouter(AuthStateNotifier authNotifier) {
 
       // ── Module 03 — Booking flow ──────────────────────────────────────────
 
+      GoRoute(
+        path: AppRoutes.bookingOrigin,
+        builder: (context, state) => const OriginPickerScreen(),
+      ),
       GoRoute(
         path: AppRoutes.bookingDestination,
         builder: (context, state) => const DestinationPickerScreen(),

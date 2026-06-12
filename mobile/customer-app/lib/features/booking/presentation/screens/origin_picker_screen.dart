@@ -1,5 +1,12 @@
-// 3.1 — Destination Picker Screen
-// Forest gradient header, search input (auto-focused), recent + popular lists.
+// 3.0 — Origin Picker Screen
+// First step of the booking flow. Sets BookingDraft.originCode/originName
+// then navigates to DestinationPickerScreen.
+//
+// Mirrors the structure of destination_picker_screen.dart:
+//   - Forest gradient header
+//   - Search input (auto-focused)
+//   - Recent destinations list (reuses recentDestinationsProvider)
+//   - Popular destinations list (reuses popularDestinationsProvider)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,18 +16,14 @@ import '../../../../core/router/app_router.dart';
 import '../../data/models/booking_models.dart';
 import '../../domain/providers/booking_providers.dart';
 
-// ignore_for_file: use_build_context_synchronously
-
-class DestinationPickerScreen extends ConsumerStatefulWidget {
-  const DestinationPickerScreen({super.key});
+class OriginPickerScreen extends ConsumerStatefulWidget {
+  const OriginPickerScreen({super.key});
 
   @override
-  ConsumerState<DestinationPickerScreen> createState() =>
-      _DestinationPickerScreenState();
+  ConsumerState<OriginPickerScreen> createState() => _OriginPickerScreenState();
 }
 
-class _DestinationPickerScreenState
-    extends ConsumerState<DestinationPickerScreen> {
+class _OriginPickerScreenState extends ConsumerState<OriginPickerScreen> {
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
   String _query = '';
@@ -44,48 +47,16 @@ class _DestinationPickerScreenState
     super.dispose();
   }
 
-  Future<void> _onDestinationSelected({
+  void _onOriginSelected({
     required String city,
     required String code,
     required String padName,
-  }) async {
-    final draft = ref.read(bookingFlowProvider);
-
-    // Origin is guaranteed non-null: OriginPickerScreen (the previous step)
-    // always sets originCode before navigating here.
-    final originCode = draft.originCode!; // invariant: set by OriginPickerScreen
-    final originName = draft.originName ?? originCode;
-
-    // Resolve the real routeId and category from the backend.
-    String? routeId;
-    String? routeCategory;
-    try {
-      final routes = await ref
-          .read(bookingServiceProvider)
-          .getAirRoutes(originCode: originCode, destinationCode: code);
-      if (routes.isNotEmpty) {
-        routeId = routes.first.id;
-        routeCategory = routes.first.category;
-      }
-    } on UnimplementedError {
-      // Backend not yet live — routeId and routeCategory will remain null.
-      // Providers surface this gracefully when flights are fetched.
-    } catch (_) {
-      // Network error — proceed without routeId; retry on next screen.
-    }
-
-    // Clear any stale flight selection from a previous destination choice.
-    ref.read(bookingFlowProvider.notifier).clearFlight();
-
-    ref.read(bookingFlowProvider.notifier).setDestination(
-          originCode: originCode,
-          originName: originName,
-          destinationCode: code,
-          destinationName: city,
-          routeId: routeId ?? '',
-          routeCategory: routeCategory,
+  }) {
+    ref.read(bookingFlowProvider.notifier).setOrigin(
+          originCode: code,
+          originName: city,
         );
-    context.push(AppRoutes.bookingDateTime);
+    context.push(AppRoutes.bookingDestination);
   }
 
   List<RecentDestination> _filterRecents(List<RecentDestination> list) {
@@ -113,8 +84,6 @@ class _DestinationPickerScreenState
     final theme = Theme.of(context);
     final recentsAsync = ref.watch(recentDestinationsProvider);
     final popularAsync = ref.watch(popularDestinationsProvider);
-    final draft = ref.watch(bookingFlowProvider);
-    final originCode = draft.originCode ?? '???';
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -122,7 +91,7 @@ class _DestinationPickerScreenState
         onTap: () => FocusScope.of(context).unfocus(),
         child: Column(
           children: [
-            _ForestHeader(cs: cs, theme: theme, originCode: originCode),
+            _OriginHeader(cs: cs, theme: theme),
             _SearchInput(
               controller: _searchController,
               focusNode: _searchFocus,
@@ -137,7 +106,7 @@ class _DestinationPickerScreenState
                     loading: () => _ShimmerList(cs: cs, count: 3),
                     error: (e, _) => _ErrorRow(
                       cs: cs,
-                      message: 'Could not load recent destinations',
+                      message: 'Could not load recent helipads',
                       onRetry: () =>
                           ref.invalidate(recentDestinationsProvider),
                     ),
@@ -148,7 +117,7 @@ class _DestinationPickerScreenState
                           cs: cs,
                           icon: Icons.history_rounded,
                           message: _query.isEmpty
-                              ? 'No recent destinations'
+                              ? 'No recent helipads'
                               : 'No matches for "$_query"',
                         );
                       }
@@ -158,7 +127,7 @@ class _DestinationPickerScreenState
                                   recent: r,
                                   cs: cs,
                                   theme: theme,
-                                  onTap: () => _onDestinationSelected(
+                                  onTap: () => _onOriginSelected(
                                     city: r.city,
                                     code: r.code,
                                     padName: r.padName,
@@ -168,12 +137,12 @@ class _DestinationPickerScreenState
                       );
                     },
                   ),
-                  _SectionHeader(label: 'Popular destinations', cs: cs),
+                  _SectionHeader(label: 'Popular departure helipads', cs: cs),
                   popularAsync.when(
                     loading: () => _ShimmerList(cs: cs, count: 5),
                     error: (e, _) => _ErrorRow(
                       cs: cs,
-                      message: 'Could not load popular destinations',
+                      message: 'Could not load popular helipads',
                       onRetry: () =>
                           ref.invalidate(popularDestinationsProvider),
                     ),
@@ -182,9 +151,9 @@ class _DestinationPickerScreenState
                       if (filtered.isEmpty) {
                         return _EmptyRow(
                           cs: cs,
-                          icon: Icons.travel_explore_rounded,
+                          icon: Icons.flight_takeoff_rounded,
                           message: _query.isEmpty
-                              ? 'No destinations available'
+                              ? 'No helipads available'
                               : 'No matches for "$_query"',
                           onRetry: () =>
                               ref.invalidate(popularDestinationsProvider),
@@ -196,7 +165,7 @@ class _DestinationPickerScreenState
                                   popular: p,
                                   cs: cs,
                                   theme: theme,
-                                  onTap: () => _onDestinationSelected(
+                                  onTap: () => _onOriginSelected(
                                     city: p.city,
                                     code: p.code,
                                     padName: p.city,
@@ -217,18 +186,13 @@ class _DestinationPickerScreenState
   }
 }
 
-// ── Forest gradient header ────────────────────────────────────────────────────
+// ── Header ────────────────────────────────────────────────────────────────────
 
-class _ForestHeader extends StatelessWidget {
-  const _ForestHeader({
-    required this.cs,
-    required this.theme,
-    required this.originCode,
-  });
+class _OriginHeader extends StatelessWidget {
+  const _OriginHeader({required this.cs, required this.theme});
 
   final ColorScheme cs;
   final ThemeData theme;
-  final String originCode;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +234,7 @@ class _ForestHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$originCode → ?',
+                    '? → destination',
                     style: TextStyle(
                       fontFamily: 'IBMPlexMono',
                       fontSize: 10.5,
@@ -293,7 +257,7 @@ class _ForestHeader extends StatelessWidget {
                           ),
                         ),
                         TextSpan(
-                          text: 'to?',
+                          text: 'from?',
                           style: theme.textTheme.displaySmall?.copyWith(
                             fontSize: 30,
                             fontWeight: FontWeight.w300,
@@ -358,7 +322,7 @@ class _SearchInput extends StatelessWidget {
                 autofocus: true,
                 decoration: InputDecoration(
                   border: InputBorder.none,
-                  hintText: 'Search destinations...',
+                  hintText: 'Search departure helipads...',
                   hintStyle: TextStyle(
                     fontSize: 16,
                     color: cs.onSurface.withOpacity(0.38),
@@ -406,7 +370,7 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-// ── Recent destination item ───────────────────────────────────────────────────
+// ── Recent helipad item ───────────────────────────────────────────────────────
 
 class _RecentItem extends StatelessWidget {
   const _RecentItem({
@@ -489,7 +453,7 @@ class _RecentItem extends StatelessWidget {
   }
 }
 
-// ── Popular destination item ──────────────────────────────────────────────────
+// ── Popular helipad item ──────────────────────────────────────────────────────
 
 class _PopularItem extends StatelessWidget {
   const _PopularItem({
@@ -520,7 +484,7 @@ class _PopularItem extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.location_on_rounded,
+                Icons.flight_takeoff_rounded,
                 size: 17,
                 color: cs.primary,
               ),
@@ -614,8 +578,7 @@ class _ShimmerList extends StatelessWidget {
                       width: 80,
                       height: 12,
                       decoration: BoxDecoration(
-                        color:
-                            cs.surfaceContainerHighest.withOpacity(0.5),
+                        color: cs.surfaceContainerHighest.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),

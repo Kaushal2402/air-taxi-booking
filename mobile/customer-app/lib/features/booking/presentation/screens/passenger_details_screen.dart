@@ -29,6 +29,7 @@ class _PassengerDetailsScreenState
   late final List<TextEditingController> _nameCtrl;
   late final List<TextEditingController> _dobCtrl;
   late final List<TextEditingController> _idCtrl;
+  late final List<String?> _idTypeValues;
 
   bool _p1PreFilled = false;
 
@@ -38,6 +39,7 @@ class _PassengerDetailsScreenState
     _nameCtrl = List.generate(_maxPax, (_) => TextEditingController());
     _dobCtrl = List.generate(_maxPax, (_) => TextEditingController());
     _idCtrl = List.generate(_maxPax, (_) => TextEditingController());
+    _idTypeValues = List.filled(_maxPax, null, growable: false);
 
     // Pre-populate from draft if passengers already set
     final draft = ref.read(bookingFlowProvider);
@@ -45,6 +47,7 @@ class _PassengerDetailsScreenState
       _nameCtrl[i].text = draft.passengers[i].fullName;
       _dobCtrl[i].text = draft.passengers[i].dateOfBirth ?? '';
       _idCtrl[i].text = draft.passengers[i].idNumber ?? '';
+      _idTypeValues[i] = draft.passengers[i].idType;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -103,6 +106,7 @@ class _PassengerDetailsScreenState
               dateOfBirth: _dobCtrl[i].text.trim().isNotEmpty
                   ? _dobCtrl[i].text.trim()
                   : null,
+              idType: _idTypeValues[i],
               idNumber: _idCtrl[i].text.trim().isNotEmpty
                   ? _idCtrl[i].text.trim()
                   : null,
@@ -118,6 +122,7 @@ class _PassengerDetailsScreenState
           ? DateFormat('yyyy-MM-dd').format(updatedDraft.selectedDate!)
           : DateFormat('yyyy-MM-dd').format(DateTime.now());
       ref.read(fareEstimateProvider.notifier).fetch(
+            service: updatedDraft.routeCategory ?? 'helicopter_shuttle',
             routeId: updatedDraft.routeId!,
             flightId: updatedDraft.selectedFlightId,
             date: date,
@@ -168,6 +173,9 @@ class _PassengerDetailsScreenState
                             nameController: _nameCtrl[idx],
                             dobController: _dobCtrl[idx],
                             idController: _idCtrl[idx],
+                            idTypeValue: _idTypeValues[idx],
+                            onIdTypeChanged: (v) =>
+                                setState(() => _idTypeValues[idx] = v),
                             cs: cs,
                             theme: theme,
                           ),
@@ -200,6 +208,8 @@ class _PassengerCard extends StatelessWidget {
     required this.nameController,
     required this.dobController,
     required this.idController,
+    required this.idTypeValue,
+    required this.onIdTypeChanged,
     required this.cs,
     required this.theme,
   });
@@ -210,6 +220,8 @@ class _PassengerCard extends StatelessWidget {
   final TextEditingController nameController;
   final TextEditingController dobController;
   final TextEditingController idController;
+  final String? idTypeValue;
+  final ValueChanged<String?> onIdTypeChanged;
   final ColorScheme cs;
   final ThemeData theme;
 
@@ -356,6 +368,23 @@ class _PassengerCard extends StatelessWidget {
                   placeholder: 'DD MMM YYYY',
                   prefixIcon: Icons.calendar_today_rounded,
                   keyboardType: TextInputType.datetime,
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'ID Type',
+                  ),
+                  value: idTypeValue,
+                  items: ['aadhar', 'passport', 'pan']
+                      .map(
+                        (t) => DropdownMenuItem(
+                          value: t,
+                          child: Text(t.toUpperCase()),
+                        ),
+                      )
+                      .toList(),
+                  validator: (v) => v == null ? 'Select ID type' : null,
+                  onChanged: onIdTypeChanged,
                 ),
                 const SizedBox(height: 10),
                 BookingInputField(

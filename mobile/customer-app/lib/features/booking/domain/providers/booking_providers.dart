@@ -127,7 +127,11 @@ class FareEstimateNotifier extends AsyncNotifier<FareEstimate?> {
   @override
   Future<FareEstimate?> build() async => null;
 
+  /// [service] must be derived from BookingDraft.routeCategory (which mirrors
+  /// AirRoute.category).  Pass `draft.routeCategory ?? 'helicopter_shuttle'`
+  /// at every call site.
   Future<void> fetch({
+    required String service,
     required String routeId,
     String? flightId,
     required String date,
@@ -140,6 +144,7 @@ class FareEstimateNotifier extends AsyncNotifier<FareEstimate?> {
     state = await AsyncValue.guard(() async {
       try {
         return await ref.read(bookingServiceProvider).getFareEstimate(
+              service: service,
               routeId: routeId,
               flightId: flightId,
               date: date,
@@ -192,13 +197,25 @@ class BookingFlowNotifier extends Notifier<BookingDraft> {
   @override
   BookingDraft build() => const BookingDraft();
 
-  // 3.1 — destination selected
+  // 3.0 — origin selected (OriginPickerScreen, the first step)
+  void setOrigin({
+    required String originCode,
+    required String originName,
+  }) {
+    state = state.copyWith(
+      originCode: originCode,
+      originName: originName,
+    );
+  }
+
+  // 3.1 — destination selected; also stores the resolved route category.
   void setDestination({
     required String originCode,
     required String originName,
     required String destinationCode,
     required String destinationName,
     required String routeId,
+    String? routeCategory,
   }) {
     state = state.copyWith(
       originCode: originCode,
@@ -206,7 +223,15 @@ class BookingFlowNotifier extends Notifier<BookingDraft> {
       destinationCode: destinationCode,
       destinationName: destinationName,
       routeId: routeId,
+      routeCategory: routeCategory,
     );
+  }
+
+  /// Called after route resolution to persist the AirRoute.category onto the
+  /// draft.  This value drives both service_subtype (booking) and the `service`
+  /// field (fare estimate).
+  void setRouteCategory(String category) {
+    state = state.copyWith(routeCategory: category);
   }
 
   // 3.2 — date + time slot selected
@@ -280,6 +305,7 @@ class BookingFlowNotifier extends Notifier<BookingDraft> {
       destinationCode: current.destinationCode,
       destinationName: current.destinationName,
       routeId: current.routeId,
+      routeCategory: current.routeCategory,
       selectedDate: current.selectedDate,
       adultCount: current.adultCount,
       childCount: current.childCount,
@@ -302,6 +328,7 @@ class BookingFlowNotifier extends Notifier<BookingDraft> {
       destinationCode: current.destinationCode,
       destinationName: current.destinationName,
       routeId: current.routeId,
+      routeCategory: current.routeCategory,
       selectedDate: current.selectedDate,
       selectedFlightId: current.selectedFlightId,
       selectedFlight: current.selectedFlight,
@@ -362,14 +389,25 @@ class CreateBookingNotifier extends AsyncNotifier<AirBookingCreated?> {
 
   void reset() => state = const AsyncValue.data(null);
 
+  /// Derives service_subtype from the route's category field, which is stored
+  /// on BookingDraft.routeCategory after route resolution.  Falls back to
+  /// 'helicopter_shuttle' when no route has been resolved yet (stub mode).
+  ///
+  /// Mapping: AirRoute.category → service_subtype sent to POST /air/bookings
+  ///   "shuttle"    → "helicopter_shuttle"
+  ///   "on_demand"  → "helicopter_on_demand"
+  ///   anything else (e.g. "charter", "vip") → passed through as-is
   String _resolveSubtype(BookingDraft draft) {
-    switch (draft.fareClass) {
-      case FareClass.charter:
-        return 'charter';
-      case FareClass.business:
-        return 'helicopter_on_demand';
-      case FareClass.standard:
+    final category = draft.routeCategory;
+    if (category == null) return 'helicopter_shuttle';
+    switch (category) {
+      case 'shuttle':
         return 'helicopter_shuttle';
+      case 'on_demand':
+        return 'helicopter_on_demand';
+      default:
+        // charter, vip, or any future category: pass through directly.
+        return category;
     }
   }
 }

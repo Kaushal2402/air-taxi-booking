@@ -92,7 +92,12 @@ class BookingService {
   /// }
   /// Returns: FareEstimate — includes estimate_ref token.
   /// Auth: public; customer JWT gives loyalty discount if present.
+  ///
+  /// [service] is derived from the route's category field (AirRoute.category)
+  /// stored as BookingDraft.routeCategory — it must NOT be inferred from the
+  /// fare class.
   Future<FareEstimate> getFareEstimate({
+    required String service,
     required String routeId,
     String? flightId,
     required String date,
