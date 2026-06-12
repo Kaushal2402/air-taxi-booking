@@ -19,14 +19,28 @@ export interface OperatorUserOut {
   name: string
   email: string
   phone: string | null
+  phone_verified: boolean
   operator_role: string
   role: string
   status: string
   twofa_enabled: boolean
+  twofa_enrolled_at: string | null
   two_factor_enabled: boolean
   operator_id: string
   operator_name: string | null
   avatar_url: string | null
+  password_changed_at: string | null
+  timezone: string
+  language: string
+  date_format: string
+  time_format: string
+}
+
+export interface NotifPref {
+  alert_type: string
+  email: boolean
+  push: boolean
+  sms: boolean
 }
 
 export interface LoginResponse {
@@ -53,6 +67,7 @@ export interface OperatorLoginHistory {
   id: string
   ip_address: string | null
   success: boolean
+  event_type: string
   attempted_at: string
 }
 
@@ -97,7 +112,7 @@ export const operatorAuthService = {
   getMe: (): Promise<OperatorUserOut> =>
     api.get<OperatorUserOut>('/auth/me').then((r: AxiosResponse<OperatorUserOut>) => r.data),
 
-  updateMe: (body: { name?: string; phone?: string }): Promise<OperatorUserOut> =>
+  updateMe: (body: { name?: string; phone?: string; timezone?: string; language?: string; date_format?: string; time_format?: string }): Promise<OperatorUserOut> =>
     api
       .patch<OperatorUserOut>('/auth/me', body)
       .then((r: AxiosResponse<OperatorUserOut>) => r.data),
@@ -155,4 +170,25 @@ export const operatorAuthService = {
 
   verify2faEmailCode: (twoFaToken: string, code: string): Promise<LoginResponse> =>
     api.post<LoginResponse>('/auth/2fa/email-code/verify', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
+
+  verifyBackupCode: (twoFaToken: string, code: string): Promise<LoginResponse> =>
+    api.post<LoginResponse>('/auth/2fa/verify-backup', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
+
+  generateBackupCodes: (): Promise<{ codes: string[] }> =>
+    api.post<{ codes: string[] }>('/auth/backup-codes/generate').then((r: AxiosResponse<{ codes: string[] }>) => r.data),
+
+  getBackupCodeStatus: (): Promise<{ total: number; used: number; remaining: number }> =>
+    api.get<{ total: number; used: number; remaining: number }>('/auth/backup-codes/status').then((r: AxiosResponse<{ total: number; used: number; remaining: number }>) => r.data),
+
+  getNotificationPrefs: (): Promise<NotifPref[]> =>
+    api.get<NotifPref[]>('/auth/me/notification-prefs').then((r: AxiosResponse<NotifPref[]>) => r.data),
+
+  updateNotificationPrefs: (body: NotifPref[]): Promise<NotifPref[]> =>
+    api.put<NotifPref[]>('/auth/me/notification-prefs', body).then((r: AxiosResponse<NotifPref[]>) => r.data),
+
+  resetNotificationPrefs: (): Promise<NotifPref[]> =>
+    api.post<NotifPref[]>('/auth/me/notification-prefs/reset').then((r: AxiosResponse<NotifPref[]>) => r.data),
+
+  getPermissions: (): Promise<{ operations: string; fleet_crew: string; finance: string; all_granted: boolean }> =>
+    api.get<{ operations: string; fleet_crew: string; finance: string; all_granted: boolean }>('/auth/me/permissions').then(r => r.data),
 }

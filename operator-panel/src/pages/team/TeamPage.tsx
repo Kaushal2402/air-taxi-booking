@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { fmtDateTime } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorAuthService } from '../../services/operatorAuthService'
@@ -26,13 +27,7 @@ function initials(name: string) {
     .slice(0, 2)
 }
 
-function formatDate(dt: string | null) {
-  if (!dt) return '—'
-  return new Date(dt).toLocaleString(undefined, {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
+const formatDate = fmtDateTime
 
 interface ConfirmState {
   open: boolean

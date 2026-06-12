@@ -59,12 +59,38 @@ async def _count_recent_failures(db: AsyncSession, email: str) -> int:
     return result.scalar_one()
 
 
-async def _log_attempt(db: AsyncSession, email: str, ip_address: str | None, success: bool) -> None:
+async def _log_attempt(
+    db: AsyncSession,
+    email: str,
+    ip_address: str | None,
+    success: bool,
+    event_type: str = "sign_in",
+) -> None:
     attempt = OperatorLoginAttempt(
         id=str(uuid.uuid4()),
         email=email,
         ip_address=ip_address,
         success=success,
+        event_type=event_type if success else (event_type or "sign_in_failed"),
+        attempted_at=_utcnow(),
+    )
+    db.add(attempt)
+    await db.flush()
+
+
+async def _log_event(
+    db: AsyncSession,
+    user: OperatorUser,
+    event_type: str,
+    ip_address: str | None = None,
+) -> None:
+    """Log a non-login security event (2FA enroll, password change, etc.)."""
+    attempt = OperatorLoginAttempt(
+        id=str(uuid.uuid4()),
+        email=user.email,
+        ip_address=ip_address,
+        success=True,
+        event_type=event_type,
         attempted_at=_utcnow(),
     )
     db.add(attempt)
@@ -82,12 +108,19 @@ def _build_user_out(user: OperatorUser, operator_name: str | None) -> OperatorUs
         name=user.name,
         email=user.email,
         phone=user.phone,
+        phone_verified=getattr(user, "phone_verified", False),
         operator_role=user.operator_role,
         status=user.status,
         twofa_enabled=user.twofa_enabled,
+        twofa_enrolled_at=getattr(user, "twofa_enrolled_at", None),
         operator_id=user.operator_id,
         operator_name=operator_name,
         avatar_url=None,
+        password_changed_at=getattr(user, "password_changed_at", None),
+        timezone=getattr(user, "timezone", "Asia/Kolkata"),
+        language=getattr(user, "language", "en"),
+        date_format=getattr(user, "date_format", "DD/MM/YYYY"),
+        time_format=getattr(user, "time_format", "24h"),
     )
 
 
@@ -119,6 +152,7 @@ async def login(
     email: str,
     password: str,
     ip_address: str | None = None,
+    device_info: str | None = None,
 ) -> OperatorTokenResponse:
     failures = await _count_recent_failures(db, email)
     if failures >= _MAX_ATTEMPTS:
@@ -165,7 +199,7 @@ async def login(
     user: OperatorUser | None = result.scalar_one_or_none()
 
     if not user or not _pwd_context.verify(password, user.password_hash):
-        await _log_attempt(db, email, ip_address, success=False)
+        await _log_attempt(db, email, ip_address, success=False, event_type="sign_in_failed")
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
@@ -184,7 +218,7 @@ async def login(
     if user.status == "invited":
         user.status = "active"
 
-    await _log_attempt(db, email, ip_address, success=True)
+    await _log_attempt(db, email, ip_address, success=True, event_type="sign_in")
 
     # 2FA required for this user
     if user.twofa_enabled and user.twofa_secret:
@@ -192,7 +226,10 @@ async def login(
         await db.commit()
         two_fa_token = create_access_token(
             subject=user.id,
-            extra_claims={"kind": "operator_2fa_pending"},
+            extra_claims={
+                "kind": "operator_2fa_pending",
+                "device_info": device_info or "",
+            },
             expires_delta=timedelta(minutes=_2FA_PENDING_EXPIRE_MINUTES),
         )
         return OperatorTokenResponse(
@@ -210,6 +247,7 @@ async def login(
         operator_user_id=user.id,
         refresh_token_hash=_hash_token(raw_refresh),
         ip_address=ip_address,
+        device_info=device_info,
         created_at=_utcnow(),
         expires_at=_utcnow() + timedelta(days=_REFRESH_EXPIRE_DAYS),
     )
@@ -224,10 +262,15 @@ async def verify_2fa_login(
     two_fa_token: str,
     code: str,
     ip_address: str | None = None,
+    device_info: str | None = None,
 ) -> OperatorTokenResponse:
     payload = decode_token(two_fa_token)
     if not payload or payload.get("kind") != "operator_2fa_pending":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA token")
+
+    # Use device_info from token if not explicitly provided (preserves info across 2FA step)
+    if not device_info:
+        device_info = payload.get("device_info") or None
 
     user_id: str | None = payload.get("sub")
     if not user_id:
@@ -241,6 +284,8 @@ async def verify_2fa_login(
 
     totp = pyotp.TOTP(user.twofa_secret)
     if not totp.verify(code, valid_window=1):
+        await _log_attempt(db, user.email, ip_address, success=False, event_type="2fa_failed")
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
 
     raw_refresh = secrets.token_urlsafe(48)
@@ -249,11 +294,13 @@ async def verify_2fa_login(
         operator_user_id=user.id,
         refresh_token_hash=_hash_token(raw_refresh),
         ip_address=ip_address,
+        device_info=device_info,
         created_at=_utcnow(),
         expires_at=_utcnow() + timedelta(days=_REFRESH_EXPIRE_DAYS),
     )
     db.add(session)
     user.last_login_at = _utcnow()
+    await _log_attempt(db, user.email, ip_address, success=True, event_type="2fa_verified")
     await db.commit()
 
     return await _build_token_response(db, user, raw_refresh, session_id=session.id)
@@ -412,6 +459,7 @@ async def change_password(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
 
     user.password_hash = _pwd_context.hash(new_password)
+    user.password_changed_at = _utcnow()
 
     session_result = await db.execute(
         select(OperatorSession).where(
@@ -422,6 +470,7 @@ async def change_password(
     for s in session_result.scalars().all():
         s.revoked_at = _utcnow()
 
+    await _log_event(db, user, "password_changed")
     await db.commit()
 
 
@@ -454,6 +503,8 @@ async def confirm_2fa_enrollment(db: AsyncSession, user: OperatorUser, code: str
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
 
     user.twofa_enabled = True
+    user.twofa_enrolled_at = _utcnow()
+    await _log_event(db, user, "2fa_enrolled")
     await db.commit()
 
 
@@ -467,6 +518,7 @@ async def disable_2fa(db: AsyncSession, user: OperatorUser, code: str) -> None:
 
     user.twofa_enabled = False
     user.twofa_secret = None
+    await _log_event(db, user, "2fa_disabled")
     await db.commit()
 
 
@@ -554,9 +606,9 @@ async def invite_operator_user(
 
 
 async def update_me(db: AsyncSession, user: OperatorUser, changes: dict) -> OperatorUser:
-    allowed = {"name", "phone"}
+    allowed = {"name", "phone", "timezone", "language", "date_format", "time_format"}
     for k, v in changes.items():
-        if k in allowed:
+        if k in allowed and v is not None:
             setattr(user, k, v)
     await db.commit()
     await db.refresh(user)
@@ -817,7 +869,7 @@ async def send_2fa_email_code(db: AsyncSession, two_fa_token: str) -> None:
     from app.providers.base.email import EmailMessage
     email_provider = get_email_provider()
     try:
-        await email_provider.send(EmailMessage(
+        result = await email_provider.send(EmailMessage(
             to=[user.email],
             subject=f"Your {settings.APP_NAME} sign-in code: {raw_code}",
             html_body=(
@@ -831,6 +883,11 @@ async def send_2fa_email_code(db: AsyncSession, two_fa_token: str) -> None:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to send verification email. Please try again.",
         ) from exc
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to send verification email. Please try again.",
+        )
 
 
 async def verify_2fa_email_code(
@@ -872,5 +929,195 @@ async def verify_2fa_email_code(
     )
     db.add(session)
     user.last_login_at = _utcnow()
+    await _log_attempt(db, user.email, ip_address, success=True, event_type="email_code_verified")
     await db.commit()
     return await _build_token_response(db, user, raw_refresh, session_id=session.id)
+
+
+# ──────────────────────────────────────────────────────────────
+# Backup / recovery codes
+# ──────────────────────────────────────────────────────────────
+
+_BACKUP_CODE_COUNT = 8
+
+
+async def generate_backup_codes(db: AsyncSession, user_id: str) -> list[str]:
+    """Generate 8 fresh single-use recovery codes. Old codes are deleted."""
+    from app.models.operator_backup_code import OperatorBackupCode
+
+    # Remove existing
+    existing = await db.execute(
+        select(OperatorBackupCode).where(OperatorBackupCode.operator_user_id == user_id)
+    )
+    for row in existing.scalars().all():
+        await db.delete(row)
+
+    plain_codes: list[str] = []
+    for _ in range(_BACKUP_CODE_COUNT):
+        raw = secrets.token_hex(5).upper()  # e.g. "A3F9C-12E8B" style
+        formatted = f"{raw[:5]}-{raw[5:]}"
+        plain_codes.append(formatted)
+        code_hash = hashlib.sha256(formatted.encode()).hexdigest()
+        db.add(OperatorBackupCode(
+            id=str(uuid.uuid4()),
+            operator_user_id=user_id,
+            code_hash=code_hash,
+        ))
+
+    await db.commit()
+    return plain_codes
+
+
+async def get_backup_code_status(db: AsyncSession, user_id: str) -> dict:
+    from app.models.operator_backup_code import OperatorBackupCode
+    result = await db.execute(
+        select(OperatorBackupCode).where(OperatorBackupCode.operator_user_id == user_id)
+    )
+    codes = result.scalars().all()
+    total = len(codes)
+    used = sum(1 for c in codes if c.used_at is not None)
+    return {"total": total, "used": used, "remaining": total - used}
+
+
+async def verify_backup_code_login(
+    db: AsyncSession,
+    two_fa_token: str,
+    plain_code: str,
+    ip_address: str | None = None,
+) -> "OperatorTokenResponse":  # type: ignore[name-defined]
+    """Consume a backup code and issue full tokens."""
+    from app.models.operator_backup_code import OperatorBackupCode
+
+    payload = decode_token(two_fa_token)
+    if not payload or payload.get("kind") != "operator_2fa_pending":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA token")
+    user_id = payload.get("sub")
+
+    code_hash = hashlib.sha256(plain_code.strip().upper().encode()).hexdigest()
+    result = await db.execute(
+        select(OperatorBackupCode).where(
+            OperatorBackupCode.operator_user_id == user_id,
+            OperatorBackupCode.code_hash == code_hash,
+            OperatorBackupCode.used_at.is_(None),
+        )
+    )
+    code_row = result.scalar_one_or_none()
+    if not code_row:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or already-used recovery code")
+
+    code_row.used_at = _utcnow()
+
+    user_result = await db.execute(select(OperatorUser).where(OperatorUser.id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    raw_refresh = secrets.token_urlsafe(48)
+    session = OperatorSession(
+        id=str(uuid.uuid4()),
+        operator_user_id=user.id,
+        refresh_token_hash=_hash_token(raw_refresh),
+        ip_address=ip_address,
+        created_at=_utcnow(),
+        expires_at=_utcnow() + timedelta(days=_REFRESH_EXPIRE_DAYS),
+    )
+    db.add(session)
+    user.last_login_at = _utcnow()
+    await _log_attempt(db, user.email, ip_address, success=True, event_type="recovery_code_used")
+    await db.commit()
+    return await _build_token_response(db, user, raw_refresh, session_id=session.id)
+
+
+# ──────────────────────────────────────────────────────────────
+# Notification preferences
+# ──────────────────────────────────────────────────────────────
+
+_DEFAULT_NOTIF_PREFS = [
+    {"alert_type": "booking_requests",      "email": True,  "push": True,  "sms": True},
+    {"alert_type": "assignment_crew",        "email": True,  "push": True,  "sms": False},
+    {"alert_type": "compliance_documents",   "email": True,  "push": True,  "sms": False},
+    {"alert_type": "payouts_settlements",    "email": True,  "push": False, "sms": False},
+    {"alert_type": "platform_announcements", "email": True,  "push": False, "sms": False},
+    {"alert_type": "day_of_flight",          "email": True,  "push": True,  "sms": True},
+]
+
+
+async def get_notification_prefs(db: AsyncSession, user_id: str) -> list[dict]:
+    from app.models.operator_notification_pref import OperatorNotificationPref
+    result = await db.execute(
+        select(OperatorNotificationPref).where(OperatorNotificationPref.operator_user_id == user_id)
+    )
+    rows = {r.alert_type: r for r in result.scalars().all()}
+
+    out = []
+    for d in _DEFAULT_NOTIF_PREFS:
+        row = rows.get(d["alert_type"])
+        if row:
+            out.append({"alert_type": row.alert_type, "email": row.email, "push": row.push, "sms": row.sms})
+        else:
+            out.append(dict(d))
+    return out
+
+
+async def update_notification_prefs(db: AsyncSession, user_id: str, updates: list[dict]) -> list[dict]:
+    from app.models.operator_notification_pref import OperatorNotificationPref
+    for u in updates:
+        result = await db.execute(
+            select(OperatorNotificationPref).where(
+                OperatorNotificationPref.operator_user_id == user_id,
+                OperatorNotificationPref.alert_type == u["alert_type"],
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row:
+            row.email = u["email"]
+            row.push = u["push"]
+            row.sms = u["sms"]
+        else:
+            db.add(OperatorNotificationPref(
+                id=str(uuid.uuid4()),
+                operator_user_id=user_id,
+                alert_type=u["alert_type"],
+                email=u["email"],
+                push=u["push"],
+                sms=u["sms"],
+            ))
+    await db.commit()
+    return await get_notification_prefs(db, user_id)
+
+
+# ──────────────────────────────────────────────────────────────
+# Permission summary (role-based static map)
+# ──────────────────────────────────────────────────────────────
+
+_PERMISSION_MAP: dict[str, dict[str, tuple[int, int]]] = {
+    "operator_admin":    {"operations": (14, 14), "fleet_crew": (9, 9), "finance": (6, 6)},
+    "ops_manager":       {"operations": (12, 14), "fleet_crew": (7, 9), "finance": (2, 6)},
+    "dispatcher":        {"operations": (8, 14),  "fleet_crew": (3, 9), "finance": (0, 6)},
+    "finance":           {"operations": (2, 14),  "fleet_crew": (0, 9), "finance": (6, 6)},
+    "crew_coordinator":  {"operations": (4, 14),  "fleet_crew": (9, 9), "finance": (0, 6)},
+    "viewer":            {"operations": (2, 14),  "fleet_crew": (2, 9), "finance": (1, 6)},
+}
+
+
+def get_permission_summary(role: str) -> dict:
+    perms = _PERMISSION_MAP.get(role, _PERMISSION_MAP["viewer"])
+    all_granted = all(v[0] == v[1] for v in perms.values())
+    return {
+        "operations": f"{perms['operations'][0]} / {perms['operations'][1]}",
+        "fleet_crew":  f"{perms['fleet_crew'][0]} / {perms['fleet_crew'][1]}",
+        "finance":     f"{perms['finance'][0]} / {perms['finance'][1]}",
+        "all_granted": all_granted,
+    }
+
+
+async def reset_notification_prefs(db: AsyncSession, user_id: str) -> list[dict]:
+    """Delete all saved prefs so the next GET returns the system defaults."""
+    from app.models.operator_notification_pref import OperatorNotificationPref
+    result = await db.execute(
+        select(OperatorNotificationPref).where(OperatorNotificationPref.operator_user_id == user_id)
+    )
+    for row in result.scalars().all():
+        await db.delete(row)
+    await db.commit()
+    return await get_notification_prefs(db, user_id)

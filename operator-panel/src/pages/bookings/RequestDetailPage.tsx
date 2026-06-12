@@ -14,6 +14,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { fmtDateTime } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -355,14 +356,14 @@ export default function RequestDetailPage() {
                   label="Requested departure"
                   value={
                     request.flight_date
-                      ? new Date(request.flight_date).toLocaleString('en-IN')
+                      ? fmtDateTime(request.flight_date)
                       : 'ASAP'
                   }
                   mono
                 />
                 <DetField
                   label="Received"
-                  value={new Date(request.received_at).toLocaleString('en-IN')}
+                  value={fmtDateTime(request.received_at)}
                   mono
                 />
               </div>
@@ -538,7 +539,7 @@ export default function RequestDetailPage() {
                 </span>
                 <span className="t-meta" style={{ fontSize: 12 }}>
                   {request.actioned_at
-                    ? `Actioned ${new Date(request.actioned_at).toLocaleString('en-IN')}`
+                    ? `Actioned ${fmtDateTime(request.actioned_at)}`
                     : ''}
                 </span>
               </div>

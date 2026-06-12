@@ -46,6 +46,8 @@ from app.models.notifications import NotificationTemplate, NotificationLog, Noti
 from app.models.operator_aircraft import OperatorAircraft, AircraftDocument, AircraftMaintenanceWindow
 from app.models.operator_crew import OperatorCrewMember, CrewDocument, CrewTypeRating
 from app.models.operator_routes import OperatorRoute, OperatorSchedule
+from app.models.operator_backup_code import OperatorBackupCode
+from app.models.operator_notification_pref import OperatorNotificationPref
 
 __all__ = [
     "AdminUser", "AdminSession", "SignInHistory", "PasswordResetToken",
@@ -79,4 +81,6 @@ __all__ = [
     "OperatorAircraft", "AircraftDocument", "AircraftMaintenanceWindow",
     "OperatorCrewMember", "CrewDocument", "CrewTypeRating",
     "OperatorRoute", "OperatorSchedule",
+    "OperatorBackupCode",
+    "OperatorNotificationPref",
 ]

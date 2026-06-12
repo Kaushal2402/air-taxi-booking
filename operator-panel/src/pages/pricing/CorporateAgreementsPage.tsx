@@ -4,11 +4,7 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { CorporateAgreement } from '../../services/operatorPricingService'
 import { operatorPricingService } from '../../services/operatorPricingService'
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+import { fmtDate } from '../../lib/format'
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Settings } from 'lucide-react'
+import { fmtDateTime } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { Route, Schedule } from '../../services/operatorRoutesService'
@@ -122,7 +123,7 @@ export default function RouteDetailPage() {
                   >
                     <div style={{ flex: 1 }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink)' }}>
-                        {new Date(s.etd).toLocaleString()} → {new Date(s.eta).toLocaleString()}
+                        {fmtDateTime(s.etd)} → {fmtDateTime(s.eta)}
                       </div>
                       {s.aircraft_registration && (
                         <div className="t-meta" style={{ fontSize: 10.5, marginTop: 2 }}>

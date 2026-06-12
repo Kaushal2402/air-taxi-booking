@@ -13,16 +13,11 @@ import type {
   Flight,
 } from '../../services/operatorAssignmentService'
 import { operatorAssignmentService } from '../../services/operatorAssignmentService'
+import { fmtDateTime } from '../../lib/format'
 
 function fmtDT(iso: string | null): string {
   if (!iso) return 'ASAP'
-  return new Date(iso).toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return fmtDateTime(iso)
 }
 
 function SelectableCard({

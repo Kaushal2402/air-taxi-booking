@@ -10,6 +10,7 @@ import {
   Grip,
   Users,
 } from 'lucide-react'
+import { fmtDate as _fmtDate } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { Flight } from '../../services/operatorAssignmentService'
@@ -245,8 +246,7 @@ export default function AssignmentBoardPage() {
   const nextDay = () =>
     setSelectedDate(d => new Date(d.getTime() + 86400000))
 
-  const fmtDate = (d: Date) =>
-    d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  const fmtDate = (d: Date) => _fmtDate(d.toISOString())
 
   const isToday = (d: Date) =>
     d.toDateString() === new Date().toDateString()

@@ -13,7 +13,8 @@ class SmtpAdapter(EmailProvider):
             smtp_from     = dyn.get("SMTP_FROM")
             smtp_host     = dyn.get("SMTP_HOST")
             smtp_port     = int(dyn.get("SMTP_PORT") or "587")
-            smtp_tls      = dyn.get("SMTP_TLS").lower() not in ("false", "0", "")
+            _tls_raw      = dyn.get("SMTP_TLS")
+            smtp_tls      = _tls_raw is True or str(_tls_raw).lower() not in ("false", "0", "")
             smtp_user     = dyn.get("SMTP_USER")
             smtp_password = dyn.get("SMTP_PASSWORD")
 

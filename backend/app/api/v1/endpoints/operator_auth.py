@@ -39,6 +39,30 @@ def _get_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
+def _get_device_info(request: Request) -> str | None:
+    ua = request.headers.get("User-Agent", "")
+    if not ua:
+        return None
+    # Compact UA: extract browser + OS tokens
+    import re
+    mobile = bool(re.search(r'Mobile|Android|iPhone|iPad', ua, re.I))
+    browser = "Unknown"
+    for b in [("Chrome", r'Chrome/(\d+)'), ("Firefox", r'Firefox/(\d+)'),
+              ("Safari", r'Version/(\d+).*Safari'), ("Edge", r'Edg/(\d+)')]:
+        m = re.search(b[1], ua)
+        if m:
+            browser = f"{b[0]} {m.group(1)}"
+            break
+    os_name = "Unknown OS"
+    for o in [("Windows", r'Windows NT'), ("macOS", r'Mac OS X'),
+              ("iOS", r'iPhone OS|iPad'), ("Android", r'Android'), ("Linux", r'Linux')]:
+        if re.search(o[1], ua, re.I):
+            os_name = o[0]
+            break
+    kind = "Mobile" if mobile else "Desktop"
+    return f"{kind} · {os_name} · {browser}"
+
+
 @router.post("/invite/accept", response_model=OperatorAcceptInviteResponse)
 async def accept_invite(body: OperatorAcceptInviteRequest, db: AsyncSession = Depends(get_db)):
     needs_2fa = await operator_auth_service.accept_invite(db, body.token, body.password)
@@ -50,12 +74,16 @@ async def accept_invite(body: OperatorAcceptInviteRequest, db: AsyncSession = De
 
 @router.post("/login", response_model=OperatorTokenResponse)
 async def login(body: OperatorLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    return await operator_auth_service.login(db, body.email, body.password, _get_ip(request))
+    return await operator_auth_service.login(
+        db, body.email, body.password, _get_ip(request), _get_device_info(request)
+    )
 
 
 @router.post("/2fa/verify", response_model=OperatorTokenResponse)
 async def verify_2fa_login(body: Operator2FAVerifyRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    return await operator_auth_service.verify_2fa_login(db, body.two_fa_token, body.code, _get_ip(request))
+    return await operator_auth_service.verify_2fa_login(
+        db, body.two_fa_token, body.code, _get_ip(request), _get_device_info(request)
+    )
 
 
 @router.post("/2fa/email-code", response_model=MessageResponse)
@@ -195,3 +223,98 @@ async def disable_2fa(
 ):
     await operator_auth_service.disable_2fa(db, current_user, body.code)
     return MessageResponse(message="2FA disabled")
+
+
+# ──────────────────────────────────────────────────────────────
+# Recovery / backup codes
+# ──────────────────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+
+class BackupCodeStatusOut(_BaseModel):
+    total: int
+    used: int
+    remaining: int
+
+class BackupCodesOut(_BaseModel):
+    codes: list[str]
+
+class VerifyBackupCodeRequest(_BaseModel):
+    two_fa_token: str
+    code: str
+
+
+@router.post("/backup-codes/generate", response_model=BackupCodesOut)
+async def generate_backup_codes(
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    codes = await operator_auth_service.generate_backup_codes(db, current_user.id)
+    return BackupCodesOut(codes=codes)
+
+
+@router.get("/backup-codes/status", response_model=BackupCodeStatusOut)
+async def backup_code_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    return await operator_auth_service.get_backup_code_status(db, current_user.id)
+
+
+@router.post("/2fa/verify-backup", response_model=OperatorTokenResponse)
+async def verify_backup_code(
+    body: VerifyBackupCodeRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else None)
+    return await operator_auth_service.verify_backup_code_login(db, body.two_fa_token, body.code, ip)
+
+
+# ──────────────────────────────────────────────────────────────
+# Notification preferences
+# ──────────────────────────────────────────────────────────────
+from app.schemas.operator_auth import (
+    OperatorNotificationPrefOut,
+    OperatorNotificationPrefUpdate,
+    OperatorPermissionSummaryOut,
+)
+from typing import List as _List
+
+
+@router.get("/me/notification-prefs", response_model=_List[OperatorNotificationPrefOut])
+async def get_notification_prefs(
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    return await operator_auth_service.get_notification_prefs(db, current_user.id)
+
+
+@router.put("/me/notification-prefs", response_model=_List[OperatorNotificationPrefOut])
+async def update_notification_prefs(
+    body: _List[OperatorNotificationPrefUpdate],
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    return await operator_auth_service.update_notification_prefs(
+        db, current_user.id, [u.model_dump() for u in body]
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# Permission summary
+# ──────────────────────────────────────────────────────────────
+
+@router.get("/me/permissions", response_model=OperatorPermissionSummaryOut)
+async def get_permissions(
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    return operator_auth_service.get_permission_summary(current_user.operator_role)
+
+
+@router.post("/me/notification-prefs/reset", response_model=_List[OperatorNotificationPrefOut])
+async def reset_notification_prefs(
+    db: AsyncSession = Depends(get_db),
+    current_user: OperatorUser = Depends(get_current_operator_user),
+):
+    return await operator_auth_service.reset_notification_prefs(db, current_user.id)

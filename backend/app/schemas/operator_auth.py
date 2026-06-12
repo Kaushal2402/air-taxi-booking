@@ -11,12 +11,20 @@ class OperatorUserOut(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
+    phone_verified: bool = False
     operator_role: str
     status: str
     twofa_enabled: bool
+    twofa_enrolled_at: Optional[datetime] = None
     operator_id: str
     operator_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    password_changed_at: Optional[datetime] = None
+    # Display preferences
+    timezone: str = "Asia/Kolkata"
+    language: str = "en"
+    date_format: str = "DD/MM/YYYY"
+    time_format: str = "24h"
 
     @field_validator("avatar_url", mode="before")
     @classmethod
@@ -70,6 +78,32 @@ class OperatorPasswordResetRequest(BaseModel):
 class OperatorUpdateProfileRequest(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    timezone: Optional[str] = None
+    language: Optional[str] = None
+    date_format: Optional[str] = None
+    time_format: Optional[str] = None
+
+
+class OperatorNotificationPrefOut(BaseModel):
+    alert_type: str
+    email: bool
+    push: bool
+    sms: bool
+    model_config = {"from_attributes": True}
+
+
+class OperatorNotificationPrefUpdate(BaseModel):
+    alert_type: str
+    email: bool
+    push: bool
+    sms: bool
+
+
+class OperatorPermissionSummaryOut(BaseModel):
+    operations: str
+    fleet_crew: str
+    finance: str
+    all_granted: bool
 
 
 class OperatorChangePasswordRequest(BaseModel):
@@ -151,5 +185,6 @@ class OperatorLoginHistoryOut(BaseModel):
     id: str
     ip_address: Optional[str] = None
     success: bool
+    event_type: str = "sign_in"
     attempted_at: datetime
     model_config = {"from_attributes": True}

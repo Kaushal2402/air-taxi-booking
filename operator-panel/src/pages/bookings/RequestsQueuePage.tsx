@@ -10,6 +10,7 @@ import {
   Tag,
   X,
 } from 'lucide-react'
+import { fmtDateShort, fmtTime } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -397,22 +398,14 @@ export default function RequestsQueuePage() {
                       color: 'var(--ink-2)',
                     }}
                   >
-                    {r.flight_date
-                      ? new Date(r.flight_date).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                        })
-                      : 'ASAP'}
+                    {r.flight_date ? fmtDateShort(r.flight_date) : 'ASAP'}
                   </div>
                 </div>
 
                 {/* Submitted */}
                 <div style={{ width: 90, flexShrink: 0 }}>
                   <div className="t-meta" style={{ fontSize: 11 }}>
-                    {new Date(r.received_at).toLocaleTimeString('en-IN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {fmtTime(r.received_at)}
                   </div>
                 </div>
 

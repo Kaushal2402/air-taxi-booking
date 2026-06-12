@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { fmtDate } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorProfileService } from '../../services/operatorProfileService'
@@ -216,10 +217,7 @@ export default function CompanyProfilePage() {
     }
   }
 
-  const formatDate = (d: string | null) => {
-    if (!d) return '—'
-    return new Date(d).toLocaleDateString()
-  }
+  const formatDate = fmtDate
 
   const onboardingStatusValue = profile?.onboarding_status || 'draft'
   const isApproved = onboardingStatusValue === 'approved'

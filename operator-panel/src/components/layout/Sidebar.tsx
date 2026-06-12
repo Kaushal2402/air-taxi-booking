@@ -1,74 +1,74 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import BrandLockup from './BrandLockup'
+import { useOperatorAuthStore } from '../../stores/authStore'
 import {
-  LayoutDashboard,
-  CalendarCheck,
-  Plane,
-  ClipboardList,
+  PieChart,
+  Inbox,
+  Zap,
   CloudSun,
-  Layers,
   Users,
-  RouteIcon,
+  RefreshCw,
+  Heater,
+  User,
+  Route,
   Tag,
   Wallet,
-  BarChart2,
-  ShieldCheck,
-  UserCog,
-  Settings,
-  User,
-  Lock,
-  X,
+  Archive,
+  Shield,
+  Bell,
+  Key,
   Building2,
-  ShieldAlert,
+  Settings,
+  X,
 } from 'lucide-react'
 
 const NAV_GROUPS = [
   {
     label: 'Operations',
     items: [
-      { id: 'dashboard',    label: 'Dashboard',        Icon: LayoutDashboard, path: '/dashboard' },
-      { id: 'bookings',     label: 'Booking Requests', Icon: CalendarCheck,   path: '/bookings' },
-      { id: 'dispatch',     label: 'Flight Dispatch',  Icon: Plane,           path: '/dispatch' },
-      { id: 'manifests',    label: 'Manifests',        Icon: ClipboardList,   path: '/manifests' },
-      { id: 'day-of-flight',label: 'Day-of-Flight',    Icon: CloudSun,        path: '/day-of-flight' },
+      { id: 'dashboard',  label: 'Dashboard',            Icon: PieChart,   path: '/dashboard' },
+      { id: 'bookings',   label: 'Booking Requests',     Icon: Inbox,      path: '/bookings' },
+      { id: 'dispatch',   label: 'Assignment',           Icon: Zap,        path: '/dispatch' },
+      { id: 'dayof',      label: 'Day-of-Flight',        Icon: CloudSun,   path: '/day-of-flight' },
+      { id: 'manifests',  label: 'Manifests',            Icon: Users,      path: '/manifests' },
+      { id: 'cancel',     label: 'Cancel & Reschedule',  Icon: RefreshCw,  path: '/cancel' },
     ],
   },
   {
     label: 'Fleet & Crew',
     items: [
-      { id: 'aircraft', label: 'Aircraft', Icon: Layers, path: '/aircraft' },
-      { id: 'crew',     label: 'Crew',     Icon: Users,  path: '/crew' },
+      { id: 'aircraft', label: 'Aircraft & Fleet', Icon: Heater, path: '/aircraft' },
+      { id: 'crew',     label: 'Crew',             Icon: User,   path: '/crew' },
     ],
   },
   {
     label: 'Schedule & Pricing',
     items: [
-      { id: 'routes',  label: 'Routes & Schedule', Icon: RouteIcon, path: '/routes' },
-      { id: 'pricing', label: 'Pricing & Quotes',  Icon: Tag,       path: '/pricing' },
+      { id: 'routes',  label: 'Routes & Schedule', Icon: Route, path: '/routes' },
+      { id: 'pricing', label: 'Pricing & Quotes',  Icon: Tag,   path: '/pricing' },
     ],
   },
   {
     label: 'Finance',
     items: [
-      { id: 'payouts', label: 'Payouts', Icon: Wallet,   path: '/payouts' },
-      { id: 'reports', label: 'Reports', Icon: BarChart2, path: '/reports' },
+      { id: 'payouts', label: 'Payouts & Settlements', Icon: Wallet,  path: '/payouts' },
+      { id: 'reports', label: 'Reports',               Icon: Archive, path: '/reports' },
     ],
   },
   {
     label: 'Compliance',
     items: [
-      { id: 'documents', label: 'Documents', Icon: ShieldCheck, path: '/documents' },
+      { id: 'documents', label: 'Documents', Icon: Shield, path: '/documents' },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { id: 'onboarding', label: 'Company Profile', Icon: Building2,   path: '/onboarding' },
-      { id: 'team',       label: 'Team Members',    Icon: UserCog,     path: '/team' },
-      { id: 'roles',      label: 'Roles',           Icon: ShieldAlert, path: '/team/roles' },
-      { id: 'settings',   label: 'Settings',        Icon: Settings,    path: '/settings' },
-      { id: 'profile',    label: 'Profile',         Icon: User,        path: '/profile' },
-      { id: 'security',   label: 'Security',        Icon: Lock,        path: '/security' },
+      { id: 'notifications', label: 'Notifications',   Icon: Bell,     path: '/notifications' },
+      { id: 'team',          label: 'Team & Roles',    Icon: Key,      path: '/team' },
+      { id: 'onboarding',    label: 'Company Profile', Icon: Building2, path: '/onboarding' },
+      { id: 'settings',      label: 'Settings',        Icon: Settings, path: '/settings' },
     ],
   },
 ]
@@ -84,6 +84,7 @@ export default function Sidebar({ activeId, isMobile, isOpen, onClose }: Sidebar
   const navigate = useNavigate()
   const location = useLocation()
   const [_collapsed, setCollapsed] = useState(false)
+  const operatorName = useOperatorAuthStore(s => s.user?.operatorName) ?? undefined
 
   const isActive = (item: { id: string; path: string }) => {
     if (activeId) return item.id === activeId
@@ -123,15 +124,7 @@ export default function Sidebar({ activeId, isMobile, isOpen, onClose }: Sidebar
         justifyContent: 'space-between',
         flexShrink: 0,
       }}>
-        <div style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: 17,
-          fontWeight: 500,
-          color: 'var(--ink)',
-          letterSpacing: '-0.01em',
-        }}>
-          Acme Mobility
-        </div>
+        <BrandLockup org={operatorName} />
         {isMobile && (
           <button
             onClick={() => { setCollapsed(false); onClose?.() }}

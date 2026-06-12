@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { fmtWeekDay, fmtTimeOnly } from '../../lib/format'
+import { useOperatorAuthStore } from '../../stores/authStore'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { Schedule } from '../../services/operatorRoutesService'
@@ -20,9 +22,7 @@ function addDays(d: Date, n: number): Date {
   return r
 }
 
-function fmtDay(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
-}
+const fmtDay = fmtWeekDay
 
 const HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 const CELL_H = 48
@@ -82,8 +82,12 @@ export default function WeekSchedulePage() {
       return d.getTime() === day.getTime()
     })
 
-  const fmtLabel = (d: Date) =>
-    `${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}–${addDays(d, 6).getDate()}, ${d.getFullYear()}`
+  const fmtLabel = (d: Date) => {
+    const { tz, lang } = { tz: (useOperatorAuthStore.getState().user?.timezone ?? 'Asia/Kolkata'), lang: 'en' }
+    const month = new Intl.DateTimeFormat('en', { timeZone: tz, month: 'short' }).format(d)
+    const year  = new Intl.DateTimeFormat('en', { timeZone: tz, year: 'numeric' }).format(d)
+    return `${month} ${d.getDate()}–${addDays(d, 6).getDate()}, ${year}`
+  }
 
   return (
     <Shell
@@ -243,7 +247,7 @@ export default function WeekSchedulePage() {
                           {e.aircraft_registration ?? e.id.slice(0, 8)}
                         </div>
                         <div style={{ fontSize: 8.5, color: 'var(--ink-4)', marginTop: 1 }}>
-                          {new Date(e.etd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {fmtTimeOnly(new Date(e.etd))}
                         </div>
                       </div>
                     )

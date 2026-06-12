@@ -33,6 +33,16 @@ class OperatorUser(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     twofa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     twofa_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    twofa_enrolled_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    phone_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    password_changed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    # Display preferences
+    timezone: Mapped[str] = mapped_column(String(60), nullable=False, default="Asia/Kolkata")
+    language: Mapped[str] = mapped_column(String(20), nullable=False, default="en")
+    date_format: Mapped[str] = mapped_column(String(30), nullable=False, default="DD MMM YYYY")
+    time_format: Mapped[str] = mapped_column(String(10), nullable=False, default="24h")
 
     last_login_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
@@ -62,11 +72,15 @@ class OperatorSession(Base, UUIDPrimaryKeyMixin):
 
 
 class OperatorLoginAttempt(Base, UUIDPrimaryKeyMixin):
-    """Audit log for operator login attempts (used for lockout logic)."""
+    """Audit log for operator authentication events."""
 
     __tablename__ = "operator_login_attempts"
 
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # event_type: sign_in | sign_in_failed | 2fa_verified | 2fa_failed |
+    #             password_changed | 2fa_enrolled | 2fa_disabled |
+    #             recovery_code_used | email_code_verified
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, default="sign_in")
     attempted_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)

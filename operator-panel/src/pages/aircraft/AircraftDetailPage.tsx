@@ -12,6 +12,7 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { Aircraft, AircraftDocument, MaintenanceWindow } from '../../services/operatorAircraftService'
 import { operatorAircraftService } from '../../services/operatorAircraftService'
+import { fmtDate, fmtNumber } from '../../lib/format'
 
 const TABS = ['Overview', 'Maintenance', 'Documents', 'Assignments'] as const
 type Tab = (typeof TABS)[number]
@@ -124,7 +125,7 @@ function MaintRow({ w, last }: { w: MaintenanceWindow; last: boolean }) {
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', fontWeight: 500 }}>{w.task}</div>
         <div className="t-meta" style={{ fontSize: 10.5, marginTop: 2 }}>
-          {new Date(w.start_dt).toLocaleDateString()} – {new Date(w.end_dt).toLocaleDateString()}
+          {fmtDate(w.start_dt)} – {fmtDate(w.end_dt)}
         </div>
       </div>
       <span className={`badge ${tone}`} style={{ height: 18, fontSize: 10 }}>
@@ -258,7 +259,7 @@ export default function AircraftDetailPage() {
                     ['Type', aircraft.aircraft_type_name, false],
                     ['Serial no.', aircraft.serial_number ?? '—', true],
                     ['Year of mfr', aircraft.year_of_manufacture?.toString() ?? '—', true],
-                    ['MTOW', `${aircraft.mtow_kg.toLocaleString()} kg`, false],
+                    ['MTOW', `${fmtNumber(aircraft.mtow_kg)} kg`, false],
                     ['Max pax', `${aircraft.seat_capacity}`, false],
                     ['Range', `${aircraft.range_nm} nm`, false],
                     ['Endurance', aircraft.endurance_hours ?? '—', false],

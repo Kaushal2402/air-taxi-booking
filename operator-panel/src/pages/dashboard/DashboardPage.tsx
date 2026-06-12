@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { fmtTime, fmtDateShort, fmtDateTime, fmtCurrency } from '../../lib/format'
 import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorDashboardService } from '../../services/operatorDashboardService'
@@ -16,17 +17,9 @@ const WINDOW_OPTIONS = [
   { label: '90 days', value: '90d' },
 ]
 
-function formatMoney(minor: number) {
-  return (minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
+const formatMoney  = (minor: number) => fmtCurrency(minor)
+const formatTime   = fmtTime
+const formatDate   = fmtDateShort
 
 function StatCard({
   label,
@@ -256,7 +249,7 @@ export default function DashboardPage() {
                       )}
                       {item.ttl_expires_at && (
                         <div style={{ fontSize: 11, color: 'var(--warn)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-                          Expires: {new Date(item.ttl_expires_at).toLocaleString()}
+                          Expires: {fmtDateTime(item.ttl_expires_at)}
                         </div>
                       )}
                     </div>

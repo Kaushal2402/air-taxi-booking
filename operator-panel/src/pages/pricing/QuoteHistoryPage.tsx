@@ -4,6 +4,7 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import type { CharterQuote } from '../../services/operatorPricingService'
 import { operatorPricingService } from '../../services/operatorPricingService'
+import { fmtDate, fmtCurrency } from '../../lib/format'
 
 const STATUS_TONE: Record<string, string> = {
   draft: 'pending',
@@ -13,19 +14,7 @@ const STATUS_TONE: Record<string, string> = {
   rejected: 'danger',
 }
 
-function fmtMoney(minor: number, currency = 'INR'): string {
-  const major = minor / 100
-  if (currency === 'INR') return `₹${major.toLocaleString('en-IN')}`
-  return `${currency} ${major.toLocaleString()}`
-}
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
+const fmtMoney = (minor: number, currency = 'INR') => fmtCurrency(minor, currency)
 
 export default function QuoteHistoryPage() {
   const isMobile = useIsMobile()

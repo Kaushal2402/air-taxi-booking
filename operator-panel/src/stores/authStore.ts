@@ -11,6 +11,11 @@ interface OperatorUser {
   twoFactorEnabled: boolean
   phone: string | null
   avatarUrl: string | null
+  // display preferences
+  timezone: string
+  language: string
+  dateFormat: string
+  timeFormat: string
 }
 
 interface OperatorAuthState {

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/queryClient'
@@ -11,6 +12,9 @@ import AcceptInvitePage from './pages/auth/AcceptInvitePage'
 import DashboardPage from './pages/dashboard/DashboardPage'
 import ProfilePage from './pages/profile/ProfilePage'
 import SecurityPage from './pages/profile/SecurityPage'
+import SessionsPage from './pages/profile/SessionsPage'
+import NotificationsPage from './pages/profile/NotificationsPage'
+import ActivityLogPage from './pages/profile/ActivityLogPage'
 import TeamPage from './pages/team/TeamPage'
 import RolesPage from './pages/team/RolesPage'
 import CompanyProfilePage from './pages/onboarding/CompanyProfilePage'
@@ -37,6 +41,15 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const language = useOperatorAuthStore(s => s.user?.language)
+
+  useEffect(() => {
+    const root = document.documentElement
+    const isRTL = language === 'ar'
+    root.setAttribute('dir', isRTL ? 'rtl' : 'ltr')
+    root.setAttribute('lang', language ?? 'en')
+  }, [language])
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -54,6 +67,9 @@ function App() {
           <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
           <Route path="/security" element={<PrivateRoute><SecurityPage /></PrivateRoute>} />
+          <Route path="/sessions" element={<PrivateRoute><SessionsPage /></PrivateRoute>} />
+          <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+          <Route path="/activity" element={<PrivateRoute><ActivityLogPage /></PrivateRoute>} />
           <Route path="/team" element={<PrivateRoute><TeamPage /></PrivateRoute>} />
           <Route path="/team/roles" element={<PrivateRoute><RolesPage /></PrivateRoute>} />
           <Route path="/onboarding" element={<PrivateRoute><CompanyProfilePage /></PrivateRoute>} />
