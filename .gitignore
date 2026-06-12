@@ -18,3 +18,6 @@ admin-panel/.env
 .DS_Store
 *.log
 backend/static/documents/
+
+# Claude Code agent worktrees (ephemeral, auto-cleaned)
+.claude/worktrees/
