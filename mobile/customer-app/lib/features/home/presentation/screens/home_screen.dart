@@ -313,15 +313,7 @@ class _QuickBookCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Booking flow coming soon — Module 03',
-                      ),
-                    ),
-                  );
-                },
+                onPressed: () => context.push(AppRoutes.bookingOrigin),
                 child: const Text('Search flights'),
               ),
             ],
