@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001') + '/api/v1/operator'
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001') + '/api/v1'
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -52,12 +52,12 @@ api.interceptors.request.use((config) => {
 })
 
 const PUBLIC_AUTH_PATHS = [
-  '/auth/login',
-  '/auth/2fa/verify',
-  '/auth/forgot-password',
-  '/auth/reset-password',
-  '/auth/refresh',
-  '/auth/invite/accept',
+  '/operator/auth/login',
+  '/operator/auth/2fa/verify',
+  '/operator/auth/forgot-password',
+  '/operator/auth/reset-password',
+  '/operator/auth/refresh',
+  '/operator/auth/invite/accept',
 ]
 
 let isRefreshing = false
@@ -109,7 +109,7 @@ api.interceptors.response.use(
 
     try {
       const { data } = await axios.post(
-        `${BASE_URL}/auth/refresh`,
+        `${BASE_URL}/operator/auth/refresh`,
         { refresh_token: refreshToken },
         { headers: { 'Content-Type': 'application/json' } },
       )

@@ -82,113 +82,113 @@ export interface OperatorSession {
 export const operatorAuthService = {
   login: (email: string, password: string, rememberDevice = false): Promise<LoginResponse> =>
     api
-      .post<LoginResponse>('/auth/login', { email, password, remember_device: rememberDevice })
+      .post<LoginResponse>('/operator/auth/login', { email, password, remember_device: rememberDevice })
       .then((r: AxiosResponse<LoginResponse>) => r.data),
 
   verify2faLogin: (two_fa_token: string, code: string): Promise<LoginResponse> =>
     api
-      .post<LoginResponse>('/auth/2fa/verify', { two_fa_token, code })
+      .post<LoginResponse>('/operator/auth/2fa/verify', { two_fa_token, code })
       .then((r: AxiosResponse<LoginResponse>) => r.data),
 
   refresh: (refreshToken: string): Promise<RefreshResponse> =>
     api
-      .post<RefreshResponse>('/auth/refresh', { refresh_token: refreshToken })
+      .post<RefreshResponse>('/operator/auth/refresh', { refresh_token: refreshToken })
       .then((r: AxiosResponse<RefreshResponse>) => r.data),
 
   logout: (refreshToken?: string): Promise<void> =>
-    api.post('/auth/logout', { refresh_token: refreshToken ?? '' }).then(() => undefined),
+    api.post('/operator/auth/logout', { refresh_token: refreshToken ?? '' }).then(() => undefined),
 
   forgotPassword: (email: string): Promise<void> =>
-    api.post('/auth/password/forgot', { email }).then(() => undefined),
+    api.post('/operator/auth/password/forgot', { email }).then(() => undefined),
 
   resetPassword: (token: string, newPassword: string): Promise<void> =>
-    api.post('/auth/password/reset', { token, new_password: newPassword }).then(() => undefined),
+    api.post('/operator/auth/password/reset', { token, new_password: newPassword }).then(() => undefined),
 
   changePassword: (currentPassword: string, newPassword: string): Promise<void> =>
     api
-      .post('/auth/me/change-password', { current_password: currentPassword, new_password: newPassword })
+      .post('/operator/auth/me/change-password', { current_password: currentPassword, new_password: newPassword })
       .then(() => undefined),
 
   getMe: (): Promise<OperatorUserOut> =>
-    api.get<OperatorUserOut>('/auth/me').then((r: AxiosResponse<OperatorUserOut>) => r.data),
+    api.get<OperatorUserOut>('/operator/auth/me').then((r: AxiosResponse<OperatorUserOut>) => r.data),
 
   updateMe: (body: { name?: string; phone?: string; timezone?: string; language?: string; date_format?: string; time_format?: string }): Promise<OperatorUserOut> =>
     api
-      .patch<OperatorUserOut>('/auth/me', body)
+      .patch<OperatorUserOut>('/operator/auth/me', body)
       .then((r: AxiosResponse<OperatorUserOut>) => r.data),
 
   enroll2fa: (): Promise<EnrollResponse> =>
-    api.post<EnrollResponse>('/auth/2fa/enroll').then((r: AxiosResponse<EnrollResponse>) => r.data),
+    api.post<EnrollResponse>('/operator/auth/2fa/enroll').then((r: AxiosResponse<EnrollResponse>) => r.data),
 
   confirm2fa: (code: string): Promise<void> =>
-    api.post('/auth/2fa/confirm', { code }).then(() => undefined),
+    api.post('/operator/auth/2fa/confirm', { code }).then(() => undefined),
 
   disable2fa: (code: string): Promise<void> =>
-    api.post('/auth/2fa/disable', { code }).then(() => undefined),
+    api.post('/operator/auth/2fa/disable', { code }).then(() => undefined),
 
   listSessions: (): Promise<OperatorSession[]> =>
     api
-      .get<OperatorSession[]>('/auth/me/sessions')
+      .get<OperatorSession[]>('/operator/auth/me/sessions')
       .then((r: AxiosResponse<OperatorSession[]>) => r.data),
 
   revokeSession: (sessionId: string): Promise<void> =>
-    api.delete(`/auth/me/sessions/${sessionId}`).then(() => undefined),
+    api.delete(`/operator/auth/me/sessions/${sessionId}`).then(() => undefined),
 
   acceptInvite: (token: string, password: string): Promise<{ message: string; needs_2fa_setup: boolean }> =>
-    api.post<{ message: string; needs_2fa_setup: boolean }>('/auth/invite/accept', { token, password }).then((r) => r.data),
+    api.post<{ message: string; needs_2fa_setup: boolean }>('/operator/auth/invite/accept', { token, password }).then((r) => r.data),
 
   signOutAllSessions: (): Promise<void> =>
-    api.delete('/auth/me/sessions').then(() => undefined),
+    api.delete('/operator/auth/me/sessions').then(() => undefined),
 
   getSignInHistory: (): Promise<OperatorLoginHistory[]> =>
-    api.get<OperatorLoginHistory[]>('/auth/me/history').then((r: AxiosResponse<OperatorLoginHistory[]>) => r.data),
+    api.get<OperatorLoginHistory[]>('/operator/auth/me/history').then((r: AxiosResponse<OperatorLoginHistory[]>) => r.data),
 
   // ── Sub-user (team) management ─────────────────────────────────────────────
   listSubUsers: (params?: { search?: string; status?: string }): Promise<OperatorSubUser[]> =>
-    api.get<OperatorSubUser[]>('/users', { params }).then((r: AxiosResponse<OperatorSubUser[]>) => r.data),
+    api.get<OperatorSubUser[]>('/operator/users', { params }).then((r: AxiosResponse<OperatorSubUser[]>) => r.data),
 
   inviteSubUser: (body: { name: string; email: string; operator_role: string; phone?: string }): Promise<OperatorSubUser> =>
-    api.post<OperatorSubUser>('/users/invite', body).then((r: AxiosResponse<OperatorSubUser>) => r.data),
+    api.post<OperatorSubUser>('/operator/users/invite', body).then((r: AxiosResponse<OperatorSubUser>) => r.data),
 
   suspendSubUser: (userId: string): Promise<OperatorSubUser> =>
-    api.post<OperatorSubUser>(`/users/${userId}/suspend`).then((r: AxiosResponse<OperatorSubUser>) => r.data),
+    api.post<OperatorSubUser>(`/operator/users/${userId}/suspend`).then((r: AxiosResponse<OperatorSubUser>) => r.data),
 
   reactivateSubUser: (userId: string): Promise<OperatorSubUser> =>
-    api.post<OperatorSubUser>(`/users/${userId}/reactivate`).then((r: AxiosResponse<OperatorSubUser>) => r.data),
+    api.post<OperatorSubUser>(`/operator/users/${userId}/reactivate`).then((r: AxiosResponse<OperatorSubUser>) => r.data),
 
   forceLogoutSubUser: (userId: string): Promise<void> =>
-    api.post(`/users/${userId}/force-logout`).then(() => undefined),
+    api.post(`/operator/users/${userId}/force-logout`).then(() => undefined),
 
   resetSubUser2fa: (userId: string): Promise<void> =>
-    api.post(`/users/${userId}/reset-2fa`).then(() => undefined),
+    api.post(`/operator/users/${userId}/reset-2fa`).then(() => undefined),
 
   resendSubUserInvite: (userId: string): Promise<void> =>
-    api.post(`/users/${userId}/resend-invite`).then(() => undefined),
+    api.post(`/operator/users/${userId}/resend-invite`).then(() => undefined),
 
   send2faEmailCode: (twoFaToken: string): Promise<void> =>
-    api.post('/auth/2fa/email-code', { two_fa_token: twoFaToken }).then(() => undefined),
+    api.post('/operator/auth/2fa/email-code', { two_fa_token: twoFaToken }).then(() => undefined),
 
   verify2faEmailCode: (twoFaToken: string, code: string): Promise<LoginResponse> =>
-    api.post<LoginResponse>('/auth/2fa/email-code/verify', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
+    api.post<LoginResponse>('/operator/auth/2fa/email-code/verify', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
 
   verifyBackupCode: (twoFaToken: string, code: string): Promise<LoginResponse> =>
-    api.post<LoginResponse>('/auth/2fa/verify-backup', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
+    api.post<LoginResponse>('/operator/auth/2fa/verify-backup', { two_fa_token: twoFaToken, code }).then((r: AxiosResponse<LoginResponse>) => r.data),
 
   generateBackupCodes: (): Promise<{ codes: string[] }> =>
-    api.post<{ codes: string[] }>('/auth/backup-codes/generate').then((r: AxiosResponse<{ codes: string[] }>) => r.data),
+    api.post<{ codes: string[] }>('/operator/auth/backup-codes/generate').then((r: AxiosResponse<{ codes: string[] }>) => r.data),
 
   getBackupCodeStatus: (): Promise<{ total: number; used: number; remaining: number }> =>
-    api.get<{ total: number; used: number; remaining: number }>('/auth/backup-codes/status').then((r: AxiosResponse<{ total: number; used: number; remaining: number }>) => r.data),
+    api.get<{ total: number; used: number; remaining: number }>('/operator/auth/backup-codes/status').then((r: AxiosResponse<{ total: number; used: number; remaining: number }>) => r.data),
 
   getNotificationPrefs: (): Promise<NotifPref[]> =>
-    api.get<NotifPref[]>('/auth/me/notification-prefs').then((r: AxiosResponse<NotifPref[]>) => r.data),
+    api.get<NotifPref[]>('/operator/auth/me/notification-prefs').then((r: AxiosResponse<NotifPref[]>) => r.data),
 
   updateNotificationPrefs: (body: NotifPref[]): Promise<NotifPref[]> =>
-    api.put<NotifPref[]>('/auth/me/notification-prefs', body).then((r: AxiosResponse<NotifPref[]>) => r.data),
+    api.put<NotifPref[]>('/operator/auth/me/notification-prefs', body).then((r: AxiosResponse<NotifPref[]>) => r.data),
 
   resetNotificationPrefs: (): Promise<NotifPref[]> =>
-    api.post<NotifPref[]>('/auth/me/notification-prefs/reset').then((r: AxiosResponse<NotifPref[]>) => r.data),
+    api.post<NotifPref[]>('/operator/auth/me/notification-prefs/reset').then((r: AxiosResponse<NotifPref[]>) => r.data),
 
   getPermissions: (): Promise<{ operations: string; fleet_crew: string; finance: string; all_granted: boolean }> =>
-    api.get<{ operations: string; fleet_crew: string; finance: string; all_granted: boolean }>('/auth/me/permissions').then(r => r.data),
+    api.get<{ operations: string; fleet_crew: string; finance: string; all_granted: boolean }>('/operator/auth/me/permissions').then(r => r.data),
 }
