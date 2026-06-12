@@ -63,26 +63,26 @@ export interface InsuranceUpload {
 
 export const operatorProfileService = {
   getProfile: (): Promise<OperatorProfile> =>
-    api.get<OperatorProfile>('/profile').then(r => r.data),
+    api.get<OperatorProfile>('/operator/profile').then(r => r.data),
 
   updateProfile: (body: ProfileUpdate): Promise<OperatorProfile> =>
-    api.patch<OperatorProfile>('/profile', body).then(r => r.data),
+    api.patch<OperatorProfile>('/operator/profile', body).then(r => r.data),
 
   submitOnboarding: (body: OnboardingSubmitRequest): Promise<OperatorProfile> =>
-    api.post<OperatorProfile>('/onboarding/submit', body).then(r => r.data),
+    api.post<OperatorProfile>('/operator/onboarding/submit', body).then(r => r.data),
 
   getOnboardingStatus: (): Promise<OnboardingStatus> =>
-    api.get<OnboardingStatus>('/onboarding/status').then(r => r.data),
+    api.get<OnboardingStatus>('/operator/onboarding/status').then(r => r.data),
 
   uploadCertification: (body: CertificationUpload): Promise<OperatorDocument> =>
-    api.post<OperatorDocument>('/profile/certifications', body).then(r => r.data),
+    api.post<OperatorDocument>('/operator/profile/certifications', body).then(r => r.data),
 
   uploadInsurance: (body: InsuranceUpload): Promise<OperatorDocument> =>
-    api.post<OperatorDocument>('/profile/insurance', body).then(r => r.data),
+    api.post<OperatorDocument>('/operator/profile/insurance', body).then(r => r.data),
 
   updatePayoutDetails: (payout_account_ref: string): Promise<OperatorProfile> =>
-    api.patch<OperatorProfile>('/payout-details', { payout_account_ref }).then(r => r.data),
+    api.patch<OperatorProfile>('/operator/payout-details', { payout_account_ref }).then(r => r.data),
 
   listDocuments: (): Promise<OperatorDocument[]> =>
-    api.get<OperatorDocument[]>('/profile/documents').then(r => r.data),
+    api.get<OperatorDocument[]>('/operator/profile/documents').then(r => r.data),
 }

@@ -60,20 +60,20 @@ export interface DashboardFullResponse {
 
 export const operatorDashboardService = {
   getKPIs: (window = '30d'): Promise<DashboardKPIs> =>
-    api.get<DashboardKPIs>('/dashboard/kpis', { params: { window } }).then(r => r.data),
+    api.get<DashboardKPIs>('/operator/dashboard/kpis', { params: { window } }).then(r => r.data),
 
   getUpcomingFlights: (): Promise<{ flights: UpcomingFlight[] }> =>
-    api.get<{ flights: UpcomingFlight[] }>('/dashboard/upcoming-flights').then(r => r.data),
+    api.get<{ flights: UpcomingFlight[] }>('/operator/dashboard/upcoming-flights').then(r => r.data),
 
   getActionQueue: (): Promise<{ items: ActionQueueItem[]; total: number }> =>
-    api.get<{ items: ActionQueueItem[]; total: number }>('/dashboard/action-queue').then(r => r.data),
+    api.get<{ items: ActionQueueItem[]; total: number }>('/operator/dashboard/action-queue').then(r => r.data),
 
   getTrends: (metric: string, window = '30d'): Promise<TrendSeries> =>
-    api.get<TrendSeries>('/dashboard/trends', { params: { metric, window } }).then(r => r.data),
+    api.get<TrendSeries>('/operator/dashboard/trends', { params: { metric, window } }).then(r => r.data),
 
   getComplianceAlerts: (): Promise<ComplianceAlert[]> =>
-    api.get<ComplianceAlert[]>('/dashboard/compliance-alerts').then(r => r.data),
+    api.get<ComplianceAlert[]>('/operator/dashboard/compliance-alerts').then(r => r.data),
 
   getDashboard: (window = '30d'): Promise<DashboardFullResponse> =>
-    api.get<DashboardFullResponse>('/dashboard', { params: { window } }).then(r => r.data),
+    api.get<DashboardFullResponse>('/operator/dashboard', { params: { window } }).then(r => r.data),
 }
