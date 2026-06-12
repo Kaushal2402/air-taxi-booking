@@ -17,6 +17,14 @@ import '../../features/home/presentation/screens/explore_routes_screen.dart';
 import '../../features/home/presentation/screens/route_preview_screen.dart';
 import '../../features/home/presentation/screens/promotions_screen.dart';
 import '../../features/home/presentation/screens/notifications_screen.dart';
+// Module 03 — Booking
+import '../../features/booking/presentation/screens/destination_picker_screen.dart';
+import '../../features/booking/presentation/screens/date_time_screen.dart';
+import '../../features/booking/presentation/screens/passenger_count_screen.dart';
+import '../../features/booking/presentation/screens/search_results_screen.dart';
+import '../../features/booking/presentation/screens/seat_map_screen.dart';
+import '../../features/booking/presentation/screens/passenger_details_screen.dart';
+import '../../features/booking/presentation/screens/booking_summary_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Route name constants — use from widgets instead of raw strings
@@ -37,6 +45,15 @@ abstract class AppRoutes {
   static const routePreview = '/home/route/:routeId';
   static const promotions = '/home/promotions';
   static const notifications = '/home/notifications';
+
+  // Module 03 — Booking flow
+  static const bookingDestination = '/booking/destination';
+  static const bookingDateTime = '/booking/date-time';
+  static const bookingPassengers = '/booking/passengers';
+  static const bookingResults = '/booking/results';
+  static const bookingSeatMap = '/booking/seats';
+  static const bookingPassengerDetails = '/booking/passenger-details';
+  static const bookingSummary = '/booking/summary';
 
   /// Substitutes the :routeId param for navigation.
   static String routePreviewPath(String routeId) => '/home/route/$routeId';
@@ -157,6 +174,37 @@ GoRouter buildAppRouter(AuthStateNotifier authNotifier) {
       GoRoute(
         path: AppRoutes.notifications,
         builder: (context, state) => const NotificationsScreen(),
+      ),
+
+      // ── Module 03 — Booking flow ──────────────────────────────────────────
+
+      GoRoute(
+        path: AppRoutes.bookingDestination,
+        builder: (context, state) => const DestinationPickerScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingDateTime,
+        builder: (context, state) => const DateTimeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingPassengers,
+        builder: (context, state) => const PassengerCountScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingResults,
+        builder: (context, state) => const SearchResultsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingSeatMap,
+        builder: (context, state) => const SeatMapScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingPassengerDetails,
+        builder: (context, state) => const PassengerDetailsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.bookingSummary,
+        builder: (context, state) => const BookingSummaryScreen(),
       ),
     ],
   );
