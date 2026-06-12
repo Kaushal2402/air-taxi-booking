@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:utbp_api_client/utbp_api_client.dart';
 
+import '../../../features/booking/domain/providers/booking_providers.dart';
 import '../data/services/auth_service.dart';
 import 'auth_models.dart';
 
@@ -149,8 +150,15 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       // Best-effort — continue sign-out even if backend call fails.
     }
     await ref.read(utbpApiClientProvider).clearTokens();
-    // IMPORTANT: when backend is wired, also reset every other provider
-    // that holds user data (home, trips, wallet, profile, notifications).
+    // Reset all booking/payment providers to prevent PII leaking to the
+    // next session (required by CLAUDE.md rule: state clears on logout).
+    ref.read(bookingFlowProvider.notifier).reset();
+    ref.invalidate(fareEstimateProvider);
+    ref.invalidate(createBookingProvider);
+    ref.invalidate(paymentMethodsProvider);
+    ref.invalidate(recentDestinationsProvider);
+    ref.invalidate(availableFlightsProvider);
+    ref.invalidate(seatMapProvider);
     state = const AsyncValue.data(AuthState.guest);
   }
 

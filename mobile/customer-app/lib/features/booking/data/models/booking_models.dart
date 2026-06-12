@@ -339,6 +339,10 @@ class BookingDraft {
   final String? destinationCode;
   final String? destinationName;
   final String? routeId;
+  /// Category value from AirRoute.category (e.g. "shuttle", "on_demand").
+  /// Used to derive the correct service_subtype for booking creation and the
+  /// `service` field sent to POST /pricing/estimate.
+  final String? routeCategory;
 
   // 3.2 Date & time
   final DateTime? selectedDate;
@@ -371,6 +375,7 @@ class BookingDraft {
     this.destinationCode,
     this.destinationName,
     this.routeId,
+    this.routeCategory,
     this.selectedDate,
     this.selectedFlightId,
     this.departureTime,
@@ -394,6 +399,7 @@ class BookingDraft {
     String? destinationCode,
     String? destinationName,
     String? routeId,
+    String? routeCategory,
     DateTime? selectedDate,
     String? selectedFlightId,
     String? departureTime,
@@ -414,6 +420,7 @@ class BookingDraft {
         destinationCode: destinationCode ?? this.destinationCode,
         destinationName: destinationName ?? this.destinationName,
         routeId: routeId ?? this.routeId,
+        routeCategory: routeCategory ?? this.routeCategory,
         selectedDate: selectedDate ?? this.selectedDate,
         selectedFlightId: selectedFlightId ?? this.selectedFlightId,
         departureTime: departureTime ?? this.departureTime,

@@ -3,6 +3,7 @@
 // All layouts use EdgeInsetsDirectional for RTL safety.
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 // ---------------------------------------------------------------------------
 // Route summary pill (forest dark background) — used on screens 3.2, 3.3, 3.4
@@ -536,7 +537,7 @@ class FareRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final amount = (amountMinor / 100).toStringAsFixed(0);
+    final amount = NumberFormat('#,##,##0', 'en_IN').format(amountMinor ~/ 100);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

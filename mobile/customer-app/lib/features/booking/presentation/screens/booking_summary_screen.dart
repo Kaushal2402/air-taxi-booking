@@ -2,12 +2,11 @@
 // FlowStep, forest gradient flight card, fare breakdown, payment method,
 // confirm CTA.
 
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/router/app_router.dart';
 import '../../data/models/booking_models.dart';
@@ -26,9 +25,9 @@ class _BookingSummaryScreenState
     extends ConsumerState<BookingSummaryScreen> {
   bool _isConfirming = false;
 
-  // Simple idempotency key generated once per screen instance
-  final String _idempotencyKey =
-      '${DateTime.now().millisecondsSinceEpoch}-${math.Random().nextInt(999999)}';
+  // UUID v4 idempotency key — generated once per screen instance,
+  // so retries on the same screen reuse the same key (idempotency guarantee).
+  final String _idempotencyKey = const Uuid().v4();
 
   @override
   void initState() {
