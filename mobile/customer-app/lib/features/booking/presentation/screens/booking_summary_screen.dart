@@ -412,7 +412,7 @@ class _FlightSummaryCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        draft.originCode ?? 'BOM',
+                        draft.originCode ?? '—',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w700,
@@ -423,7 +423,7 @@ class _FlightSummaryCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '$depTime · ${draft.originName ?? 'Juhu'}',
+                        '$depTime · ${draft.originName ?? '—'}',
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onPrimary.withOpacity(0.4),
@@ -481,7 +481,7 @@ class _FlightSummaryCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        draft.destinationCode ?? 'PNQ',
+                        draft.destinationCode ?? '—',
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w700,
@@ -492,7 +492,7 @@ class _FlightSummaryCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '$arrTime · ${draft.destinationName ?? 'Lohegaon'}',
+                        '$arrTime · ${draft.destinationName ?? '—'}',
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onPrimary.withOpacity(0.4),
