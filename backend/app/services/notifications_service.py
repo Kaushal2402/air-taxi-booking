@@ -198,10 +198,11 @@ async def send_event_notification(
     recipient_phone: str | None = None,
     recipient_email: str | None = None,
     recipient_push_token: str | None = None,
+    recipient_user_type: str | None = None,   # 'admin'|'operator'|'customer'|'driver'
+    recipient_user_id: str | None = None,     # used with push_token_service (multi-device)
     notify_push: bool = True,
     notify_sms: bool = True,
     notify_email: bool = True,
-    notify_wa: bool = False,
     reference: str | None = None,  # booking_ref or any external reference for log filtering
 ) -> None:
     """
@@ -265,20 +266,32 @@ async def send_event_notification(
 
     # 4. Push — send first; SMS fallback fires after sms_fallback_seconds if push fails
     push_delivered = False
-    if "push" in channels and notify_push and recipient_push_token:
+    if "push" in channels and notify_push:
+        push_title = _render(tmpl.push_title, variables)
+        push_body_text = _render(tmpl.push_body, variables)
         try:
-            from app.providers import get_push_provider
-            from app.providers.base.push import PushMessage
-            provider = get_push_provider()
-            msg = PushMessage(
-                title=_render(tmpl.push_title, variables),
-                body=_render(tmpl.push_body, variables),
-                # Pass priority in data payload so FCM adapter can forward it
-                data={"priority": fcm_priority},
-            )
-            res = await provider.send(recipient_push_token, msg)
-            push_delivered = res.success
-            _log(db, tmpl, "delivered" if res.success else "failed", "push", reference=reference)
+            # Multi-device path: look up all tokens for this user
+            if recipient_user_type and recipient_user_id:
+                from app.services.push_token_service import send_to_user
+                delivered_count = await send_to_user(
+                    db, recipient_user_type, recipient_user_id,  # type: ignore[arg-type]
+                    title=push_title, body=push_body_text,
+                    data={}, priority=fcm_priority,
+                )
+                push_delivered = delivered_count > 0
+                _log(db, tmpl, "delivered" if push_delivered else "failed", "push", reference=reference)
+            # Single-token legacy path
+            elif recipient_push_token:
+                from app.providers import get_push_provider
+                from app.providers.base.push import PushMessage
+                provider = get_push_provider()
+                msg = PushMessage(
+                    title=push_title, body=push_body_text,
+                    data={"priority": fcm_priority},
+                )
+                res = await provider.send(recipient_push_token, msg)
+                push_delivered = res.success
+                _log(db, tmpl, "delivered" if res.success else "failed", "push", reference=reference)
         except Exception as exc:
             logger.warning("send_event_notification push failed for %s: %s", template_code, exc)
             _log(db, tmpl, "failed", "push", reference=reference)
@@ -329,7 +342,7 @@ async def send_event_notification(
             _log(db, tmpl, "failed", "email", recipient=recipient_email, reference=reference)
 
     # 6. WhatsApp
-    if "wa" in channels and notify_wa and recipient_phone and tmpl.wa_body:
+    if "wa" in channels and recipient_phone and tmpl.wa_body:
         try:
             from app.providers import get_whatsapp_provider
             provider = get_whatsapp_provider()

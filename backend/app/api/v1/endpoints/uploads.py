@@ -47,17 +47,26 @@ async def upload_file(
     if len(content) > MAX_SIZE_BYTES:
         raise HTTPException(status_code=422, detail="File exceeds 10 MB limit.")
 
-    # Build destination path
     ext = Path(file.filename or "file").suffix.lower() or ".bin"
     unique_name = f"{uuid.uuid4()}{ext}"
-    dest_dir = Path(f"static/{folder}")
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / unique_name
 
-    dest.write_bytes(content)
+    raw_key = f"{folder}/{unique_name}"
+    in_s3 = False
 
+    try:
+        from app.providers import get_storage_provider
+        await get_storage_provider().upload(content, raw_key, file.content_type or "application/octet-stream")
+        in_s3 = True
+    except Exception:
+        dest_dir = Path(f"static/{folder}")
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / unique_name).write_bytes(content)
+
+    from app.core.storage_utils import make_key, resolve_url
+    stored_key = make_key(raw_key, in_s3)
     return JSONResponse({
-        "url": f"/static/{folder}/{unique_name}",
+        "url": resolve_url(stored_key),
+        "key": stored_key,
         "original_filename": file.filename,
         "size_bytes": len(content),
     })

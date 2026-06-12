@@ -1,22 +1,21 @@
 import httpx
 
-from app.config import get_settings
+from app.dynamic_config import dyn
 from app.providers.base.whatsapp import WhatsAppProvider, WhatsAppResult
-
-settings = get_settings()
 
 
 class GenericCloudApiWhatsAppAdapter(WhatsAppProvider):
     """Config-driven WhatsApp adapter targeting Meta Cloud API or any BSP."""
 
     async def send_text(self, to: str, message: str) -> WhatsAppResult:
-        if not settings.WHATSAPP_ENDPOINT:
+        endpoint = dyn.get("WHATSAPP_ENDPOINT")
+        if not endpoint:
             return WhatsAppResult(success=False, error="WHATSAPP_ENDPOINT not configured")
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(
-                    settings.WHATSAPP_ENDPOINT,
-                    headers={"Authorization": f"Bearer {settings.WHATSAPP_TOKEN}"},
+                    endpoint,
+                    headers={"Authorization": f"Bearer {dyn.get('WHATSAPP_TOKEN')}"},
                     json={
                         "messaging_product": "whatsapp",
                         "to": to,
@@ -36,13 +35,14 @@ class GenericCloudApiWhatsAppAdapter(WhatsAppProvider):
     async def send_template(
         self, to: str, template_name: str, language: str, components: list
     ) -> WhatsAppResult:
-        if not settings.WHATSAPP_ENDPOINT:
+        endpoint = dyn.get("WHATSAPP_ENDPOINT")
+        if not endpoint:
             return WhatsAppResult(success=False, error="WHATSAPP_ENDPOINT not configured")
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(
-                    settings.WHATSAPP_ENDPOINT,
-                    headers={"Authorization": f"Bearer {settings.WHATSAPP_TOKEN}"},
+                    endpoint,
+                    headers={"Authorization": f"Bearer {dyn.get('WHATSAPP_TOKEN')}"},
                     json={
                         "messaging_product": "whatsapp",
                         "to": to,

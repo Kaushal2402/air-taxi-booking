@@ -257,6 +257,25 @@ async def issue_refund(db, txn_id: str, refund_req: RefundRequest) -> RefundResp
 
     refund_id = f"REF-{uuid.uuid4().hex[:8].upper()}"
     now = _now()
+    gateway_refund_id: str | None = None
+    refund_status = "pending"
+
+    # ── Call Razorpay only for online payments that have been captured ─────────
+    is_online = str(p.method.value if hasattr(p.method, "value") else p.method) != "cash"
+    has_gateway_ref = bool(p.gateway_ref)  # payment_id set after capture
+    if is_online and has_gateway_ref:
+        try:
+            from app.providers import get_payment_provider
+            result_rz = await get_payment_provider().refund(
+                p.gateway_ref,
+                refund_amount,
+                reason=refund_req.reason or "",
+            )
+            gateway_refund_id = result_rz.gateway_refund_id
+            refund_status = result_rz.status  # "pending" / "processed" from Razorpay
+        except Exception:
+            # Non-fatal: record the refund locally even if gateway call fails
+            pass
 
     refund = Refund(
         id=refund_id,
@@ -264,13 +283,13 @@ async def issue_refund(db, txn_id: str, refund_req: RefundRequest) -> RefundResp
         amount=refund_amount,
         refund_type=refund_req.refund_type,
         reason=refund_req.reason,
-        status="pending",
+        status=refund_status,
+        gateway_refund_id=gateway_refund_id,
         created_at=now,
         updated_at=now,
     )
     db.add(refund)
 
-    # update payment status
     new_status = PaymentStatus.refunded if refund_req.refund_type == "full" else PaymentStatus.part_refund
     p.status = new_status
     p.updated_at = now
@@ -282,7 +301,7 @@ async def issue_refund(db, txn_id: str, refund_req: RefundRequest) -> RefundResp
         refund_id=refund_id,
         transaction_id=txn_id,
         amount=refund_amount,
-        status="pending",
+        status=refund_status,
         message="Refund initiated successfully",
         created_at=now,
     )

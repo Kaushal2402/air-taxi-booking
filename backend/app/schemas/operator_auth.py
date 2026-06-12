@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, computed_field
+from pydantic import BaseModel, EmailStr, computed_field, field_validator
 
 
 class OperatorUserOut(BaseModel):
@@ -17,6 +17,12 @@ class OperatorUserOut(BaseModel):
     operator_id: str
     operator_name: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @field_validator("avatar_url", mode="before")
+    @classmethod
+    def _resolve_avatar(cls, v: Optional[str]) -> Optional[str]:
+        from app.core.storage_utils import resolve_url
+        return resolve_url(v)
 
     # Aliases expected by the frontend
     @computed_field  # type: ignore[misc]
@@ -49,6 +55,7 @@ class OperatorTokenResponse(BaseModel):
 
 class OperatorRefreshRequest(BaseModel):
     refresh_token: str
+    push_token: str | None = None
 
 
 class OperatorForgotPasswordRequest(BaseModel):

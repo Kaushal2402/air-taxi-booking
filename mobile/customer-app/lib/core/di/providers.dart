@@ -1,10 +1,9 @@
 // Shared infrastructure providers used by multiple features.
-// Centralising here avoids circular imports between auth_provider.dart
-// and home_providers.dart.
+// Centralising here avoids circular imports.
 //
-// auth_provider.dart still defines utbpApiClientProvider for backward
-// compatibility — it is re-exported from here so other features can
-// import from a single location.
+// utbpApiClientProvider is defined in api_client_provider.dart and
+// re-exported here (and from auth_provider.dart) for backward compatibility.
 
-export '../../features/auth/domain/auth_provider.dart'
-    show utbpApiClientProvider;
+export 'api_client_provider.dart' show utbpApiClientProvider;
+export '../services/push_notification_service.dart'
+    show pushNotificationServiceProvider;

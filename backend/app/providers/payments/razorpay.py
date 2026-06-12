@@ -4,7 +4,7 @@ import hmac
 
 import httpx
 
-from app.config import get_settings
+from app.dynamic_config import dyn
 from app.providers.base.payments import (
     PaymentCapture,
     PaymentOrder,
@@ -13,16 +13,14 @@ from app.providers.base.payments import (
     RefundResult,
 )
 
-settings = get_settings()
-
 BASE_URL = "https://api.razorpay.com/v1"
 
 
 class RazorpayAdapter(PaymentProvider):
     def __init__(self, key_id: str | None = None, key_secret: str | None = None):
-        self._key_id = key_id or settings.RAZORPAY_KEY_ID
-        self._key_secret = key_secret or settings.RAZORPAY_KEY_SECRET
-        self._webhook_secret = settings.RAZORPAY_WEBHOOK_SECRET
+        self._key_id = key_id or dyn.get("RAZORPAY_KEY_ID")
+        self._key_secret = key_secret or dyn.get("RAZORPAY_KEY_SECRET")
+        self._webhook_secret = dyn.get("RAZORPAY_WEBHOOK_SECRET")
 
     @property
     def _auth(self):

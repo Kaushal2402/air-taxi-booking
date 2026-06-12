@@ -376,6 +376,8 @@ async def approve_driver(db: AsyncSession, driver_id: str) -> Driver:
             {"driver_name": driver.name, "brand_name": "Air Taxi"},
             recipient_phone=driver.phone,
             recipient_email=driver.email,
+            recipient_user_type="driver",
+            recipient_user_id=driver.id,
             notify_push=True, notify_sms=True, notify_email=True,
         )
     except Exception:
@@ -709,17 +711,22 @@ async def upload_document_image(
     }
     ext = ext_map.get(content_type, "bin")
 
-    # Build safe filename: <doc_id>.<ext>  (overwrites previous upload for same doc)
-    os.makedirs(_UPLOAD_DIR, exist_ok=True)
-    filename  = f"{doc_id}.{ext}"
-    file_path = os.path.join(_UPLOAD_DIR, filename)
+    filename = f"{doc_id}.{ext}"
+    raw_key = f"documents/{filename}"
+    content = await file.read()
+    in_s3 = False
 
-    # Stream file to disk
-    with open(file_path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
+    try:
+        from app.providers import get_storage_provider
+        await get_storage_provider().upload(content, raw_key, content_type)
+        in_s3 = True
+    except Exception:
+        os.makedirs(_UPLOAD_DIR, exist_ok=True)
+        with open(os.path.join(_UPLOAD_DIR, filename), "wb") as out:
+            out.write(content)
 
-    # Persist URL
-    doc.image_url = f"/static/documents/{filename}"
+    from app.core.storage_utils import make_key
+    doc.image_url = make_key(raw_key, in_s3)
     await db.commit()
     await db.refresh(doc)
     return doc

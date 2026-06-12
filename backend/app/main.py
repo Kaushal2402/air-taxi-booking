@@ -16,6 +16,7 @@ from app.core.exceptions import AppException, app_exception_handler
 from app.core.logging import setup_logging
 from app.database import AsyncSessionLocal
 from app.services.purge_service import run_all_purges
+from app.dynamic_config import load_from_db as _load_dynamic_config
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ async def _daily_purge_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _purge_task
+    await _load_dynamic_config()
+    logger.info("dynamic_config loaded from DB")
     _purge_task = asyncio.create_task(_daily_purge_loop())
     logger.info("daily_purge task started")
     yield

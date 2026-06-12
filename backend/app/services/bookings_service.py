@@ -492,6 +492,22 @@ async def create_assisted_booking(
         else 2.0
     )
 
+    # Resolve route distance & duration via Google Maps (non-fatal)
+    distance_km: Optional[float] = None
+    duration_min: Optional[int] = None
+    if all(v is not None for v in (data.pickup_lat, data.pickup_lng, data.drop_lat, data.drop_lng)):
+        try:
+            from app.providers import get_maps_provider
+            from app.providers.base.maps import LatLng
+            route = await get_maps_provider().get_route(
+                LatLng(lat=data.pickup_lat, lng=data.pickup_lng),  # type: ignore[arg-type]
+                LatLng(lat=data.drop_lat, lng=data.drop_lng),      # type: ignore[arg-type]
+            )
+            distance_km = round(route.distance_meters / 1000, 2)
+            duration_min = max(1, round(route.duration_seconds / 60))
+        except Exception:
+            pass
+
     booking = RoadBooking(
         id=str(uuid.uuid4()),
         booking_ref=booking_ref,
@@ -515,6 +531,8 @@ async def create_assisted_booking(
         customer_ride_count=customer_ride_count,
         customer_rating=customer_rating,
         current_radius_km=initial_radius_km,
+        distance_km=distance_km,
+        duration_min=duration_min,
     )
     db.add(booking)
     await db.flush()  # get the id
@@ -568,6 +586,61 @@ async def create_assisted_booking(
             amount_minor=500,
         ))
 
+    # ── Create Razorpay order + Payment ledger entry ──────────────────────────
+    _is_online_payment = data.payment_method and data.payment_method != "cash"
+    if _is_online_payment and data.fare_estimate_minor and data.fare_estimate_minor > 0:
+        try:
+            from app.providers import get_payment_provider
+            from app.models.payment import Payment as PaymentModel, PaymentMethod as PM, PaymentStatus as PS
+            _currency = await get_base_currency(db)
+            _order = await get_payment_provider().create_order(
+                amount_minor=data.fare_estimate_minor,
+                currency=_currency,
+                receipt=booking_ref,
+                notes={"booking_id": booking.id, "customer_id": data.customer_id or ""},
+            )
+            try:
+                _pm = PM(data.payment_method)
+            except ValueError:
+                _pm = PM.upi
+            db.add(PaymentModel(
+                id=f"PAY-{booking.id[:8].upper()}",
+                booking_id=booking.id,
+                customer_id=data.customer_id or "",
+                customer_name=customer_name or "",
+                booking_ref=booking_ref,
+                service=f"Road · {data.vehicle_class or data.service_type or ''}",
+                method=_pm,
+                gross_amount=data.fare_estimate_minor,
+                gateway_fee=0,
+                net_amount=data.fare_estimate_minor,
+                status=PS.initiated,
+                gateway_order_id=_order.gateway_order_id,
+                currency=_currency,
+            ))
+        except Exception:
+            pass
+    elif data.payment_method == "cash" and data.fare_estimate_minor and data.fare_estimate_minor > 0:
+        try:
+            from app.models.payment import Payment as PaymentModel, PaymentMethod as PM, PaymentStatus as PS
+            _currency = await get_base_currency(db)
+            db.add(PaymentModel(
+                id=f"PAY-{booking.id[:8].upper()}",
+                booking_id=booking.id,
+                customer_id=data.customer_id or "",
+                customer_name=customer_name or "",
+                booking_ref=booking_ref,
+                service=f"Road · {data.vehicle_class or data.service_type or ''}",
+                method=PM.cash,
+                gross_amount=data.fare_estimate_minor,
+                gateway_fee=0,
+                net_amount=data.fare_estimate_minor,
+                status=PS.captured,
+                currency=_currency,
+            ))
+        except Exception:
+            pass
+
     await db.commit()
 
     # Send BOOKING_CREATED notification (non-fatal)
@@ -585,6 +658,8 @@ async def create_assisted_booking(
             },
             recipient_phone=cust.phone if cust else None,
             recipient_email=cust.email if cust else None,
+            recipient_user_type="customer",
+            recipient_user_id=data.customer_id,
             notify_push=True, notify_sms=True, notify_email=True,
         )
     except Exception:
@@ -738,6 +813,8 @@ async def cancel_booking(
             },
             recipient_phone=cust.phone if cust else None,
             recipient_email=cust.email if cust else None,
+            recipient_user_type="customer",
+            recipient_user_id=booking.customer_id,
             notify_push=True, notify_sms=True, notify_email=True,
         )
     except Exception:

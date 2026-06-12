@@ -1,21 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:utbp_api_client/utbp_api_client.dart';
 
+import '../../../core/di/api_client_provider.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../data/services/auth_service.dart';
 import 'auth_models.dart';
 
-// ---------------------------------------------------------------------------
-// Infrastructure providers
-// ---------------------------------------------------------------------------
-
-final utbpApiClientProvider = Provider<UtbpApiClient>((ref) {
-  return UtbpApiClient(
-    baseUrl: const String.fromEnvironment(
-      'API_BASE_URL',
-      defaultValue: 'http://localhost:8000',
-    ),
-  );
-});
+// utbpApiClientProvider is defined in core/di/api_client_provider.dart and
+// re-exported from core/di/providers.dart. Re-export it here for backward
+// compatibility with callers that import from auth_provider.dart.
+export '../../../core/di/api_client_provider.dart' show utbpApiClientProvider;
 
 final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService(client: ref.read(utbpApiClientProvider));
@@ -143,6 +136,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   /// Signs out: clears tokens, resets all user state.
   Future<void> signOut() async {
     state = const AsyncValue.loading();
+    // Deregister FCM token before clearing auth tokens — best-effort.
+    try {
+      await ref.read(pushNotificationServiceProvider).deregisterToken();
+    } catch (_) {
+      // Never block sign-out on push-token failure.
+    }
     try {
       await ref.read(authServiceProvider).logout();
     } catch (_) {

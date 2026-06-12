@@ -544,6 +544,9 @@ async def cancel_booking(
                 },
                 recipient_phone=booking.customer_phone,
                 recipient_email=booking.customer_email,
+                recipient_user_type="customer",
+                recipient_user_id=booking.customer_id,
+                notify_push=True, notify_sms=True, notify_email=True,
                 reference=booking.booking_ref,
             )
     except Exception:
@@ -624,6 +627,9 @@ async def process_refund(
                 },
                 recipient_phone=booking.customer_phone,
                 recipient_email=booking.customer_email,
+                recipient_user_type="customer",
+                recipient_user_id=booking.customer_id,
+                notify_push=True, notify_sms=True, notify_email=True,
                 reference=booking.booking_ref,
             )
     except Exception:
@@ -871,6 +877,9 @@ async def request_operator_quotes(
                     },
                     recipient_phone=contact_phone,
                     recipient_email=contact_email,
+                    recipient_user_type="operator",
+                    recipient_user_id=op.id,
+                    notify_push=True, notify_sms=True, notify_email=True,
                     reference=booking.booking_ref,
                 )
     except Exception:
@@ -1092,6 +1101,30 @@ async def create_air_booking(
     if req.payment_method == "cash" and not await get_toggle(db, "cash_payments"):
         raise HTTPException(status_code=422, detail="Cash payments are currently disabled on this platform.")
 
+    # Resolve great-circle distance & estimated flight time via Google Maps geocoding (non-fatal)
+    distance_nm: Any = None
+    flight_time_min: Any = None
+    try:
+        from app.providers import get_maps_provider
+        maps = get_maps_provider()
+        origin_geo = await maps.geocode(req.route_from)
+        dest_geo = await maps.geocode(req.route_to)
+        # Haversine in nautical miles
+        R_NM = 3440.065
+        lat1 = math.radians(origin_geo.lat)
+        lon1 = math.radians(origin_geo.lng)
+        lat2 = math.radians(dest_geo.lat)
+        lon2 = math.radians(dest_geo.lng)
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        dist_nm = R_NM * 2 * math.asin(math.sqrt(a))
+        distance_nm = round(dist_nm, 1)
+        # Helicopter cruise ~150 knots; add 20% overhead for approach/departure
+        flight_time_min = max(5, round(dist_nm / 150 * 60 * 1.2))
+    except Exception:
+        pass
+
     booking = AirBooking(
         id=str(uuid.uuid4()),
         booking_ref=booking_ref,
@@ -1115,6 +1148,8 @@ async def create_air_booking(
         internal_reason=req.internal_reason,
         notes=req.notes,
         manifest_locked=False,
+        distance_nm=distance_nm,
+        flight_time_min=flight_time_min,
     )
     db.add(booking)
 
@@ -1137,6 +1172,51 @@ async def create_air_booking(
         req.internal_reason,
         "info",
     )
+
+    # ── Create Razorpay order + Payment ledger entry ──────────────────────────
+    _is_online = req.payment_method and req.payment_method != "cash"
+    _fare = booking.fare_estimate_minor or req.fare_estimate_minor or 0
+    if _fare > 0:
+        try:
+            from app.models.payment import Payment as PaymentModel, PaymentMethod as PM, PaymentStatus as PS
+            from app.services.settings_service import get_base_currency
+            _currency = await get_base_currency(db)
+            _pm_str = (req.payment_method or "upi").lower()
+            try:
+                _pm = PM(_pm_str)
+            except ValueError:
+                _pm = PM.upi if _is_online else PM.cash
+            _gw_order_id: str | None = None
+            if _is_online:
+                try:
+                    from app.providers import get_payment_provider
+                    _order = await get_payment_provider().create_order(
+                        amount_minor=_fare,
+                        currency=_currency,
+                        receipt=booking.booking_ref,
+                        notes={"booking_id": booking.id, "customer_id": booking.customer_id or ""},
+                    )
+                    _gw_order_id = _order.gateway_order_id
+                except Exception:
+                    pass
+            db.add(PaymentModel(
+                id=f"PAY-{booking.id[:8].upper()}",
+                booking_id=booking.id,
+                customer_id=booking.customer_id or "",
+                customer_name=booking.customer_name or "",
+                booking_ref=booking.booking_ref,
+                service=f"Air · {booking.service_label or booking.service_subtype or ''}",
+                method=_pm,
+                gross_amount=_fare,
+                gateway_fee=0,
+                net_amount=_fare,
+                status=PS.captured if not _is_online else PS.initiated,
+                gateway_order_id=_gw_order_id,
+                currency=_currency,
+            ))
+        except Exception:
+            pass
+
     await db.commit()
     return await get_air_booking(db, booking.id)
 

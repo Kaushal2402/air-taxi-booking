@@ -569,14 +569,22 @@ async def upload_document_image(
     }
     ext = ext_map.get(content_type, "bin")
 
-    os.makedirs(_UPLOAD_DIR, exist_ok=True)
     filename = f"{doc_id}.{ext}"
-    file_path = os.path.join(_UPLOAD_DIR, filename)
+    raw_key = f"documents/{filename}"
+    content = await file.read()
+    in_s3 = False
 
-    with open(file_path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
+    try:
+        from app.providers import get_storage_provider
+        await get_storage_provider().upload(content, raw_key, content_type)
+        in_s3 = True
+    except Exception:
+        os.makedirs(_UPLOAD_DIR, exist_ok=True)
+        with open(os.path.join(_UPLOAD_DIR, filename), "wb") as out:
+            out.write(content)
 
-    doc.image_url = f"/static/documents/{filename}"
+    from app.core.storage_utils import make_key
+    doc.image_url = make_key(raw_key, in_s3)
     await db.commit()
     await db.refresh(doc)
     return doc
@@ -600,14 +608,22 @@ async def upload_vehicle_image(
     ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}
     ext = ext_map.get(content_type, "jpg")
 
-    os.makedirs(_VEHICLE_PHOTO_DIR, exist_ok=True)
     filename = f"{vehicle.id}.{ext}"
-    file_path = os.path.join(_VEHICLE_PHOTO_DIR, filename)
+    raw_key = f"vehicles/{filename}"
+    content = await file.read()
+    in_s3 = False
 
-    with open(file_path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
+    try:
+        from app.providers import get_storage_provider
+        await get_storage_provider().upload(content, raw_key, content_type)
+        in_s3 = True
+    except Exception:
+        os.makedirs(_VEHICLE_PHOTO_DIR, exist_ok=True)
+        with open(os.path.join(_VEHICLE_PHOTO_DIR, filename), "wb") as out:
+            out.write(content)
 
-    vehicle.image_url = f"/static/vehicles/{filename}"
+    from app.core.storage_utils import make_key
+    vehicle.image_url = make_key(raw_key, in_s3)
     await db.commit()
     await db.refresh(vehicle)
     return await _build_vehicle_response(db, vehicle)

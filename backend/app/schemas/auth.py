@@ -35,6 +35,7 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+    push_token: str | None = None   # optional — deregistered on logout
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -80,6 +81,12 @@ class AdminUserBrief(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("avatar_url", mode="before")
+    @classmethod
+    def _resolve_avatar(cls, v: str | None) -> str | None:
+        from app.core.storage_utils import resolve_url
+        return resolve_url(v)
+
 
 class AdminUserResponse(BaseModel):
     id: str
@@ -92,6 +99,12 @@ class AdminUserResponse(BaseModel):
     created_at: datetime
     phone: str | None = None
     avatar_url: str | None = None
+
+    @field_validator("avatar_url", mode="before")
+    @classmethod
+    def _resolve_avatar(cls, v: str | None) -> str | None:
+        from app.core.storage_utils import resolve_url
+        return resolve_url(v)
     locale: str = "en"
     failed_attempts: int = 0
     locked_until: datetime | None = None

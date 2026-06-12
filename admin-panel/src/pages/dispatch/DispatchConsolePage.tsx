@@ -199,7 +199,7 @@ export default function DispatchConsolePage() {
     if (!confirmed) return
     try {
       await import('../../lib/axios').then(m =>
-        m.default.patch(`/bookings/${selectedItem.id}/cancel`, { reason: 'Cancelled from dispatch console — no driver available' })
+        m.default.post(`/bookings/${selectedItem.id}/cancel`, { reason: 'Cancelled from dispatch console — no driver available' })
       )
       await loadQueue()
       setSelectedItem(null)

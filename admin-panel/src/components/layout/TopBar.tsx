@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../ui/Icon'
+import SearchModal from '../ui/SearchModal'
+import QuickCreateModal from '../ui/QuickCreateModal'
+import NotificationDrawer from '../ui/NotificationDrawer'
+import { adminAlertsService } from '../../services/adminAlertsService'
 import { useAuthStore } from '../../store/authStore'
 
 interface TopBarProps {
@@ -22,15 +26,34 @@ export default function TopBar({
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const [searchOpen, setSearchOpen] = useState(false)
-  const searchRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (searchOpen) searchRef.current?.focus()
-  }, [searchOpen])
-
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const initials = user?.name
-    ? user.name.split(' ').map(p => p[0]).slice(0, 2).join('')
+    ? user.name.split(' ').map((p: string) => p[0]).slice(0, 2).join('')
     : 'SA'
+  const avatarUrl = user?.avatar_url || null
+
+  // Global ⌘K / Ctrl+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // Poll unread count every 60 s
+  useEffect(() => {
+    let alive = true
+    const fetch = () => adminAlertsService.unreadCount().then(n => { if (alive) setUnreadCount(n) }).catch(() => {})
+    fetch()
+    const id = setInterval(fetch, 60_000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
 
   /* ── Mobile layout ─────────────────────────────────────────────────────── */
   if (isMobile) {
@@ -71,17 +94,34 @@ export default function TopBar({
           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>{actionsCompact}</div>
         )}
 
-        <button className="btn icon sm" title="Notifications" style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          className="btn icon sm"
+          title="Notifications"
+          style={{ position: 'relative', flexShrink: 0 }}
+          onClick={() => setNotifOpen(true)}
+        >
           <Icon name="bell" size={16} />
-          <span style={{
-            position: 'absolute', top: 6, right: 6,
-            width: 6, height: 6, borderRadius: 3,
-            background: 'var(--warn)', border: '1.5px solid var(--surface)',
-          }} />
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute', top: 3, right: 3,
+              minWidth: 16, height: 16, borderRadius: 8,
+              background: '#e53935', border: '1.5px solid var(--surface)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, fontWeight: 700, color: '#fff',
+              fontFamily: 'var(--font-mono)', padding: '0 3px',
+              lineHeight: 1,
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
 
         <div style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => navigate('/profile')}>
-          <div className="avatar">{initials}</div>
+          <div className="avatar" style={avatarUrl ? { padding: 0, overflow: 'hidden' } : {}}>
+            {avatarUrl
+              ? <img src={avatarUrl} alt={user?.name || 'Profile'} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              : initials}
+          </div>
         </div>
       </div>
     )
@@ -155,39 +195,26 @@ export default function TopBar({
           <span className="dot ok" /> Acme Mobility · Prod · IN
         </div>
 
-        {/* Search — collapses to icon at < 1280px, hides at < 1024px */}
-        {searchOpen ? (
-          <div className="input topbar-search" style={{ width: 220, height: 32, transition: 'width 200ms' }}>
-            <Icon name="search" size={14} className="icon" />
-            <input
-              ref={searchRef}
-              placeholder="Search bookings, drivers, ops…"
-              onBlur={() => setSearchOpen(false)}
-            />
-            <span className="kbd">⌘K</span>
-          </div>
-        ) : (
-          <>
-            {/* Expanded search input visible via CSS at ≥ 1280px */}
-            <div className="input topbar-search" style={{ width: 200, height: 32 }}>
-              <Icon name="search" size={14} className="icon" />
-              <input
-                placeholder="Search…"
-                onFocus={() => setSearchOpen(true)}
-              />
-              <span className="kbd">⌘K</span>
-            </div>
-            {/* Search icon button shown only when input is hidden — controlled by CSS class */}
-            <button
-              className="btn icon sm topbar-search-icon"
-              title="Search"
-              onClick={() => setSearchOpen(true)}
-              style={{ display: 'none' }}
-            >
-              <Icon name="search" size={15} />
-            </button>
-          </>
-        )}
+        {/* Search — triggers command-palette modal */}
+        <div
+          className="input topbar-search"
+          style={{ width: 200, height: 32, cursor: 'pointer' }}
+          onClick={() => setSearchOpen(true)}
+        >
+          <Icon name="search" size={14} className="icon" />
+          <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-3)', userSelect: 'none' }}>Search…</span>
+          <span className="kbd">⌘K</span>
+        </div>
+        <button
+          className="btn icon sm topbar-search-icon"
+          title="Search (⌘K)"
+          onClick={() => setSearchOpen(true)}
+          style={{ display: 'none' }}
+        >
+          <Icon name="search" size={15} />
+        </button>
+
+        <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
 
         {/* Page-level actions — compact icon version shown via actionsCompact */}
         {actions && (
@@ -197,19 +224,40 @@ export default function TopBar({
         )}
 
         {/* Notification bell */}
-        <button className="btn icon sm" title="Notifications" style={{ position: 'relative' }}>
+        <button
+          className="btn icon sm"
+          title="Notifications"
+          style={{ position: 'relative' }}
+          onClick={() => setNotifOpen(true)}
+        >
           <Icon name="bell" size={15} />
-          <span style={{
-            position: 'absolute', top: 6, right: 6,
-            width: 6, height: 6, borderRadius: 3,
-            background: 'var(--warn)', border: '1.5px solid var(--surface)',
-          }} />
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute', top: 3, right: 3,
+              minWidth: 16, height: 16, borderRadius: 8,
+              background: '#e53935', border: '1.5px solid var(--surface)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, fontWeight: 700, color: '#fff',
+              fontFamily: 'var(--font-mono)', padding: '0 3px',
+              lineHeight: 1,
+            }}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
 
+        <NotificationDrawer
+          open={notifOpen}
+          onClose={() => setNotifOpen(false)}
+          onUnreadChange={setUnreadCount}
+        />
+
         {/* Quick create — hidden via CSS at < 1280px */}
-        <button className="btn sm topbar-quick-create">
+        <button className="btn sm topbar-quick-create" onClick={() => setQuickCreateOpen(true)}>
           <Icon name="plus" size={13} /> Quick create
         </button>
+
+        <QuickCreateModal open={quickCreateOpen} onClose={() => setQuickCreateOpen(false)} />
 
         <div style={{ width: 1, height: 28, background: 'var(--rule)', margin: '0 2px' }} />
 
@@ -218,7 +266,11 @@ export default function TopBar({
           style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4, cursor: 'pointer' }}
           onClick={() => navigate('/profile')}
         >
-          <div className="avatar">{initials}</div>
+          <div className="avatar" style={avatarUrl ? { padding: 0, overflow: 'hidden' } : {}}>
+            {avatarUrl
+              ? <img src={avatarUrl} alt={user?.name || 'Profile'} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              : initials}
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
             <span style={{
               fontSize: 12.5, fontWeight: 500, color: 'var(--ink)',

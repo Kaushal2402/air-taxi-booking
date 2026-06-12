@@ -69,6 +69,13 @@ async def refresh(body: RefreshRequest, db=Depends(get_db)):
 @router.post("/logout", response_model=MessageResponse)
 async def logout(body: RefreshRequest, request: Request, current_user: AdminUser = Depends(get_current_admin_user), db=Depends(get_db)):
     await auth_service.logout(db, current_user.id, body.refresh_token)
+    # Deregister FCM token for this device if provided
+    if body.push_token:
+        try:
+            from app.services.push_token_service import deregister
+            await deregister(db, body.push_token)
+        except Exception:
+            pass
     try:
         await audit_service.log_event(
             db,
@@ -231,20 +238,26 @@ async def upload_avatar(
     ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
     ext = ext_map[avatar.content_type]
 
-    # Remove any previous avatar files for this user (different extension)
-    avatars_dir = os.path.join("static", "avatars")
-    for old_ext in ("jpg", "png", "webp"):
-        old_path = os.path.join(avatars_dir, f"{current_user.id}.{old_ext}")
-        if os.path.exists(old_path):
-            os.remove(old_path)
-
     filename = f"{current_user.id}.{ext}"
-    save_path = os.path.join(avatars_dir, filename)
-    with open(save_path, "wb") as f:
-        f.write(content)
+    raw_key = f"avatars/{filename}"
+    in_s3 = False
 
-    # Cache-bust so the browser fetches the new image after re-upload
-    avatar_url = f"{settings.BACKEND_URL}/static/avatars/{filename}?v={int(time.time())}"
+    try:
+        from app.providers import get_storage_provider
+        await get_storage_provider().upload(content, raw_key, avatar.content_type)
+        in_s3 = True
+    except Exception:
+        avatars_dir = os.path.join("static", "avatars")
+        os.makedirs(avatars_dir, exist_ok=True)
+        for old_ext in ("jpg", "png", "webp"):
+            old_path = os.path.join(avatars_dir, f"{current_user.id}.{old_ext}")
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        with open(os.path.join(avatars_dir, filename), "wb") as f:
+            f.write(content)
+
+    from app.core.storage_utils import make_key
+    avatar_url = make_key(raw_key, in_s3)
     await db.execute(sa_update(M).where(M.id == current_user.id).values(avatar_url=avatar_url))
     await db.flush()
     repo = AdminUserRepository(db)
@@ -263,11 +276,35 @@ async def remove_avatar(
     from app.repositories.admin_user_repository import AdminUserRepository
 
     if current_user.avatar_url:
-        match = re.search(r"/static/avatars/([^?]+)", current_user.avatar_url)
-        if match:
-            file_path = os.path.join("static", "avatars", match.group(1))
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        stored = current_user.avatar_url
+
+        if stored.startswith("s3:"):
+            # New format: "s3:avatars/user.jpg"
+            raw_key = stored[3:]
+            try:
+                from app.providers import get_storage_provider
+                await get_storage_provider().delete(raw_key)
+            except Exception:
+                pass
+        elif stored.startswith("http://") or stored.startswith("https://"):
+            # Legacy full URL — extract key and try S3, then local
+            s3_match = re.search(r"amazonaws\.com/(.+?)(\?|$)", stored)
+            local_match = re.search(r"/static/(.+?)(\?|$)", stored)
+            if s3_match:
+                try:
+                    from app.providers import get_storage_provider
+                    await get_storage_provider().delete(s3_match.group(1))
+                except Exception:
+                    pass
+            elif local_match:
+                local_path = os.path.join("static", local_match.group(1))
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+        else:
+            # Plain local key: "avatars/user.jpg"
+            local_path = os.path.join("static", stored)
+            if os.path.exists(local_path):
+                os.remove(local_path)
 
     await db.execute(sa_update(M).where(M.id == current_user.id).values(avatar_url=None))
     await db.flush()

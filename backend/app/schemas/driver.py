@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 # ── Document schemas ──────────────────────────────────────────────────────────
@@ -17,6 +17,13 @@ class DriverDocumentResponse(BaseModel):
     doc_number: str | None
     expiry_date: Any
     image_url: str | None
+
+    @field_validator("image_url", mode="before")
+    @classmethod
+    def _resolve_image(cls, v: str | None) -> str | None:
+        from app.core.storage_utils import resolve_url
+        return resolve_url(v)
+
     review_note: str | None
     reviewed_by: str | None
     reviewed_at: Any

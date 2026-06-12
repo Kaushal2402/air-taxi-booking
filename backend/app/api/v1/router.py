@@ -26,6 +26,10 @@ from app.api.v1.endpoints.sos import router as sos_router
 from app.api.v1.endpoints.data_purge import router as data_purge_router
 from app.api.v1.endpoints.privacy import router as privacy_router
 from app.api.v1.endpoints.reference import router as reference_router
+from app.api.v1.endpoints.search import router as search_router
+from app.api.v1.endpoints.admin_alerts import router as admin_alerts_router
+from app.api.v1.endpoints.integrations import router as integrations_router
+from app.api.v1.endpoints.push_tokens import router as push_tokens_router
 from app.api.v1.endpoints.operator_auth import router as operator_auth_router
 from app.api.v1.endpoints.operator_users import router as operator_users_router
 from app.api.v1.endpoints.operator_profile import router as operator_profile_router
@@ -37,6 +41,7 @@ from app.api.v1.endpoints.operator_routes import router as operator_routes_route
 from app.api.v1.endpoints.operator_pricing import router as operator_pricing_router
 from app.api.v1.endpoints.operator_requests import router as operator_requests_router
 from app.api.v1.endpoints.operator_assignment import router as operator_assignment_router
+from app.api.v1.endpoints.razorpay_webhook import router as razorpay_webhook_router
 
 api_router = APIRouter()
 
@@ -72,6 +77,10 @@ api_router.include_router(sos_router,            prefix="/sos",            tags=
 api_router.include_router(data_purge_router,     prefix="/data/purge",     tags=["Data Retention"])
 api_router.include_router(privacy_router,        prefix="/privacy",        tags=["Privacy Requests"])
 api_router.include_router(reference_router,      prefix="/ref",            tags=["Reference Lookups"])
+api_router.include_router(search_router,         prefix="/search",         tags=["Global Search"])
+api_router.include_router(admin_alerts_router,   prefix="/admin-alerts",   tags=["Admin Alerts"])
+api_router.include_router(integrations_router,   prefix="/integrations",   tags=["Integrations"])
+api_router.include_router(push_tokens_router,    prefix="/push-tokens",    tags=["Push Tokens"])
 api_router.include_router(operator_auth_router,      prefix="/operator/auth",      tags=["Operator Auth"])
 api_router.include_router(operator_users_router,     prefix="/operator/users",     tags=["Operator Users"])
 api_router.include_router(operator_profile_router,   prefix="/operator",           tags=["Operator Profile"])
@@ -83,3 +92,4 @@ api_router.include_router(operator_routes_router,     prefix="/operator",       
 api_router.include_router(operator_pricing_router,    prefix="/operator",           tags=["Operator Pricing"])
 api_router.include_router(operator_requests_router,   prefix="/operator",           tags=["Operator Requests"])
 api_router.include_router(operator_assignment_router, prefix="/operator",           tags=["Operator Assignment"])
+api_router.include_router(razorpay_webhook_router,    prefix="/webhooks/razorpay",  tags=["Webhooks"])

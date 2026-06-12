@@ -231,17 +231,12 @@ async def get_queue_stats(db: AsyncSession) -> QueueStatsResponse:
         if ec == 0:
             no_driver_count += 1
 
-    # Auto-dispatch rate: ratio of bookings assigned within TTL vs total assigned today
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    total_assigned_today = (await db.execute(
-        select(func.count()).select_from(RoadBooking).where(
-            RoadBooking.status.in_(["Accepted", "InProgress", "Completed"]),
-            RoadBooking.updated_at >= today_start,
-        )
-    )).scalar_one()
-    auto_dispatch_rate = 100.0 if total_assigned_today == 0 else round(
-        min(100.0, (total_assigned_today / max(1, total_assigned_today)) * 100), 1
-    )
+    # Auto-dispatch rate: requires RoadBooking.auto_assigned flag (set by the
+    # auto-dispatch engine on each assignment) to distinguish system vs manual
+    # assignments.  That column does not exist yet — return 0.0 until the
+    # auto-dispatch engine is implemented so the field is honest rather than
+    # always 100 % (the previous formula divided a value by itself).
+    auto_dispatch_rate = 0.0
 
     # Active exceptions
     exc_stmt = select(func.count()).select_from(DispatchException).where(

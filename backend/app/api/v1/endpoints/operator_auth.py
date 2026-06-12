@@ -81,6 +81,12 @@ async def logout(
     current_user: OperatorUser = Depends(get_current_operator_user),
 ):
     await operator_auth_service.logout(db, current_user.id, body.refresh_token)
+    if body.push_token:
+        try:
+            from app.services.push_token_service import deregister
+            await deregister(db, body.push_token)
+        except Exception:
+            pass
     return MessageResponse(message="Logged out successfully")
 
 

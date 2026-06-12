@@ -74,9 +74,9 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""
 
-    # Provider — Push
+    # Provider — Push (FCM v1 — service account JSON, single-line or pretty-printed)
     PUSH_PROVIDER: str = "fcm"
-    FCM_SERVER_KEY: str = ""
+    FCM_SERVICE_ACCOUNT_JSON: str = ""
 
     # Provider — SMS
     SMS_PROVIDER: str = "generic_http"

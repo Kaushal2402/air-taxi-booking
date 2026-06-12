@@ -45,7 +45,8 @@ class Payment(Base):
     gateway_fee = Column(Integer, nullable=False, default=0)
     net_amount = Column(Integer, nullable=False, default=0)
     status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.initiated)
-    gateway_ref = Column(String(255), nullable=True)
+    gateway_order_id = Column(String(255), nullable=True)   # Razorpay order_id (set at booking creation)
+    gateway_ref = Column(String(255), nullable=True)        # Razorpay payment_id (set after capture)
     currency = Column(String(8), nullable=False, default="INR")
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
@@ -62,6 +63,7 @@ class Refund(Base):
     refund_type = Column(String(16), nullable=False)
     reason = Column(String(512), nullable=False, default="")
     status = Column(String(32), nullable=False, default="pending")
+    gateway_refund_id = Column(String(255), nullable=True)  # Razorpay refund_id returned from API
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 

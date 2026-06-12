@@ -3,10 +3,8 @@ from typing import List
 
 import httpx
 
-from app.config import get_settings
+from app.dynamic_config import dyn
 from app.providers.base.maps import GeocodedAddress, LatLng, MapsProvider, RouteResult
-
-settings = get_settings()
 
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
@@ -16,7 +14,7 @@ PLACES_AUTOCOMPLETE_URL = "https://maps.googleapis.com/maps/api/place/autocomple
 
 class GoogleMapsAdapter(MapsProvider):
     def __init__(self, api_key: str | None = None):
-        self._key = api_key or settings.GOOGLE_MAPS_API_KEY
+        self._key = api_key or dyn.get("GOOGLE_MAPS_API_KEY")
 
     async def geocode(self, address: str) -> GeocodedAddress:
         async with httpx.AsyncClient() as client:

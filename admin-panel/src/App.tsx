@@ -90,6 +90,7 @@ import NotificationTemplatesPage from './pages/notifications/NotificationTemplat
 import TemplateEditorPage from './pages/notifications/TemplateEditorPage'
 import DeliveryLogPage from './pages/notifications/DeliveryLogPage'
 import NoAccessPage from './pages/auth/NoAccessPage'
+import IntegrationsPage from './pages/integrations/IntegrationsPage'
 import { getFirstPermittedPath } from './lib/getFirstPermittedPath'
 
 // Blocks access to protected pages when not authenticated.
@@ -325,6 +326,7 @@ function App() {
           <Route path="/settings" element={<PrivateRoute><PlatformSettingsPage /></PrivateRoute>} />
           <Route path="/settings/flags" element={<PrivateRoute><FeatureFlagsPage /></PrivateRoute>} />
           <Route path="/settings/maintenance" element={<PrivateRoute><MaintenancePage /></PrivateRoute>} />
+          <Route path="/integrations" element={<PrivateRoute><IntegrationsPage /></PrivateRoute>} />
 
           {/* RBAC — /rbac/permissions MUST be before /rbac/roles/:id */}
           <Route path="/rbac" element={<PrivateRoute><RolesListPage /></PrivateRoute>} />

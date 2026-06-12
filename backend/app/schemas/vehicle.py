@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 # ── Vehicle Document Schemas ──────────────────────────────────────────────────
@@ -37,6 +37,12 @@ class VehicleDocumentResponse(BaseModel):
     updated_at: Any
 
     model_config = {"from_attributes": True}
+
+    @field_validator("image_url", mode="before")
+    @classmethod
+    def _resolve_image(cls, v: Optional[str]) -> Optional[str]:
+        from app.core.storage_utils import resolve_url
+        return resolve_url(v)
 
 
 # ── Vehicle Maintenance Schemas ───────────────────────────────────────────────
@@ -129,6 +135,12 @@ class VehicleResponse(BaseModel):
     updated_at: Any
 
     model_config = {"from_attributes": True}
+
+    @field_validator("image_url", mode="before")
+    @classmethod
+    def _resolve_image(cls, v: Optional[str]) -> Optional[str]:
+        from app.core.storage_utils import resolve_url
+        return resolve_url(v)
 
 
 class VehicleDetailResponse(VehicleResponse):

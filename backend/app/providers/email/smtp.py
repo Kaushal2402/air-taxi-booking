@@ -3,18 +3,23 @@ import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from app.config import get_settings
+from app.dynamic_config import dyn
 from app.providers.base.email import EmailMessage, EmailProvider, EmailResult
-
-settings = get_settings()
 
 
 class SmtpAdapter(EmailProvider):
     async def send(self, message: EmailMessage) -> EmailResult:
         try:
+            smtp_from     = dyn.get("SMTP_FROM")
+            smtp_host     = dyn.get("SMTP_HOST")
+            smtp_port     = int(dyn.get("SMTP_PORT") or "587")
+            smtp_tls      = dyn.get("SMTP_TLS").lower() not in ("false", "0", "")
+            smtp_user     = dyn.get("SMTP_USER")
+            smtp_password = dyn.get("SMTP_PASSWORD")
+
             msg = MIMEMultipart("alternative")
             msg["Subject"] = message.subject
-            msg["From"] = settings.SMTP_FROM
+            msg["From"] = smtp_from
             msg["To"] = ", ".join(message.to)
             if message.cc:
                 msg["Cc"] = ", ".join(message.cc)
@@ -28,12 +33,12 @@ class SmtpAdapter(EmailProvider):
             all_recipients = message.to + message.cc + message.bcc
 
             context = ssl.create_default_context()
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                if settings.SMTP_TLS:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                if smtp_tls:
                     server.starttls(context=context)
-                if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.sendmail(settings.SMTP_FROM, all_recipients, msg.as_string())
+                if smtp_user and smtp_password:
+                    server.login(smtp_user, smtp_password)
+                server.sendmail(smtp_from, all_recipients, msg.as_string())
 
             return EmailResult(success=True)
         except Exception as exc:
