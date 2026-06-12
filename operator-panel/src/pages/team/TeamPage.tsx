@@ -3,6 +3,8 @@ import Shell from '../../components/layout/Shell'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { operatorAuthService } from '../../services/operatorAuthService'
 import type { OperatorSubUser } from '../../services/operatorAuthService'
+import { operatorRolesService } from '../../services/operatorRolesService'
+import type { OperatorRole } from '../../services/operatorRolesService'
 
 type StatusFilter = 'all' | 'active' | 'invited' | 'suspended'
 
@@ -49,6 +51,7 @@ export default function TeamPage() {
   const isMobile = useIsMobile()
 
   const [members, setMembers] = useState<OperatorSubUser[]>([])
+  const [roles, setRoles] = useState<OperatorRole[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -79,8 +82,12 @@ export default function TeamPage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await operatorAuthService.listSubUsers()
+      const [data, roleList] = await Promise.all([
+        operatorAuthService.listSubUsers(),
+        operatorRolesService.listRoles(),
+      ])
       setMembers(data)
+      setRoles(roleList)
     } catch {
       setError('Failed to load team members.')
     } finally {
@@ -535,9 +542,14 @@ export default function TeamPage() {
                     value={inviteRole}
                     onChange={e => setInviteRole(e.target.value)}
                   >
-                    {Object.entries(ROLE_LABELS).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
+                    {roles.length > 0
+                      ? roles.map(r => (
+                          <option key={r.name} value={r.name}>{r.display_name}</option>
+                        ))
+                      : Object.entries(ROLE_LABELS).map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))
+                    }
                   </select>
                 </div>
                 <div className="field">

@@ -193,6 +193,7 @@ export default function OperatorDetailPage() {
 
   useEffect(() => {
     loadOperator()
+    loadTeam()
     settingsService.getSettings().then(s => setSiteVisitRequired(!!s.operator_site_visit_required)).catch(() => {})
     catalogService.listAircraftTypes().then(setAircraftTypes).catch(() => {})
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
