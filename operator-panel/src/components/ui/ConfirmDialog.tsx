@@ -1,9 +1,10 @@
+import type React from 'react'
 import { AlertTriangle, Shield, RefreshCw } from 'lucide-react'
 
 interface ConfirmDialogProps {
   open: boolean
   title: string
-  description: string
+  description: React.ReactNode
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'danger' | 'default'
