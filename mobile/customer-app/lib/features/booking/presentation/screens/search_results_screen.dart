@@ -381,6 +381,8 @@ class _SearchResultsScreenState
                       child: _FlightCard(
                         flight: flight,
                         isBestValue: i == 1 && _sort == _SortMode.price,
+                        originName: draft.originName ?? '—',
+                        destinationName: draft.destinationName ?? '—',
                         cs: cs,
                         theme: theme,
                         onTap: () => _onFlightTap(flight),
@@ -490,6 +492,8 @@ class _FlightCard extends StatelessWidget {
   const _FlightCard({
     required this.flight,
     required this.isBestValue,
+    required this.originName,
+    required this.destinationName,
     required this.cs,
     required this.theme,
     required this.onTap,
@@ -497,6 +501,8 @@ class _FlightCard extends StatelessWidget {
 
   final AirFlight flight;
   final bool isBestValue;
+  final String originName;
+  final String destinationName;
   final ColorScheme cs;
   final ThemeData theme;
   final VoidCallback onTap;
@@ -530,7 +536,7 @@ class _FlightCard extends StatelessWidget {
   Color _badgeColor() {
     if (isBestValue) return cs.primary;
     if (flight.seatsAvailable <= 2) return cs.error;
-    return Colors.blue; // info semantic only
+    return cs.tertiary;
   }
 
   @override
@@ -592,7 +598,7 @@ class _FlightCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Juhu',
+                          originName,
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurface.withOpacity(0.38),
@@ -677,7 +683,7 @@ class _FlightCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Lohegaon',
+                          destinationName,
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurface.withOpacity(0.38),

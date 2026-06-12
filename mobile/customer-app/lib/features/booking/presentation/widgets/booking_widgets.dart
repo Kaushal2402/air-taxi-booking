@@ -87,7 +87,7 @@ class BookingFlowStep extends StatelessWidget {
               Expanded(
                 child: Container(
                   height: 2,
-                  margin: const EdgeInsets.only(bottom: 18),
+                  margin: const EdgeInsetsDirectional.only(bottom: 18),
                   color: i < currentStep ? cs.primary : cs.outline,
                 ),
               ),
@@ -366,6 +366,7 @@ class BookingInputField extends StatelessWidget {
   const BookingInputField({
     super.key,
     required this.label,
+    this.controller,
     this.initialValue,
     this.placeholder,
     this.prefixIcon,
@@ -373,9 +374,13 @@ class BookingInputField extends StatelessWidget {
     this.onChanged,
     this.keyboardType,
     this.textInputAction,
-  });
+  }) : assert(
+          controller == null || initialValue == null,
+          'Cannot supply both a controller and an initialValue.',
+        );
 
   final String label;
+  final TextEditingController? controller;
   final String? initialValue;
   final String? placeholder;
   final IconData? prefixIcon;
@@ -401,7 +406,8 @@ class BookingInputField extends StatelessWidget {
         ),
         const SizedBox(height: 7),
         TextFormField(
-          initialValue: initialValue,
+          controller: controller,
+          initialValue: controller == null ? initialValue : null,
           onChanged: onChanged,
           keyboardType: keyboardType,
           textInputAction: textInputAction,
@@ -496,7 +502,7 @@ class SeatTile extends StatelessWidget {
               Container(
                 width: 28,
                 height: 3,
-                margin: const EdgeInsets.only(top: 3),
+                margin: const EdgeInsetsDirectional.only(top: 3),
                 decoration: BoxDecoration(
                   color: cs.onSurface.withOpacity(0.20),
                   borderRadius: BorderRadius.circular(2),

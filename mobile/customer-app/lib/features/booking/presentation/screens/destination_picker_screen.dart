@@ -9,6 +9,8 @@ import '../../../../core/router/app_router.dart';
 import '../../data/models/booking_models.dart';
 import '../../domain/providers/booking_providers.dart';
 
+// ignore_for_file: use_build_context_synchronously
+
 class DestinationPickerScreen extends ConsumerStatefulWidget {
   const DestinationPickerScreen({super.key});
 
@@ -42,18 +44,51 @@ class _DestinationPickerScreenState
     super.dispose();
   }
 
-  void _onDestinationSelected({
+  Future<void> _onDestinationSelected({
     required String city,
     required String code,
     required String padName,
-  }) {
+  }) async {
     final draft = ref.read(bookingFlowProvider);
+
+    // Guard: origin must be set before picking a destination.
+    if (draft.originCode == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select your origin helipad first'),
+        ),
+      );
+      return;
+    }
+
+    final originCode = draft.originCode!;
+    final originName = draft.originName ?? originCode;
+
+    // Resolve the real routeId from the backend.
+    String? routeId;
+    try {
+      final routes = await ref
+          .read(bookingServiceProvider)
+          .getAirRoutes(originCode: originCode, destinationCode: code);
+      if (routes.isNotEmpty) {
+        routeId = routes.first.id;
+      }
+    } on UnimplementedError {
+      // Backend not yet live — routeId will remain null.
+      // The provider will surface this gracefully when flights are fetched.
+    } catch (_) {
+      // Network error — proceed without routeId; retry on next screen.
+    }
+
+    // Clear any stale flight selection from a previous destination choice.
+    ref.read(bookingFlowProvider.notifier).clearFlight();
+
     ref.read(bookingFlowProvider.notifier).setDestination(
-          originCode: draft.originCode ?? 'BOM',
-          originName: draft.originName ?? 'Mumbai Juhu',
+          originCode: originCode,
+          originName: originName,
           destinationCode: code,
           destinationName: city,
-          routeId: '${draft.originCode ?? 'BOM'}-$code',
+          routeId: routeId ?? '',
         );
     context.push(AppRoutes.bookingDateTime);
   }
@@ -84,7 +119,7 @@ class _DestinationPickerScreenState
     final recentsAsync = ref.watch(recentDestinationsProvider);
     final popularAsync = ref.watch(popularDestinationsProvider);
     final draft = ref.watch(bookingFlowProvider);
-    final originCode = draft.originCode ?? 'BOM';
+    final originCode = draft.originCode ?? '???';
 
     return Scaffold(
       backgroundColor: cs.surface,

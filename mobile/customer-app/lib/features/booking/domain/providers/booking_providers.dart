@@ -33,9 +33,9 @@ class RecentDestinationsNotifier
       return await ref.read(bookingServiceProvider).getRecentDestinations();
     } on UnimplementedError {
       return const [];
-    } catch (_) {
-      return const [];
     }
+    // Any other exception is re-thrown so Riverpod sets AsyncValue.error,
+    // which enables the retry button in the UI to actually work.
   }
 }
 
@@ -52,9 +52,9 @@ class PopularDestinationsNotifier
       return await ref.read(bookingServiceProvider).getPopularDestinations();
     } on UnimplementedError {
       return const [];
-    } catch (_) {
-      return const [];
     }
+    // Any other exception is re-thrown so Riverpod sets AsyncValue.error,
+    // which enables the retry button in the UI to actually work.
   }
 }
 
@@ -173,9 +173,9 @@ class PaymentMethodsNotifier extends AsyncNotifier<List<PaymentMethod>> {
       return await ref.read(bookingServiceProvider).getPaymentMethods();
     } on UnimplementedError {
       return const [];
-    } catch (_) {
-      return const [];
     }
+    // Any other exception is re-thrown so Riverpod sets AsyncValue.error,
+    // which enables the retry button in the UI to actually work.
   }
 }
 
@@ -268,6 +268,54 @@ class BookingFlowNotifier extends Notifier<BookingDraft> {
 
   void setPaymentMethod(String methodId) {
     state = state.copyWith(selectedPaymentMethodId: methodId);
+  }
+
+  /// Clear selected flight + fare estimate when the user picks a new destination.
+  /// copyWith cannot set nullable fields to null, so we rebuild explicitly.
+  void clearFlight() {
+    final current = state;
+    state = BookingDraft(
+      originCode: current.originCode,
+      originName: current.originName,
+      destinationCode: current.destinationCode,
+      destinationName: current.destinationName,
+      routeId: current.routeId,
+      selectedDate: current.selectedDate,
+      adultCount: current.adultCount,
+      childCount: current.childCount,
+      infantCount: current.infantCount,
+      fareClass: current.fareClass,
+      selectedSeats: current.selectedSeats,
+      passengers: current.passengers,
+      selectedPaymentMethodId: current.selectedPaymentMethodId,
+      // selectedFlight, selectedFlightId, departureTime, arrivalTime,
+      // and fareEstimate are intentionally omitted (null).
+    );
+  }
+
+  /// Clear only the fare estimate (used when pricing inputs change).
+  void clearFareEstimate() {
+    final current = state;
+    state = BookingDraft(
+      originCode: current.originCode,
+      originName: current.originName,
+      destinationCode: current.destinationCode,
+      destinationName: current.destinationName,
+      routeId: current.routeId,
+      selectedDate: current.selectedDate,
+      selectedFlightId: current.selectedFlightId,
+      selectedFlight: current.selectedFlight,
+      departureTime: current.departureTime,
+      arrivalTime: current.arrivalTime,
+      adultCount: current.adultCount,
+      childCount: current.childCount,
+      infantCount: current.infantCount,
+      fareClass: current.fareClass,
+      selectedSeats: current.selectedSeats,
+      passengers: current.passengers,
+      selectedPaymentMethodId: current.selectedPaymentMethodId,
+      // fareEstimate intentionally omitted (null).
+    );
   }
 
   /// Reset the entire booking draft on logout or booking completion.

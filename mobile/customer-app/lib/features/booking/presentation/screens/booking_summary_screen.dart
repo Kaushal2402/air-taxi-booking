@@ -313,9 +313,17 @@ class _FlightSummaryCard extends StatelessWidget {
     final depTime = _formatTime(draft.departureTime);
     final arrTime = _formatTime(draft.arrivalTime);
     final dur = _formatDuration(draft.departureTime, draft.arrivalTime);
-    final dateStr = draft.selectedDate != null
-        ? DateFormat('EEE, MMM d · hh:mm a').format(draft.selectedDate!)
-        : '—';
+    final String dateStr;
+    if (draft.selectedDate != null) {
+      final datePart = DateFormat('EEE, MMM d').format(draft.selectedDate!);
+      final timePart = draft.departureTime != null
+          ? DateFormat('hh:mm a')
+              .format(DateTime.parse(draft.departureTime!).toLocal())
+          : '';
+      dateStr = timePart.isNotEmpty ? '$datePart · $timePart' : datePart;
+    } else {
+      dateStr = '—';
+    }
     final seatStr = draft.selectedSeats.isNotEmpty
         ? 'Seats ${draft.selectedSeats.join(' & ')}'
         : 'No seats';
@@ -793,7 +801,7 @@ class _PaymentMethodCard extends StatelessWidget {
                       : null,
                   onTap: () {
                     onMethodSelected(m);
-                    Navigator.of(ctx).pop();
+                    ctx.pop();
                   },
                 ),
               ),
