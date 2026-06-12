@@ -560,13 +560,7 @@ class _EmptyTripCard extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Booking flow coming soon — Module 03'),
-                ),
-              );
-            },
+            onTap: () => context.push(AppRoutes.bookingOrigin),
             child: Container(
               padding: const EdgeInsetsDirectional.symmetric(
                 horizontal: 20,
