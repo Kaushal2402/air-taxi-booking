@@ -32,6 +32,19 @@ import RequestsQueuePage from './pages/bookings/RequestsQueuePage'
 import RequestDetailPage from './pages/bookings/RequestDetailPage'
 import AssignmentBoardPage from './pages/dispatch/AssignmentBoardPage'
 import CrewAssignmentPage from './pages/dispatch/CrewAssignmentPage'
+import ManifestsPage from './pages/manifests/ManifestsPage'
+import ManifestDetailPage from './pages/manifests/ManifestDetailPage'
+import DayOfFlightPage from './pages/dayOfflight/DayOfFlightPage'
+import FlightDetailPage from './pages/dayOfflight/FlightDetailPage'
+import CancelReschedulePage from './pages/cancel/CancelReschedulePage'
+import PayoutsPage from './pages/payouts/PayoutsPage'
+import SettlementDetailPage from './pages/payouts/SettlementDetailPage'
+import ReportsPage from './pages/reports/ReportsPage'
+import DocumentsPage from './pages/documents/DocumentsPage'
+import NotificationCenterPage from './pages/notificationCenter/NotificationCenterPage'
+import OperatorSettingsPage from './pages/settings/OperatorSettingsPage'
+import CompanionPage from './pages/companion/CompanionPage'
+import FlightBriefPage from './pages/companion/FlightBriefPage'
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useOperatorAuthStore(s => s.isAuthenticated)
@@ -99,6 +112,37 @@ function App() {
           {/* Module 10 — Flight Assignment & Dispatch */}
           <Route path="/dispatch" element={<PrivateRoute><AssignmentBoardPage /></PrivateRoute>} />
           <Route path="/dispatch/:id/assign" element={<PrivateRoute><CrewAssignmentPage /></PrivateRoute>} />
+
+          {/* Module 11 — Passenger Manifest Management */}
+          <Route path="/manifests" element={<PrivateRoute><ManifestsPage /></PrivateRoute>} />
+          <Route path="/manifests/:id" element={<PrivateRoute><ManifestDetailPage /></PrivateRoute>} />
+
+          {/* Module 12 — Day-of-Flight Operations */}
+          <Route path="/day-of-flight" element={<PrivateRoute><DayOfFlightPage /></PrivateRoute>} />
+          <Route path="/day-of-flight/:id" element={<PrivateRoute><FlightDetailPage /></PrivateRoute>} />
+
+          {/* Module 13 — Cancellation & Rescheduling */}
+          <Route path="/cancel" element={<PrivateRoute><CancelReschedulePage /></PrivateRoute>} />
+
+          {/* Module 14 — Payouts & Settlements */}
+          <Route path="/payouts" element={<PrivateRoute><PayoutsPage /></PrivateRoute>} />
+          <Route path="/payouts/:id" element={<PrivateRoute><SettlementDetailPage /></PrivateRoute>} />
+
+          {/* Module 15 — Reports & Analytics */}
+          <Route path="/reports" element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
+
+          {/* Module 16 — Documents & Compliance */}
+          <Route path="/documents" element={<PrivateRoute><DocumentsPage /></PrivateRoute>} />
+
+          {/* Module 17 — Notification Center */}
+          <Route path="/notification-center" element={<PrivateRoute><NotificationCenterPage /></PrivateRoute>} />
+
+          {/* Module 18 — Operator Settings */}
+          <Route path="/settings" element={<PrivateRoute><OperatorSettingsPage /></PrivateRoute>} />
+
+          {/* Module 19 — Crew Companion */}
+          <Route path="/companion" element={<PrivateRoute><CompanionPage /></PrivateRoute>} />
+          <Route path="/companion/:id" element={<PrivateRoute><FlightBriefPage /></PrivateRoute>} />
 
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -41,6 +41,15 @@ from app.api.v1.endpoints.operator_routes import router as operator_routes_route
 from app.api.v1.endpoints.operator_pricing import router as operator_pricing_router
 from app.api.v1.endpoints.operator_requests import router as operator_requests_router
 from app.api.v1.endpoints.operator_assignment import router as operator_assignment_router
+from app.api.v1.endpoints.operator_manifests import router as operator_manifests_router
+from app.api.v1.endpoints.operator_day_of_flight import router as operator_day_of_flight_router
+from app.api.v1.endpoints.operator_cancel import router as operator_cancel_router
+from app.api.v1.endpoints.operator_settlements import router as operator_settlements_router
+from app.api.v1.endpoints.operator_reports import router as operator_reports_router
+from app.api.v1.endpoints.operator_documents import documents_router as operator_documents_router, compliance_router as operator_compliance_router
+from app.api.v1.endpoints.operator_settings import router as operator_settings_router
+from app.api.v1.endpoints.operator_notification_center import router as operator_notification_center_router
+from app.api.v1.endpoints.operator_companion import router as operator_companion_router
 from app.api.v1.endpoints.razorpay_webhook import router as razorpay_webhook_router
 
 api_router = APIRouter()
@@ -91,5 +100,15 @@ api_router.include_router(operator_crew_router,       prefix="/operator",       
 api_router.include_router(operator_routes_router,     prefix="/operator",           tags=["Operator Routes"])
 api_router.include_router(operator_pricing_router,    prefix="/operator",           tags=["Operator Pricing"])
 api_router.include_router(operator_requests_router,   prefix="/operator",           tags=["Operator Requests"])
-api_router.include_router(operator_assignment_router, prefix="/operator",           tags=["Operator Assignment"])
-api_router.include_router(razorpay_webhook_router,    prefix="/webhooks/razorpay",  tags=["Webhooks"])
+api_router.include_router(operator_assignment_router,  prefix="/operator",           tags=["Operator Assignment"])
+api_router.include_router(operator_manifests_router,      prefix="/operator",           tags=["Operator Manifests"])
+api_router.include_router(operator_day_of_flight_router, prefix="/operator",           tags=["Operator Day of Flight"])
+api_router.include_router(operator_cancel_router,         prefix="/operator",           tags=["Operator Cancel"])
+api_router.include_router(operator_settlements_router,    prefix="/operator",           tags=["Operator Settlements"])
+api_router.include_router(operator_reports_router,        prefix="/operator",           tags=["Operator Reports"])
+api_router.include_router(operator_documents_router,      prefix="/operator",           tags=["Operator Documents"])
+api_router.include_router(operator_compliance_router,     prefix="/operator",           tags=["Operator Compliance"])
+api_router.include_router(operator_settings_router,            prefix="/operator",           tags=["Operator Settings"])
+api_router.include_router(operator_notification_center_router, prefix="/operator",           tags=["Operator Notifications"])
+api_router.include_router(operator_companion_router,           prefix="/operator",           tags=["Operator Companion"])
+api_router.include_router(razorpay_webhook_router,             prefix="/webhooks/razorpay",  tags=["Webhooks"])

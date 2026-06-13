@@ -1,6 +1,6 @@
 {
   "panel": "operator-panel",
-  "last_updated": "2026-06-12",
+  "last_updated": "2026-06-13",
   "modules": [
     { "id": 0,  "name": "Foundation — Shell, Routes, Auth Store, Axios, Sidebar",       "status": "done", "last_updated": "2026-06-08" },
     { "id": 1,  "name": "Module 1 — Operator Authentication & Identity",                 "status": "done", "last_updated": "2026-06-10", "audit_status": "clean", "deferred": ["background-scheduler-cert-expiry", "sso-integration"] },
@@ -13,15 +13,15 @@
     { "id": 8,  "name": "Module 8 — Operator Pricing & Quotes",                         "status": "done", "last_updated": "2026-06-12", "audit_status": "clean", "branch": "module/2026-06-12-pricing-requests-assignment", "dod_passed": true, "deferred": ["fare-calculation-engine", "pricing-bounds-enforcement"] },
     { "id": 9,  "name": "Module 9 — Booking Requests & Queue",                          "status": "done", "last_updated": "2026-06-12", "audit_status": "clean", "branch": "module/2026-06-12-pricing-requests-assignment", "dod_passed": true, "deferred": ["websocket-live-ttl-push"] },
     { "id": 10, "name": "Module 10 — Flight Assignment & Dispatch",                     "status": "done", "last_updated": "2026-06-12", "audit_status": "clean", "branch": "module/2026-06-12-pricing-requests-assignment", "dod_passed": true, "deferred": ["gantt-drag-drop", "fdp-server-side-check"] },
-    { "id": 11, "name": "Module 11 — Passenger Manifest Management",                    "status": "pending" },
-    { "id": 12, "name": "Module 12 — Flight Operations & Day-of-Flight Control",        "status": "pending" },
-    { "id": 13, "name": "Module 13 — Cancellation & Rescheduling",                     "status": "pending" },
-    { "id": 14, "name": "Module 14 — Payouts & Settlements (Operator View)",            "status": "pending" },
-    { "id": 15, "name": "Module 15 — Reports & Analytics (Operator)",                   "status": "pending" },
-    { "id": 16, "name": "Module 16 — Documents & Compliance",                           "status": "pending" },
-    { "id": 17, "name": "Module 17 — Notifications & Communication",                    "status": "pending" },
-    { "id": 18, "name": "Module 18 — Operator Settings & Profile Configuration",        "status": "pending" },
-    { "id": 19, "name": "Module 19 — Pilot / Crew Companion (Lightweight Sub-Surface)", "status": "pending" }
+    { "id": 11, "name": "Module 11 — Passenger Manifest Management",                    "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 12, "name": "Module 12 — Flight Operations & Day-of-Flight Control",        "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 13, "name": "Module 13 — Cancellation & Rescheduling",                     "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 14, "name": "Module 14 — Payouts & Settlements (Operator View)",            "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 15, "name": "Module 15 — Reports & Analytics (Operator)",                   "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 16, "name": "Module 16 — Documents & Compliance",                           "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 17, "name": "Module 17 — Notifications & Communication",                    "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 18, "name": "Module 18 — Operator Settings & Profile Configuration",        "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" },
+    { "id": 19, "name": "Module 19 — Pilot / Crew Companion (Lightweight Sub-Surface)", "status": "done", "last_updated": "2026-06-13", "audit_status": "clean" }
   ],
   "notes": "Each run picks 3 pending modules. Per module: create branch → build → audit → fix gaps → push → merge to main. SSO and background scheduler are deferred to integration/compliance modules."
 }

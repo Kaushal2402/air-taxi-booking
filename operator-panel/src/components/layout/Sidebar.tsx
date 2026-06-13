@@ -17,10 +17,12 @@ import {
   Archive,
   Shield,
   Bell,
+  BellRing,
   Key,
   Building2,
   Settings,
   X,
+  Clipboard,
 } from 'lucide-react'
 
 const NAV_GROUPS = [
@@ -32,7 +34,14 @@ const NAV_GROUPS = [
       { id: 'dispatch',   label: 'Assignment',           Icon: Zap,        path: '/dispatch' },
       { id: 'dayof',      label: 'Day-of-Flight',        Icon: CloudSun,   path: '/day-of-flight' },
       { id: 'manifests',  label: 'Manifests',            Icon: Users,      path: '/manifests' },
-      { id: 'cancel',     label: 'Cancel & Reschedule',  Icon: RefreshCw,  path: '/cancel' },
+      { id: 'cancel',              label: 'Cancel & Reschedule',  Icon: RefreshCw,  path: '/cancel' },
+      { id: 'notification-center', label: 'Notification Center',  Icon: BellRing,   path: '/notification-center' },
+    ],
+  },
+  {
+    label: 'Crew Companion',
+    items: [
+      { id: 'companion', label: 'My Assignments', Icon: Clipboard, path: '/companion' },
     ],
   },
   {
