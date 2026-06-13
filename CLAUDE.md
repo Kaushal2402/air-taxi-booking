@@ -116,6 +116,38 @@ export const moduleService = {
 
 ---
 
+## Routine — Execution Rules
+
+**These rules apply to every session. Follow them without asking for permission.**
+
+### Permissions & autonomy
+- **Never pause for permission** on any file edit, Bash command, npm/pip install, migration file creation, git operation, or GitHub API call.
+- Only stop and ask if a **business decision** is required: data loss risk, breaking API contract change, or ambiguous product requirement.
+- All other actions — including push and merge — execute automatically.
+
+### After each module passes all verification checks
+1. Commit that module alone (never batch two modules in one commit):
+   ```bash
+   git add <module files>
+   git commit -m "feat: Module XX — [Name]"
+   ```
+2. Push to the working branch:
+   ```bash
+   git push -u origin <branch>
+   ```
+3. **Immediately merge to main** using the GitHub MCP tool — no manual confirmation needed:
+   ```
+   mcp__github__merge_pull_request  owner=Kaushal2402  repo=air-taxi-booking  pullNumber=<PR>  merge_method=squash
+   ```
+   If no open PR exists for the branch, create one first with `mcp__github__create_pull_request`, then merge it.
+4. Continue to the next module in the queue without waiting.
+
+### Branch to use
+Always develop on the branch specified in the session instructions (e.g. `claude/sweet-bardeen-4mIUP`).
+Never push directly to `main`; always go through a PR so the merge commit appears in the log.
+
+---
+
 ## Common pitfalls (learned the hard way)
 
 1. `ConfirmDialog` — never use `message=` or `danger={true}`, always `description=` + `variant="danger"`
