@@ -6,6 +6,7 @@ import type {
   ReportFilter,
   RevenueReportSummary,
   FlightsSummary,
+  LoadFactorSummary,
   FleetUtilRow,
   CrewUtilRow,
   ReportPeriod,
@@ -39,67 +40,6 @@ function downloadCSV(filename: string, rows: string[][]): void {
   URL.revokeObjectURL(url)
 }
 
-// ─── Mock fallback data (used when backend returns error) ────────────────────
-
-function mockRevenueData(): RevenueReportSummary {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-  const now = new Date()
-  const rows = months.map((label, i) => {
-    const gross = 40000 + Math.random() * 60000
-    const commission = gross * 0.15
-    return {
-      month: `${now.getFullYear()}-${String(now.getMonth() - 5 + i + 1).padStart(2, '0')}`,
-      month_label: `${label} ${now.getFullYear()}`,
-      gross_revenue: gross,
-      commission,
-      net_payout: gross - commission,
-      flight_count: Math.floor(20 + Math.random() * 80),
-    }
-  })
-  const total_gross = rows.reduce((s, r) => s + r.gross_revenue, 0)
-  const total_commission = rows.reduce((s, r) => s + r.commission, 0)
-  return {
-    total_gross,
-    total_commission,
-    total_net: total_gross - total_commission,
-    total_flights: rows.reduce((s, r) => s + r.flight_count, 0),
-    rows,
-  }
-}
-
-function mockFlightsSummary(): FlightsSummary {
-  return {
-    total_flights_completed: 312,
-    total_flights_cancelled: 18,
-    otp_percent: 87.4,
-    avg_load_factor: 73.2,
-    total_flight_hours: 624.5,
-    rows: [
-      { route_label: 'NYC → BOS', flights_completed: 102, flights_cancelled: 4, otp_percent: 91.2, avg_load_factor: 78.5, total_flight_hours: 204.0 },
-      { route_label: 'BOS → NYC', flights_completed: 98, flights_cancelled: 6, otp_percent: 84.7, avg_load_factor: 71.3, total_flight_hours: 196.0 },
-      { route_label: 'NYC → PHI', flights_completed: 72, flights_cancelled: 5, otp_percent: 86.1, avg_load_factor: 69.2, total_flight_hours: 144.0 },
-      { route_label: 'PHI → NYC', flights_completed: 40, flights_cancelled: 3, otp_percent: 88.0, avg_load_factor: 74.8, total_flight_hours: 80.5 },
-    ],
-  }
-}
-
-function mockFleetUtil(): FleetUtilRow[] {
-  return [
-    { aircraft_id: '1', registration: 'N100AT', aircraft_type: 'Bell 429', flights: 124, flight_hours: 248.0, utilization_percent: 82 },
-    { aircraft_id: '2', registration: 'N200AT', aircraft_type: 'Airbus H145', flights: 98, flight_hours: 196.0, utilization_percent: 65 },
-    { aircraft_id: '3', registration: 'N300AT', aircraft_type: 'Bell 429', flights: 90, flight_hours: 180.5, utilization_percent: 60 },
-  ]
-}
-
-function mockCrewUtil(): CrewUtilRow[] {
-  return [
-    { crew_id: '1', crew_name: 'James Carter', role: 'Pilot', duty_hours: 112.5, flights: 62, rest_compliance_percent: 100 },
-    { crew_id: '2', crew_name: 'Sarah Mills', role: 'Pilot', duty_hours: 98.0, flights: 54, rest_compliance_percent: 98.1 },
-    { crew_id: '3', crew_name: 'Daniel Park', role: 'Co-Pilot', duty_hours: 87.5, flights: 48, rest_compliance_percent: 100 },
-    { crew_id: '4', crew_name: 'Lisa Tran', role: 'Co-Pilot', duty_hours: 74.0, flights: 41, rest_compliance_percent: 95.2 },
-  ]
-}
-
 // ─── SVG Bar Chart ──────────────────────────────────────────────────────────
 
 interface BarChartProps {
@@ -131,7 +71,6 @@ function BarChart({ labels, series, height = 200 }: BarChartProps) {
         viewBox={`0 0 ${totalWidth} ${height}`}
         preserveAspectRatio="none"
       >
-        {/* Y axis ticks */}
         {yTicks.map(t => {
           const y = topPad + chartHeight - t * chartHeight
           return (
@@ -157,7 +96,6 @@ function BarChart({ labels, series, height = 200 }: BarChartProps) {
           )
         })}
 
-        {/* Bars */}
         {labels.map((label, gi) => {
           const gx = leftPad + gi * (barGroupWidth + gap)
           return (
@@ -181,7 +119,6 @@ function BarChart({ labels, series, height = 200 }: BarChartProps) {
                   </g>
                 )
               })}
-              {/* X label */}
               <text
                 x={gx + barGroupWidth / 2}
                 y={topPad + chartHeight + 16}
@@ -196,7 +133,6 @@ function BarChart({ labels, series, height = 200 }: BarChartProps) {
         })}
       </svg>
 
-      {/* Legend */}
       <div style={{ display: 'flex', gap: 16, padding: '8px 0 4px', flexWrap: 'wrap' }}>
         {series.map(s => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -285,6 +221,14 @@ const PERIODS: { id: ReportPeriod; label: string }[] = [
   { id: 'custom', label: 'Custom' },
 ]
 
+// ─── Empty state ─────────────────────────────────────────────────────────────
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="t-meta" style={{ textAlign: 'center', padding: 40 }}>{message}</div>
+  )
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 type TabId = 'revenue' | 'operational'
@@ -296,36 +240,33 @@ export default function ReportsPage() {
   const [filter, setFilter] = useState<ReportFilter>({ period: 'last_30d' })
   const [loading, setLoading] = useState(false)
 
-  const [revenueData, setRevenueData] = useState<RevenueReportSummary>(mockRevenueData())
-  const [flightsData, setFlightsData] = useState<FlightsSummary>(mockFlightsSummary())
-  const [fleetData, setFleetData] = useState<FleetUtilRow[]>(mockFleetUtil())
-  const [crewData, setCrewData] = useState<CrewUtilRow[]>(mockCrewUtil())
+  const [revenueData, setRevenueData] = useState<RevenueReportSummary | null>(null)
+  const [flightsData, setFlightsData] = useState<FlightsSummary | null>(null)
+  const [loadFactorData, setLoadFactorData] = useState<LoadFactorSummary | null>(null)
+  const [fleetData, setFleetData] = useState<FleetUtilRow[]>([])
+  const [crewData, setCrewData] = useState<CrewUtilRow[]>([])
 
   const loadAll = useCallback((f: ReportFilter) => {
     setLoading(true)
     Promise.allSettled([
       operatorReportsService.getRevenueReport(f),
       operatorReportsService.getFlightsSummary(f),
+      operatorReportsService.getLoadFactorReport(f),
       operatorReportsService.getFleetUtilization(f),
       operatorReportsService.getCrewUtilization(f),
-    ]).then(([rev, flt, fleet, crew]) => {
-      if (rev.status === 'fulfilled') setRevenueData(rev.value)
-      else setRevenueData(mockRevenueData())
-
-      if (flt.status === 'fulfilled') setFlightsData(flt.value)
-      else setFlightsData(mockFlightsSummary())
-
-      if (fleet.status === 'fulfilled') setFleetData(fleet.value)
-      else setFleetData(mockFleetUtil())
-
-      if (crew.status === 'fulfilled') setCrewData(crew.value)
-      else setCrewData(mockCrewUtil())
+    ]).then(([rev, flt, lf, fleet, crew]) => {
+      setRevenueData(rev.status === 'fulfilled' ? rev.value : null)
+      setFlightsData(flt.status === 'fulfilled' ? flt.value : null)
+      setLoadFactorData(lf.status === 'fulfilled' ? lf.value : null)
+      setFleetData(fleet.status === 'fulfilled' ? fleet.value : [])
+      setCrewData(crew.status === 'fulfilled' ? crew.value : [])
     }).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { loadAll(filter) }, [filter, loadAll])
 
   function handleExportRevenue() {
+    if (!revenueData) return
     const header = ['Month', 'Gross Revenue', 'Commission', 'Net Payout', 'Flights']
     const rows = revenueData.rows.map(r => [
       r.month_label,
@@ -338,14 +279,12 @@ export default function ReportsPage() {
   }
 
   function handleExportOperational() {
-    const header = ['Route', 'Completed', 'Cancelled', 'OTP%', 'Load Factor%', 'Flight Hours']
-    const rows = flightsData.rows.map(r => [
+    const header = ['Route', 'Seats Available', 'Seats Sold', 'Load Factor%']
+    const rows = (loadFactorData?.rows ?? []).map(r => [
       r.route_label,
-      String(r.flights_completed),
-      String(r.flights_cancelled),
-      r.otp_percent.toFixed(1),
-      r.avg_load_factor.toFixed(1),
-      r.total_flight_hours.toFixed(1),
+      String(r.seats_available),
+      String(r.seats_sold),
+      r.load_factor_pct.toFixed(1),
     ])
     downloadCSV('operational-report.csv', [header, ...rows])
   }
@@ -365,6 +304,7 @@ export default function ReportsPage() {
         <button
           className="btn sm accent"
           onClick={activeTab === 'revenue' ? handleExportRevenue : handleExportOperational}
+          disabled={activeTab === 'revenue' ? !revenueData : !loadFactorData}
         >
           <Download size={12} />
           Export CSV
@@ -460,12 +400,14 @@ export default function ReportsPage() {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '20px 16px' : '28px' }}>
         {activeTab === 'revenue' ? (
-          <RevenueTab data={revenueData} isMobile={isMobile} />
+          <RevenueTab data={revenueData} loading={loading} isMobile={isMobile} />
         ) : (
           <OperationalTab
             flights={flightsData}
+            loadFactor={loadFactorData}
             fleet={fleetData}
             crew={crewData}
+            loading={loading}
             isMobile={isMobile}
           />
         )}
@@ -476,7 +418,14 @@ export default function ReportsPage() {
 
 // ─── Revenue Tab ─────────────────────────────────────────────────────────────
 
-function RevenueTab({ data, isMobile }: { data: RevenueReportSummary; isMobile: boolean }) {
+function RevenueTab({ data, loading, isMobile: _isMobile }: { data: RevenueReportSummary | null; loading: boolean; isMobile: boolean }) {
+  if (loading && !data) {
+    return <div className="t-meta" style={{ textAlign: 'center', padding: 60 }}>Loading revenue data…</div>
+  }
+  if (!data) {
+    return <EmptyState message="No revenue data available for the selected period." />
+  }
+
   const chartLabels = data.rows.map(r => r.month_label.split(' ')[0])
   const chartSeries = [
     { label: 'Gross Revenue', color: '#0F8A5F', values: data.rows.map(r => r.gross_revenue) },
@@ -528,7 +477,7 @@ function RevenueTab({ data, isMobile }: { data: RevenueReportSummary; isMobile: 
         {data.rows.length > 0 ? (
           <BarChart labels={chartLabels} series={chartSeries} height={220} />
         ) : (
-          <div className="t-meta" style={{ textAlign: 'center', padding: 40 }}>No data for selected period.</div>
+          <EmptyState message="No monthly data for selected period." />
         )}
       </div>
 
@@ -586,40 +535,50 @@ function RevenueTab({ data, isMobile }: { data: RevenueReportSummary; isMobile: 
 
 function OperationalTab({
   flights,
+  loadFactor,
   fleet,
   crew,
-  isMobile,
+  loading,
+  isMobile: _isMobile,
 }: {
-  flights: FlightsSummary
+  flights: FlightsSummary | null
+  loadFactor: LoadFactorSummary | null
   fleet: FleetUtilRow[]
   crew: CrewUtilRow[]
+  loading: boolean
   isMobile: boolean
 }) {
+  const totalFlightHours = fleet.reduce((s, r) => s + r.flight_hours, 0)
+
+  if (loading && !flights && !loadFactor) {
+    return <div className="t-meta" style={{ textAlign: 'center', padding: 60 }}>Loading operational data…</div>
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* KPI cards */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <KpiCard
           label="Flights Completed"
-          value={String(flights.total_flights_completed)}
-          sub={`${flights.total_flights_cancelled} cancelled`}
+          value={flights ? String(flights.total_flights_completed) : '—'}
+          sub={flights ? `${flights.total_flights_cancelled} cancelled` : undefined}
           icon={<Plane size={14} />}
         />
         <KpiCard
           label="On-Time Performance"
-          value={fmtPct(flights.otp_percent)}
+          value={flights ? fmtPct(flights.otp_percent) : '—'}
           sub="Departed within 15 min"
           icon={<Clock size={14} />}
         />
         <KpiCard
           label="Avg Load Factor"
-          value={fmtPct(flights.avg_load_factor)}
+          value={loadFactor ? fmtPct(loadFactor.avg_load_factor_pct) : '—'}
           sub="Seats filled per flight"
           icon={<Users size={14} />}
         />
         <KpiCard
           label="Total Flight Hours"
-          value={fmtHours(flights.total_flight_hours)}
+          value={fleet.length > 0 ? fmtHours(totalFlightHours) : '—'}
           sub="Block hours logged"
           icon={<Clock size={14} />}
         />
@@ -654,11 +613,11 @@ function OperationalTab({
                   <td colSpan={5} className="t-meta" style={{ textAlign: 'center', padding: 24 }}>No fleet data.</td>
                 </tr>
               )}
-              {fleet.map(a => (
-                <tr key={a.aircraft_id}>
+              {fleet.map((a, i) => (
+                <tr key={`${a.aircraft_reg}-${i}`}>
                   <td>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink)', fontWeight: 500 }}>
-                      {a.registration}
+                      {a.aircraft_reg}
                     </span>
                   </td>
                   <td className="t-meta" style={{ fontSize: 12 }}>{a.aircraft_type}</td>
@@ -674,7 +633,7 @@ function OperationalTab({
         </div>
       </div>
 
-      {/* Crew Utilization */}
+      {/* Crew Duty Hours */}
       <div
         style={{
           background: 'var(--surface)',
@@ -687,41 +646,29 @@ function OperationalTab({
           Crew Duty Hours
         </div>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table className="tbl" style={{ minWidth: 520 }}>
+          <table className="tbl" style={{ minWidth: 440 }}>
             <thead>
               <tr>
                 <th className="t-label">Name</th>
                 <th className="t-label">Role</th>
                 <th className="t-label" style={{ textAlign: 'right' }}>Flights</th>
                 <th className="t-label" style={{ textAlign: 'right' }}>Duty Hours</th>
-                <th className="t-label" style={{ textAlign: 'right' }}>Rest Compliance</th>
               </tr>
             </thead>
             <tbody>
               {crew.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="t-meta" style={{ textAlign: 'center', padding: 24 }}>No crew data.</td>
+                  <td colSpan={4} className="t-meta" style={{ textAlign: 'center', padding: 24 }}>No crew data.</td>
                 </tr>
               )}
-              {crew.map(c => (
-                <tr key={c.crew_id}>
+              {crew.map((c, i) => (
+                <tr key={`${c.crew_name}-${i}`}>
                   <td style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{c.crew_name}</td>
                   <td>
                     <span className="badge info" style={{ height: 19, fontSize: 10 }}>{c.role}</span>
                   </td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{c.flights}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{fmtHours(c.duty_hours)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        color: c.rest_compliance_percent >= 99 ? 'var(--accent)' : c.rest_compliance_percent >= 90 ? 'var(--warn)' : 'var(--danger)',
-                      }}
-                    >
-                      {fmtPct(c.rest_compliance_percent)}
-                    </span>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -729,7 +676,7 @@ function OperationalTab({
         </div>
       </div>
 
-      {/* Route OTP table */}
+      {/* Load Factor by Route */}
       <div
         style={{
           background: 'var(--surface)',
@@ -739,41 +686,34 @@ function OperationalTab({
         }}
       >
         <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--rule)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
-          Performance by Route
+          Load Factor by Route
         </div>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table className="tbl" style={{ minWidth: 580 }}>
+          <table className="tbl" style={{ minWidth: 480 }}>
             <thead>
               <tr>
                 <th className="t-label">Route</th>
-                <th className="t-label" style={{ textAlign: 'right' }}>Completed</th>
-                <th className="t-label" style={{ textAlign: 'right' }}>Cancelled</th>
-                <th className="t-label" style={{ textAlign: 'right' }}>OTP%</th>
-                <th className="t-label" style={{ textAlign: 'right' }}>Load Factor</th>
-                <th className="t-label" style={{ textAlign: 'right' }}>Block Hours</th>
+                <th className="t-label" style={{ textAlign: 'right' }}>Seats Available</th>
+                <th className="t-label" style={{ textAlign: 'right' }}>Seats Sold</th>
+                <th className="t-label" style={{ minWidth: 160 }}>Load Factor</th>
               </tr>
             </thead>
             <tbody>
-              {flights.rows.length === 0 && (
+              {(!loadFactor || loadFactor.rows.length === 0) && (
                 <tr>
-                  <td colSpan={6} className="t-meta" style={{ textAlign: 'center', padding: 24 }}>No route data.</td>
+                  <td colSpan={4} className="t-meta" style={{ textAlign: 'center', padding: 24 }}>No route data.</td>
                 </tr>
               )}
-              {flights.rows.map((r, i) => (
-                <tr key={i}>
+              {(loadFactor?.rows ?? []).map((r, i) => (
+                <tr key={`${r.route_label}-${i}`}>
                   <td style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{r.route_label}</td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.flights_completed}</td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: r.flights_cancelled > 0 ? 'var(--danger)' : 'var(--ink-4)' }}>
-                    {r.flights_cancelled}
-                  </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, color: r.otp_percent >= 85 ? 'var(--accent)' : 'var(--warn)' }}>
-                    {fmtPct(r.otp_percent)}
-                  </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                    {fmtPct(r.avg_load_factor)}
-                  </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                    {r.total_flight_hours.toFixed(1)}h
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.seats_available}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{r.seats_sold}</td>
+                  <td style={{ minWidth: 160 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <UtilBar value={r.load_factor_pct} />
+                      <span style={{ fontSize: 11, color: 'var(--ink-3)', flexShrink: 0 }}>{fmtPct(r.load_factor_pct)}</span>
+                    </div>
                   </td>
                 </tr>
               ))}
