@@ -185,7 +185,7 @@ class _ConfirmedBody extends StatelessWidget {
                                 "You're booked.",
                                 textAlign: TextAlign.center,
                                 style: tt.displaySmall?.copyWith(
-                                  color: Colors.white,
+                                  color: cs.onPrimary,
                                   fontWeight: FontWeight.w400,
                                   letterSpacing: -0.025,
                                   height: 1.1,
@@ -361,7 +361,7 @@ class _ActionButton extends StatelessWidget {
               icon,
               size: 18,
               color: isPrimary
-                  ? Colors.white
+                  ? cs.onPrimary
                   : cs.onSurface.withOpacity(0.6),
             ),
             const SizedBox(height: 4),
@@ -370,7 +370,7 @@ class _ActionButton extends StatelessWidget {
               style: tt.labelSmall?.copyWith(
                 fontWeight: FontWeight.w500,
                 color: isPrimary
-                    ? Colors.white
+                    ? cs.onPrimary
                     : cs.onSurface.withOpacity(0.6),
                 letterSpacing: 0.04,
               ),

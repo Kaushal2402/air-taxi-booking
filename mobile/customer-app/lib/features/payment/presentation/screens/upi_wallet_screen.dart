@@ -374,8 +374,8 @@ class _UpiWalletScreenState extends ConsumerState<UpiWalletScreen> {
                                         child: Container(
                                           width: 8,
                                           height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.white,
+                                          decoration: BoxDecoration(
+                                            color: cs.onPrimary,
                                             shape: BoxShape.circle,
                                           ),
                                         ),

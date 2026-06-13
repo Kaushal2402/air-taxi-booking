@@ -234,7 +234,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                               textAlign: TextAlign.center,
                               text: TextSpan(
                                 style: tt.displaySmall?.copyWith(
-                                  color: Colors.white,
+                                  color: cs.onPrimary,
                                   height: 1.1,
                                   letterSpacing: -0.025,
                                   fontWeight: FontWeight.w400,

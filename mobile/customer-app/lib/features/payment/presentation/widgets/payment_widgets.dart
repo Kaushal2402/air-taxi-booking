@@ -95,8 +95,8 @@ class PaymentMethodTile extends StatelessWidget {
                       child: Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
+                        decoration: BoxDecoration(
+                          color: cs.onPrimary,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -405,7 +405,7 @@ class AcmeMilesToggle extends StatelessWidget {
                     width: 20,
                     height: 20,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cs.onPrimary,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -564,7 +564,7 @@ class CardPreviewWidget extends StatelessWidget {
                 height: 180,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 0.8),
+                  border: Border.all(color: cs.onPrimary, width: 0.8),
                 ),
               ),
             ),
@@ -579,7 +579,7 @@ class CardPreviewWidget extends StatelessWidget {
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 0.8),
+                  border: Border.all(color: cs.onPrimary, width: 0.8),
                 ),
               ),
             ),
@@ -614,7 +614,7 @@ class CardPreviewWidget extends StatelessWidget {
                     fontFamily: 'IBMPlexMono',
                     fontSize: 19,
                     letterSpacing: 0.18,
-                    color: Colors.white,
+                    color: cs.onPrimary,
                     height: 1,
                   ),
                 ),
@@ -660,7 +660,7 @@ class CardPreviewWidget extends StatelessWidget {
               width: 44,
               height: 28,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cs.surface,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Center(
@@ -753,7 +753,7 @@ class _ProcessingSpinnerState extends State<ProcessingSpinner>
           Icon(
             Icons.flight_rounded,
             size: size * 0.30,
-            color: Colors.white,
+            color: cs.onPrimary,
           ),
         ],
       ),
