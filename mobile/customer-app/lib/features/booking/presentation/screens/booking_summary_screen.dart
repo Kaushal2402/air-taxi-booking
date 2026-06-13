@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../core/router/app_router.dart';
 import '../../data/models/booking_models.dart';
@@ -23,11 +22,6 @@ class BookingSummaryScreen extends ConsumerStatefulWidget {
 
 class _BookingSummaryScreenState
     extends ConsumerState<BookingSummaryScreen> {
-  bool _isConfirming = false;
-
-  // UUID v4 idempotency key — generated once per screen instance,
-  // so retries on the same screen reuse the same key (idempotency guarantee).
-  final String _idempotencyKey = const Uuid().v4();
 
   @override
   void initState() {
@@ -59,67 +53,27 @@ class _BookingSummaryScreenState
   }
 
   Future<void> _onConfirm() async {
-    if (_isConfirming) return;
-
     final draft = ref.read(bookingFlowProvider);
-
-    // Validate minimum required fields
-    if (draft.selectedPaymentMethodId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please select a payment method'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
-
-    // Re-fetch fare if estimate is null/expired
     final fareAsync = ref.read(fareEstimateProvider);
-    if (fareAsync.valueOrNull == null) {
-      _fetchFareIfNeeded();
+    final fareEstimate = fareAsync.valueOrNull;
+
+    if (fareEstimate == null) {
+      // Trigger estimate fetch if not loaded
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading fare... please wait')),
+      );
       return;
     }
 
-    setState(() => _isConfirming = true);
-
-    try {
-      final booking = await ref
-          .read(createBookingProvider.notifier)
-          .confirm(idempotencyKey: _idempotencyKey);
-
-      if (!mounted) return;
-
-      if (booking != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Booking confirmed! Ref: ${booking.bookingRef}'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-          ),
-        );
-        ref.read(bookingFlowProvider.notifier).reset();
-        context.go(AppRoutes.home);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-                'Booking service is not yet available. Try again later.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Booking failed: ${e.toString()}'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isConfirming = false);
-    }
+    if (!mounted) return;
+    context.push(
+      AppRoutes.paymentMethods,
+      extra: {
+        'fareAmountMinor': fareEstimate.totalMinor,
+        'estimateRef': fareEstimate.estimateRef,
+        'bookingDraft': draft,
+      },
+    );
   }
 
   @override
@@ -129,9 +83,8 @@ class _BookingSummaryScreenState
     final draft = ref.watch(bookingFlowProvider);
     final fareAsync = ref.watch(fareEstimateProvider);
     final paymentAsync = ref.watch(paymentMethodsProvider);
-    final createAsync = ref.watch(createBookingProvider);
 
-    final isLoading = createAsync.isLoading || _isConfirming;
+    final fareEstimate = fareAsync.valueOrNull;
 
     // Determine total display
     final totalMinor = fareAsync.valueOrNull?.totalMinor ??
@@ -207,8 +160,8 @@ class _BookingSummaryScreenState
                   // ── Confirm CTA ─────────────────────────────────────────
                   BookingCTA(
                     label: 'Confirm & pay $totalStr',
-                    onPressed: isLoading ? null : _onConfirm,
-                    isLoading: isLoading,
+                    onPressed: fareEstimate != null ? _onConfirm : null,
+                    isLoading: false,
                   ),
 
                   const SizedBox(height: 12),

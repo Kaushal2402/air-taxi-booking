@@ -292,6 +292,25 @@ class _PaymentMethodsScreenState
                           .state = !milesApplied,
                     ),
 
+                    if (milesApplied)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(2, 0, 2, 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Icon(Icons.check_circle_rounded, size: 14, color: cs.primary),
+                            const SizedBox(width: 5),
+                            Text(
+                              '₹245 Acme Miles applied',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                     const SizedBox(height: 24),
 
                     // ── Total + Pay CTA ───────────────────────────────────
