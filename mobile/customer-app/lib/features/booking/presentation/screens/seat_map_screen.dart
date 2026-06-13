@@ -296,7 +296,7 @@ class _SeatMapScreenState extends ConsumerState<SeatMapScreen> {
                   ),
                 ),
                 child: Icon(
-                  Icons.helicopter_rounded,
+                  Icons.airplanemode_active,
                   size: 18,
                   color: cs.onPrimary.withOpacity(0.9),
                 ),

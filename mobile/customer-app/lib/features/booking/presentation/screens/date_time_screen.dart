@@ -512,7 +512,7 @@ class _TimeSlots extends StatelessWidget {
       child: Column(
         children: [
           Icon(
-            Icons.flight_off_rounded,
+            Icons.flight_land,
             size: 32,
             color: cs.onSurface.withOpacity(0.38),
           ),

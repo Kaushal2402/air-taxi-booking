@@ -425,7 +425,7 @@ class _SearchResultsScreenState
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.flight_off_rounded,
+              Icons.flight_land,
               size: 48,
               color: cs.onSurface.withOpacity(0.3),
             ),
@@ -637,7 +637,7 @@ class _FlightCard extends StatelessWidget {
                                       const EdgeInsetsDirectional.fromSTEB(
                                           4, 0, 4, 0),
                                   child: Icon(
-                                    Icons.helicopter_rounded,
+                                    Icons.airplanemode_active,
                                     size: 16,
                                     color: cs.primary,
                                   ),
@@ -711,7 +711,7 @@ class _FlightCard extends StatelessWidget {
                         Row(
                           children: [
                             Icon(
-                              Icons.helicopter_rounded,
+                              Icons.airplanemode_active,
                               size: 13,
                               color: cs.onSurface.withOpacity(0.38),
                             ),

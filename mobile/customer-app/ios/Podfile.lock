@@ -34,8 +34,6 @@ PODS:
   - Flutter (1.0.0)
   - flutter_secure_storage (6.0.0):
     - Flutter
-  - fluttertoast (0.0.2):
-    - Flutter
   - geolocator_apple (1.2.0):
     - Flutter
     - FlutterMacOS
@@ -83,12 +81,6 @@ PODS:
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
   - PromisesObjC (2.4.0)
-  - razorpay-core-pod (1.0.3)
-  - razorpay-pod (1.5.2):
-    - razorpay-core-pod (= 1.0.3)
-  - razorpay_flutter (1.1.10):
-    - Flutter
-    - razorpay-pod
   - sqlite3 (3.52.0):
     - sqlite3/common (= 3.52.0)
   - sqlite3/common (3.52.0)
@@ -120,10 +112,8 @@ DEPENDENCIES:
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
-  - fluttertoast (from `.symlinks/plugins/fluttertoast/ios`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
   - google_maps_flutter_ios (from `.symlinks/plugins/google_maps_flutter_ios/ios`)
-  - razorpay_flutter (from `.symlinks/plugins/razorpay_flutter/ios`)
   - sqlite3_flutter_libs (from `.symlinks/plugins/sqlite3_flutter_libs/darwin`)
 
 SPEC REPOS:
@@ -139,8 +129,6 @@ SPEC REPOS:
     - GoogleUtilities
     - nanopb
     - PromisesObjC
-    - razorpay-core-pod
-    - razorpay-pod
     - sqlite3
 
 EXTERNAL SOURCES:
@@ -152,14 +140,10 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_secure_storage:
     :path: ".symlinks/plugins/flutter_secure_storage/ios"
-  fluttertoast:
-    :path: ".symlinks/plugins/fluttertoast/ios"
   geolocator_apple:
     :path: ".symlinks/plugins/geolocator_apple/darwin"
   google_maps_flutter_ios:
     :path: ".symlinks/plugins/google_maps_flutter_ios/ios"
-  razorpay_flutter:
-    :path: ".symlinks/plugins/razorpay_flutter/ios"
   sqlite3_flutter_libs:
     :path: ".symlinks/plugins/sqlite3_flutter_libs/darwin"
 
@@ -173,7 +157,6 @@ SPEC CHECKSUMS:
   FirebaseMessaging: 3b26e2cee503815e01c3701236b020aa9b576f09
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
-  fluttertoast: 2c67e14dce98bbdb200df9e1acf610d7a6264ea1
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
   Google-Maps-iOS-Utils: 66d6de12be1ce6d3742a54661e7a79cb317a9321
   google_maps_flutter_ios: 17552876e72723da1d41accc22f03b5f7afbde69
@@ -182,12 +165,9 @@ SPEC CHECKSUMS:
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
-  razorpay-core-pod: ef0309dbf8e3e5a1330f6cad89dcf9226d8ef758
-  razorpay-pod: a9cb6e158aee8754053b147008eff6b4897789c8
-  razorpay_flutter: 0e98e4fcaae27ad50e011d85f66d85e0a008754a
   sqlite3: a51c07cf16e023d6c48abd5e5791a61a47354921
   sqlite3_flutter_libs: b3e120efe9a82017e5552a620f696589ed4f62ab
 
-PODFILE CHECKSUM: e30f02f9d1c72c47bb6344a0a748c9d268180865
+PODFILE CHECKSUM: 6c01055ff966e40e8862373e66668a0fbf0b7ba8
 
 COCOAPODS: 1.16.2
