@@ -302,7 +302,7 @@ class _PaymentMethodsScreenState
                             const SizedBox(width: 5),
                             Text(
                               '₹245 Acme Miles applied',
-                              style: theme.textTheme.bodySmall?.copyWith(
+                              style: tt.bodySmall?.copyWith(
                                 color: cs.primary,
                                 fontWeight: FontWeight.w500,
                               ),

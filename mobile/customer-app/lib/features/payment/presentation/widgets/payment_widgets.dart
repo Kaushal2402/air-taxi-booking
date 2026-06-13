@@ -896,7 +896,9 @@ class ETicketCard extends StatelessWidget {
                                     const EdgeInsetsDirectional.fromSTEB(
                                         8, 0, 8, 0),
                                 child: Icon(
-                                  Icons.arrow_forward_rounded,
+                                  Directionality.of(context) == TextDirection.rtl
+                                      ? Icons.arrow_back_rounded
+                                      : Icons.arrow_forward_rounded,
                                   size: 18,
                                   color: cs.onSurface.withOpacity(0.45),
                                 ),
@@ -974,42 +976,40 @@ class ETicketCard extends StatelessWidget {
             ),
 
             // ── Perforated divider ──────────────────────────────────────
-            SizedBox(
-              height: 24,
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 0, 0),
               child: Stack(
-                alignment: Alignment.center,
+                clipBehavior: Clip.none,
                 children: [
-                  // Dashed line
-                  Divider(
-                    height: 1,
-                    thickness: 1.5,
-                    color: cs.outline,
-                    indent: 0,
-                    endIndent: 0,
+                  CustomPaint(
+                    painter: _DashedLinePainter(color: cs.outline),
+                    child: const SizedBox(height: 2, width: double.infinity),
                   ),
-                  // Left notch
+                  // Left notch circle
                   Positioned(
                     left: -12,
+                    top: -9,
                     child: Container(
-                      width: 24,
-                      height: 24,
+                      width: 20,
+                      height: 20,
                       decoration: BoxDecoration(
                         color: scaffoldBg,
                         shape: BoxShape.circle,
-                        border: Border.all(color: cs.outline),
+                        border: Border.all(color: cs.outline, width: 1),
                       ),
                     ),
                   ),
-                  // Right notch
+                  // Right notch circle
                   Positioned(
                     right: -12,
+                    top: -9,
                     child: Container(
-                      width: 24,
-                      height: 24,
+                      width: 20,
+                      height: 20,
                       decoration: BoxDecoration(
                         color: scaffoldBg,
                         shape: BoxShape.circle,
-                        border: Border.all(color: cs.outline),
+                        border: Border.all(color: cs.outline, width: 1),
                       ),
                     ),
                   ),
@@ -1186,4 +1186,35 @@ class _ProgressDotsState extends State<ProgressDots>
       },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// _DashedLinePainter — used for the perforated divider in ETicketCard
+// ---------------------------------------------------------------------------
+
+class _DashedLinePainter extends CustomPainter {
+  const _DashedLinePainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    const dashWidth = 8.0;
+    const gapWidth = 5.0;
+    double x = 0;
+    while (x < size.width) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset((x + dashWidth).clamp(0, size.width), 0),
+        paint,
+      );
+      x += dashWidth + gapWidth;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedLinePainter old) => old.color != color;
 }
