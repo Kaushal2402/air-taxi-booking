@@ -44,7 +44,7 @@ export default function SettlementDetailPage() {
       .getDetail(id)
       .then(data => {
         setDetail(data)
-        setQueries(data.queries)
+        setQueries(data.queries ?? [])
       })
       .catch(console.error)
       .finally(() => setLoading(false))

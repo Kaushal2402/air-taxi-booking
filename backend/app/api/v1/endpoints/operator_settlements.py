@@ -10,14 +10,14 @@ from app.schemas.operator_settlements import (
     SettlementDetail,
     SettlementQuery,
     SettlementQueryOut,
-    SettlementSummary,
+    SettlementsListResponse,
 )
 from app.services import operator_settlements_service
 
 router = APIRouter(prefix="/settlements", tags=["operator-settlements"])
 
 
-@router.get("", response_model=list[SettlementSummary])
+@router.get("", response_model=SettlementsListResponse)
 async def list_settlements(
     db: AsyncSession = Depends(get_db),
     current_user: OperatorUser = Depends(get_current_operator_user),
@@ -47,6 +47,7 @@ async def export_settlement(
     )
 
 
+@router.post("/{settlement_id}/queries", response_model=SettlementQueryOut, status_code=201)
 @router.post("/{settlement_id}/query", response_model=SettlementQueryOut, status_code=201)
 async def raise_query(
     settlement_id: str,

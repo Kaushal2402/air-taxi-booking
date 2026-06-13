@@ -9,7 +9,7 @@ export interface SettlementSummary {
   commission_amount: number
   deduction_amount: number
   net_amount: number
-  status: 'pending' | 'processing' | 'paid' | 'disputed' | 'on_hold'
+  status: 'pending' | 'processing' | 'paid' | 'disputed' | 'on_hold' | 'cancelled'
   payout_date: string | null
   payout_ref: string | null
   created_at: string
@@ -17,10 +17,10 @@ export interface SettlementSummary {
 
 export interface SettlementLineItem {
   id: string
-  settlement_id: string
-  flight_date: string
-  route: string
+  flight_id: string
   booking_ref: string
+  route: string
+  flight_date: string
   gross_amount: number
   commission_amount: number
   deduction_amount: number
@@ -32,9 +32,9 @@ export interface SettlementQuery {
   settlement_id: string
   query_text: string
   status: 'open' | 'resolved'
+  response: string | null
   created_at: string
   resolved_at: string | null
-  response: string | null
 }
 
 export interface SettlementDetail extends SettlementSummary {
@@ -51,16 +51,29 @@ export interface SettlementsKPI {
   next_payout_date: string | null
 }
 
+export interface SettlementsListResponse {
+  kpi: SettlementsKPI
+  settlements: SettlementSummary[]
+}
+
 export const operatorSettlementsService = {
   list: () =>
-    api.get<{ kpi: SettlementsKPI; settlements: SettlementSummary[] }>('/operator/settlements').then(r => r.data),
+    api
+      .get<SettlementsListResponse>('/operator/settlements')
+      .then(r => r.data),
 
   getDetail: (id: string) =>
-    api.get<SettlementDetail>(`/operator/settlements/${id}`).then(r => r.data),
+    api
+      .get<SettlementDetail>(`/operator/settlements/${id}`)
+      .then(r => r.data),
 
   exportSettlement: (id: string) =>
-    api.get(`/operator/settlements/${id}/export`, { responseType: 'blob' }).then(r => r.data),
+    api
+      .get(`/operator/settlements/${id}/export`, { responseType: 'blob' })
+      .then(r => r.data as Blob),
 
   raiseQuery: (id: string, queryText: string) =>
-    api.post<SettlementQuery>(`/operator/settlements/${id}/queries`, { query_text: queryText }).then(r => r.data),
+    api
+      .post<SettlementQuery>(`/operator/settlements/${id}/queries`, { query_text: queryText })
+      .then(r => r.data),
 }
