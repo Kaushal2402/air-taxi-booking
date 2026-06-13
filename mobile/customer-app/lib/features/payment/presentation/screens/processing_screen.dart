@@ -196,7 +196,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
           children: [
             // Decorative concentric rings
             Positioned.fill(
-              child: CustomPaint(painter: _RingsPainter()),
+              child: CustomPaint(painter: _RingsPainter(color: cs.onPrimary.withOpacity(0.04))),
             ),
 
             // Content
@@ -223,7 +223,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                                 fontFamily: 'IBMPlexMono',
                                 fontSize: 11,
                                 letterSpacing: 0.18,
-                                color: Colors.white.withOpacity(0.38),
+                                color: cs.onPrimary.withOpacity(0.38),
                               ),
                             ),
 
@@ -246,7 +246,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                                     style: TextStyle(
                                       fontStyle: FontStyle.italic,
                                       fontWeight: FontWeight.w300,
-                                      color: Colors.white.withOpacity(0.67),
+                                      color: cs.onPrimary.withOpacity(0.67),
                                     ),
                                   ),
                                 ],
@@ -281,7 +281,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                                 Icon(
                                   Icons.lock_rounded,
                                   size: 14,
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: cs.onPrimary.withOpacity(0.3),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -290,7 +290,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                                     fontFamily: 'IBMPlexMono',
                                     fontSize: 13,
                                     letterSpacing: 0.04,
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: cs.onPrimary.withOpacity(0.3),
                                   ),
                                 ),
                               ],
@@ -312,7 +312,7 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.white.withOpacity(0.20),
+                        color: cs.onPrimary.withOpacity(0.20),
                         fontFamily: 'IBMPlexMono',
                       ),
                     ),
@@ -330,6 +330,9 @@ class _ProcessingScreenState extends ConsumerState<ProcessingScreen> {
 // ── Decorative concentric rings painter ───────────────────────────────────────
 
 class _RingsPainter extends CustomPainter {
+  const _RingsPainter({required this.color});
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
@@ -337,7 +340,7 @@ class _RingsPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.6
-      ..color = Colors.white.withOpacity(0.04);
+      ..color = color;
 
     for (final r in [300.0, 200.0, 100.0]) {
       canvas.drawCircle(Offset(cx, cy), r, paint);
@@ -345,5 +348,5 @@ class _RingsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingsPainter old) => false;
+  bool shouldRepaint(_RingsPainter old) => old.color != color;
 }

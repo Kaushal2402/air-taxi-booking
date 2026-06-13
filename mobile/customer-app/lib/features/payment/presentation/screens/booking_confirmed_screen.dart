@@ -123,7 +123,7 @@ class _ConfirmedBody extends StatelessWidget {
                         // Decorative rings
                         Positioned.fill(
                           child: CustomPaint(
-                            painter: _HeroRingsPainter(),
+                            painter: _HeroRingsPainter(color: cs.onPrimary.withOpacity(0.04)),
                           ),
                         ),
 
@@ -441,6 +441,9 @@ class _FallbackState extends StatelessWidget {
 // ── Hero rings painter ────────────────────────────────────────────────────────
 
 class _HeroRingsPainter extends CustomPainter {
+  const _HeroRingsPainter({required this.color});
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
@@ -448,12 +451,12 @@ class _HeroRingsPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.7
-      ..color = Colors.white.withOpacity(0.04);
+      ..color = color;
 
     canvas.drawCircle(Offset(cx, cy), 200, paint);
     canvas.drawCircle(Offset(cx, cy), 130, paint);
   }
 
   @override
-  bool shouldRepaint(_HeroRingsPainter old) => false;
+  bool shouldRepaint(_HeroRingsPainter old) => old.color != color;
 }

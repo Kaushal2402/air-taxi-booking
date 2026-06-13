@@ -596,10 +596,10 @@ class CardPreviewWidget extends StatelessWidget {
                   width: 38,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: cs.onPrimary.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(5),
                     border:
-                        Border.all(color: Colors.white.withOpacity(0.18)),
+                        Border.all(color: cs.onPrimary.withOpacity(0.18)),
                   ),
                 ),
 
@@ -631,7 +631,7 @@ class CardPreviewWidget extends StatelessWidget {
                           : 'CARD HOLDER NAME',
                       style: TextStyle(
                         fontSize: 12.5,
-                        color: Colors.white.withOpacity(0.6),
+                        color: cs.onPrimary.withOpacity(0.6),
                         fontFamily: 'IBMPlexMono',
                         letterSpacing: 0.08,
                       ),
@@ -642,7 +642,7 @@ class CardPreviewWidget extends StatelessWidget {
                           : 'MM / YY',
                       style: TextStyle(
                         fontSize: 12.5,
-                        color: Colors.white.withOpacity(0.6),
+                        color: cs.onPrimary.withOpacity(0.6),
                         fontFamily: 'IBMPlexMono',
                       ),
                     ),
@@ -746,7 +746,10 @@ class _ProcessingSpinnerState extends State<ProcessingSpinner>
             turns: _rotation,
             child: CustomPaint(
               size: Size(size, size),
-              painter: _SpinnerArcPainter(color: cs.secondary),
+              painter: _SpinnerArcPainter(
+                color: cs.secondary,
+                backgroundRingColor: cs.onPrimary.withOpacity(0.1),
+              ),
             ),
           ),
           // Plane icon
@@ -762,8 +765,12 @@ class _ProcessingSpinnerState extends State<ProcessingSpinner>
 }
 
 class _SpinnerArcPainter extends CustomPainter {
-  const _SpinnerArcPainter({required this.color});
+  const _SpinnerArcPainter({
+    required this.color,
+    required this.backgroundRingColor,
+  });
   final Color color;
+  final Color backgroundRingColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -778,7 +785,7 @@ class _SpinnerArcPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 6
-        ..color = Colors.white.withOpacity(0.1),
+        ..color = backgroundRingColor,
     );
 
     // Foreground arc
@@ -796,7 +803,8 @@ class _SpinnerArcPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SpinnerArcPainter old) => old.color != color;
+  bool shouldRepaint(_SpinnerArcPainter old) =>
+      old.color != color || old.backgroundRingColor != backgroundRingColor;
 }
 
 // ---------------------------------------------------------------------------
