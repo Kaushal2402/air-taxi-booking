@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/di/api_client_provider.dart';
 import '../../../core/services/push_notification_service.dart';
 import '../../../features/booking/domain/providers/booking_providers.dart';
+import '../../../features/payment/domain/providers/payment_providers.dart';
 import '../data/services/auth_service.dart';
 import 'auth_models.dart';
 
@@ -158,6 +159,13 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     ref.invalidate(recentDestinationsProvider);
     ref.invalidate(availableFlightsProvider);
     ref.invalidate(seatMapProvider);
+    // Reset payment module providers to prevent PII leaking to the next session.
+    ref.read(customerPaymentMethodsProvider.notifier).reset();
+    ref.read(bookingConfirmationProvider.notifier).reset();
+    ref.read(razorpayOrderProvider.notifier).reset();
+    ref.read(upiVerificationProvider.notifier).clear();
+    ref.read(acmeMilesAppliedProvider.notifier).state = false;
+    ref.read(selectedPaymentMethodIdProvider.notifier).state = null;
     state = const AsyncValue.data(AuthState.guest);
   }
 

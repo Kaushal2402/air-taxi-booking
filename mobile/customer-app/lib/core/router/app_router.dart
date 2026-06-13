@@ -26,6 +26,12 @@ import '../../features/booking/presentation/screens/search_results_screen.dart';
 import '../../features/booking/presentation/screens/seat_map_screen.dart';
 import '../../features/booking/presentation/screens/passenger_details_screen.dart';
 import '../../features/booking/presentation/screens/booking_summary_screen.dart';
+// Module 04 — Payment & Confirmation
+import '../../features/payment/presentation/screens/payment_methods_screen.dart';
+import '../../features/payment/presentation/screens/add_card_screen.dart';
+import '../../features/payment/presentation/screens/upi_wallet_screen.dart';
+import '../../features/payment/presentation/screens/processing_screen.dart';
+import '../../features/payment/presentation/screens/booking_confirmed_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Route name constants — use from widgets instead of raw strings
@@ -57,6 +63,14 @@ abstract class AppRoutes {
   static const bookingSeatMap = '/booking/seats';
   static const bookingPassengerDetails = '/booking/passenger-details';
   static const bookingSummary = '/booking/summary';
+
+  // Module 04 — Payment & Confirmation flow
+  /// Entry from BookingSummaryScreen — receives fareAmountMinor + estimateRef via extra.
+  static const paymentMethods = '/payment/methods';
+  static const paymentAddCard = '/payment/add-card';
+  static const paymentUpi = '/payment/upi';
+  static const paymentProcessing = '/payment/processing';
+  static const bookingConfirmed = '/payment/confirmed';
 
   /// Substitutes the :routeId param for navigation.
   static String routePreviewPath(String routeId) => '/home/route/$routeId';
@@ -212,6 +226,55 @@ GoRouter buildAppRouter(AuthStateNotifier authNotifier) {
       GoRoute(
         path: AppRoutes.bookingSummary,
         builder: (context, state) => const BookingSummaryScreen(),
+      ),
+
+      // ── Module 04 — Payment & Confirmation flow ───────────────────────
+
+      GoRoute(
+        path: AppRoutes.paymentMethods,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return PaymentMethodsScreen(
+            fareAmountMinor: extra['fareAmountMinor'] as int? ?? 0,
+            estimateRef: extra['estimateRef'] as String? ?? '',
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.paymentAddCard,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return AddCardScreen(
+            fareAmountMinor: extra['fareAmountMinor'] as int? ?? 0,
+            estimateRef: extra['estimateRef'] as String? ?? '',
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.paymentUpi,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return UpiWalletScreen(
+            fareAmountMinor: extra['fareAmountMinor'] as int? ?? 0,
+            estimateRef: extra['estimateRef'] as String? ?? '',
+            preferredApp: extra['preferredApp'] as String?,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.paymentProcessing,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return ProcessingScreen(
+            fareAmountMinor: extra['fareAmountMinor'] as int? ?? 0,
+            estimateRef: extra['estimateRef'] as String? ?? '',
+            paymentMethodId: extra['paymentMethodId'] as String?,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.bookingConfirmed,
+        builder: (context, state) => const BookingConfirmedScreen(),
       ),
     ],
   );
